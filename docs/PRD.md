@@ -254,7 +254,7 @@ Status as of 2026-10-10 (details and sources in the Research log):
 | GUI / tool | Platform | License | Role | Who checks |
 | --- | --- | --- | --- | --- |
 | fastchess, cutechess-cli | Linux/macOS | Open source (GPL-3.0 / MIT) | Automated matches, SPRT, gauntlets | Claude (scripted, every release) |
-| En Croissant | macOS (.dmg) | Open source (GPL-3.0) | **Primary GUI**: modern analysis and play, any UCI engine | Carlos |
+| En Croissant | macOS (.dmg) | Open source (GPL-3.0) | **Primary GUI**: modern analysis and play, any UCI engine. Installed on the test Mac and ready (2026-10-10) | Carlos |
 | Cute Chess | macOS (Apple Silicon build exists) | Open source (GPL-3.0) | **Primary for engine-vs-engine** games and tournaments | Carlos |
 | Scid vs. PC / Scid | macOS | Open source (GPL-2.0) | Database and analysis; UCI and XBoard engines | Carlos |
 | XBoard | macOS (Homebrew) | Open source (GPL-3.0) | The reference CECP GUI | Carlos (CECP mode) |
@@ -510,7 +510,7 @@ release tags. Releases build binaries for every platform in the table above.
 | Milestone | Scope | Gate |
 | --- | --- | --- |
 | M0 · Foundations | Workspace, CI, licence checks, board, FEN, move generation, magics, perft (stages 1–3) | All perft suites exact; ≥100 Mnps perft on the M1 Max |
-| M1 · Playable | Zobrist, UCI, alpha-beta, iterative deepening, time management, quiescence; shell basics: board display, play a full game, thinking display, `perft`, `bb` (stages 4–7) | Plays complete games in Cute Chess and the shell with no illegal moves or time losses |
+| M1 · Playable | Zobrist, UCI, alpha-beta, iterative deepening, time management, quiescence; shell basics: board display, play a full game, thinking display, `perft`, `bb` (stages 4–7) | Plays complete games in En Croissant and the shell with no illegal moves or time losses |
 | M2 · Classical search | TT, move ordering, PVS, null move, LMR, pruning (stages 8–14) | ~2200 CCRL by gauntlet; every technique has an SPRT result in the ledger |
 | M3 · Evaluation | Full HCE, eval trace, Texel tuner, self-play data generation, `eval`/`explain`/`tree`/`stats` (stages 15–16) | ≥2400 CCRL by gauntlet |
 | M4 · Complete engine | Lazy SMP, Syzygy, Polyglot, Chess960, MultiPV, pondering, levels, XBoard, Lichess bot (stages 17–20) | GUI compatibility matrix passes; levels calibrated |
@@ -556,7 +556,7 @@ Sources:
 
 | Product | Finding | To confirm |
 | --- | --- | --- |
-| En Croissant | Free, GPL-3.0, built with Tauri; macOS .dmg from encroissant.org, macOS 10.13 or later; supports any UCI engine, added from a local file | Native Apple Silicon build (expected from Tauri, not checked) |
+| En Croissant | Free, GPL-3.0, built with Tauri; macOS .dmg from encroissant.org, macOS 10.13 or later; supports any UCI engine, added from a local file | Installed on Carlos's M1 Max (2026-10-10). Native Apple Silicon build still to check (Finder → Get Info → Kind) |
 | Cute Chess | GPL-3.0; a third-party site provides a build for Apple Silicon and Intel; widely recommended for engine matches | Official vs third-party Mac build |
 | Scid | A forum user reports it runs well on Apple Silicon | Which variant (Scid vs. PC or Scid) and its current Mac build |
 | Nibbler | No official Mac build; the community project Nibbler-for-macOS packages it with Electron and Lc0 | Using it with a non-Lc0 UCI engine |
@@ -610,6 +610,8 @@ these with measured figures from the first real SPRT runs.
 - [x] GUI testing is Mac-first and open-source-first: En Croissant and Cute Chess as the primary
       GUIs, plus Scid and XBoard; HIARCS Chess Explorer as the commercial target, ChessBase for
       Mac once it ships, Shredder 13 optional (2026-10-10).
+- [x] En Croissant is installed on the test Mac and is the first GUI cb2026 is checked in, from
+      M1 on (2026-10-10).
 - [x] Repo goes public around October 2027, with the book on GitHub Pages (2026-10-10).
 
 ## Open questions
