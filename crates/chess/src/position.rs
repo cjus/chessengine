@@ -36,6 +36,7 @@ use crate::bitboard::Bitboard;
 use crate::castling::CastlingRights;
 use crate::piece::{Color, Piece, PieceType};
 use crate::square::{File, Rank, Square};
+use crate::zobrist;
 
 // ANCHOR: position
 /// A chess position.
@@ -55,6 +56,8 @@ pub struct Position {
     en_passant: Option<Square>,
     halfmove_clock: u32,
     fullmove_number: u32,
+    /// The Zobrist key, kept up to date by every change (see [`crate::zobrist`]).
+    hash: u64,
 }
 // ANCHOR_END: position
 
@@ -76,6 +79,7 @@ impl Position {
             en_passant: None,
             halfmove_clock: 0,
             fullmove_number: 1,
+            hash: 0,
         }
     }
 
@@ -89,6 +93,7 @@ impl Position {
         self.mailbox[square.index()] = Some(piece);
         self.by_type[piece.piece_type.index()] |= Bitboard::from_square(square);
         self.by_color[piece.color.index()] |= Bitboard::from_square(square);
+        self.hash ^= zobrist::piece_square(piece, square);
     }
     // ANCHOR_END: put_piece
 
@@ -97,11 +102,33 @@ impl Position {
         let piece = self.mailbox[square.index()].take()?;
         self.by_type[piece.piece_type.index()] &= !Bitboard::from_square(square);
         self.by_color[piece.color.index()] &= !Bitboard::from_square(square);
+        self.hash ^= zobrist::piece_square(piece, square);
         Some(piece)
     }
 
-    pub(crate) fn castling_mut(&mut self) -> &mut CastlingRights {
-        &mut self.castling
+    /// The position's Zobrist key: equal positions (same pieces, side to move, castling
+    /// rights and en passant square) have equal keys.
+    pub fn hash(&self) -> u64 {
+        self.hash
+    }
+
+    /// The Zobrist key computed from scratch. [`Position::hash`] must always equal it; tests
+    /// use this to check the incremental updates.
+    pub fn compute_hash(&self) -> u64 {
+        let mut hash = 0;
+        for square in Square::all() {
+            if let Some(piece) = self.piece_at(square) {
+                hash ^= zobrist::piece_square(piece, square);
+            }
+        }
+        if self.side_to_move == Color::Black {
+            hash ^= zobrist::black_to_move();
+        }
+        hash ^= zobrist::castling(self.castling);
+        if let Some(square) = self.en_passant {
+            hash ^= zobrist::en_passant(square.file());
+        }
+        hash
     }
 
     /// What stands on `square`, if anything.
@@ -165,14 +192,24 @@ impl Position {
     }
 
     pub(crate) fn set_side_to_move(&mut self, color: Color) {
+        if color != self.side_to_move {
+            self.hash ^= zobrist::black_to_move();
+        }
         self.side_to_move = color;
     }
 
     pub(crate) fn set_castling(&mut self, castling: CastlingRights) {
+        self.hash ^= zobrist::castling(self.castling) ^ zobrist::castling(castling);
         self.castling = castling;
     }
 
     pub(crate) fn set_en_passant(&mut self, square: Option<Square>) {
+        if let Some(old) = self.en_passant {
+            self.hash ^= zobrist::en_passant(old.file());
+        }
+        if let Some(new) = square {
+            self.hash ^= zobrist::en_passant(new.file());
+        }
         self.en_passant = square;
     }
 
@@ -181,7 +218,7 @@ impl Position {
         self.fullmove_number = fullmove_number;
     }
 
-    /// Checks that the bitboards and the mailbox describe the same board.
+    /// Checks that the bitboards, the mailbox and the hash key all describe the same position.
     ///
     /// Every function that changes the board keeps them in step; this is the test that they
     /// do. It is cheap enough for tests and debug assertions, not for the search.
@@ -203,6 +240,7 @@ impl Position {
             && by_color == self.by_color
             && types_disjoint
             && (self.by_color[0] & self.by_color[1]).is_empty()
+            && self.hash == self.compute_hash()
     }
 }
 

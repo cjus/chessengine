@@ -40,7 +40,7 @@ impl Position {
             let rook = self.remove_piece(to).expect("castling rook");
             self.put_piece(king_to, king);
             self.put_piece(rook_to, rook);
-            self.castling_mut().remove_color(us);
+            self.remove_castling_color(us);
         } else {
             let piece = self.remove_piece(from).expect("a piece on the from-square");
 
@@ -77,7 +77,7 @@ impl Position {
                         }
                     }
                 }
-                PieceType::King => self.castling_mut().remove_color(us),
+                PieceType::King => self.remove_castling_color(us),
                 PieceType::Rook => self.remove_rook_right(us, from),
                 _ => {}
             }
@@ -90,6 +90,13 @@ impl Position {
     }
     // ANCHOR_END: make_move
 
+    /// Removes both of `color`'s castling rights.
+    fn remove_castling_color(&mut self, color: Color) {
+        let mut rights = self.castling();
+        rights.remove_color(color);
+        self.set_castling(rights);
+    }
+
     /// Removes `color`'s castling right that uses the rook on `square`, if there is one.
     fn remove_rook_right(&mut self, color: Color, square: Square) {
         let back_rank = match color {
@@ -101,7 +108,9 @@ impl Position {
         }
         for side in CastlingSide::ALL {
             if self.castling().rook_file(color, side) == Some(square.file()) {
-                self.castling_mut().remove(color, side);
+                let mut rights = self.castling();
+                rights.remove(color, side);
+                self.set_castling(rights);
             }
         }
     }

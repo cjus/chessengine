@@ -18,12 +18,13 @@
 //! - [`movegen`]: legal move generation with check and pin masks.
 //! - [`makemove`]: playing a move on a position.
 //! - [`perft`]: counting positions to prove move generation correct.
+//! - [`zobrist`]: 64-bit hash keys for positions, updated incrementally.
 //!
 //! ## What's coming
 //!
 //! The crate grows stage by stage (see `docs/PRD.md`, "Stages", and the companion book):
 //!
-//! - **Stage 4:** make/unmake with an undo stack, and incremental Zobrist hashing.
+//! - **Stage 4:** standard algebraic notation (SAN) for moves.
 //!
 //! ## Further reading
 //!
@@ -45,6 +46,7 @@ pub mod perft;
 pub mod piece;
 pub mod position;
 pub mod square;
+pub mod zobrist;
 
 pub use bitboard::Bitboard;
 pub use castling::{CastlingRights, CastlingSide};
