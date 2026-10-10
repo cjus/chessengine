@@ -311,7 +311,17 @@ side, `board ascii|unicode` to switch styles.
 | Look inside | `bb <piece\|occupancy\|attacks\|pins\|checkers>`: bitboard as an 8×8 grid plus hex; `attacks <square>`; `magic <square>` (mask, magic number, index, result); `zobrist` (hash broken into its parts); `see <move>`; `legal` (all legal moves with SAN and their move-ordering scores); `perft <n>`, `divide <n>` |
 | Explain | `eval` (term-by-term breakdown, middlegame/endgame/blended, both sides); `eval diff <move>` (what a move changes); `explain <move>` (searches the move and compares it with the best move, showing the refutation); `tree <depth>` (prints or exports the search tree, with pruned and reduced nodes marked); `stats` (TT hit rate, first-move cutoff rate, nodes saved by each pruning technique, LMR re-searches) |
 | Techniques | `techniques` (lists them, on/off); `set <technique> on\|off`; `ab <depth>` (searches with and without one technique and compares nodes, time and move) |
-| Tools | `bench`, `selfplay <n> [tc]`, `match <engine-path> <n> [tc]` (a small match against another UCI engine, should-have), `uci` / `xboard` (switches the session to that protocol), `help [command]`, `quit` |
+| Tools | `bench`, `selfplay <n> [tc]`, `match <engine-path> <n> [tc]` (a small match against another UCI engine: must-have in v1, cjus/chessengine#9; see below), `uci` / `xboard` (switches the session to that protocol), `help [command]`, `quit` |
+
+### The `match` command
+
+Decided 2026-10-10 (cjus/chessengine#9): in v1. `match <engine-path> <n> [tc]` plays `n` games
+between cb2026 and another UCI engine from inside the shell, alternating colours, and shows the
+running score, a live board for the current game, and the final result with an Elo estimate and
+error margin. Games are saved as PGN. It's for quick, friendly comparisons and for learners
+("does my change beat the previous stage?"); rigorous testing still uses fastchess and SPRT.
+It needs the shell to drive a second engine over UCI, so it arrives in M4, with an optional
+opening file (EPD or PGN) and Chess960 support.
 
 ### Engine thinking display
 
@@ -518,7 +528,7 @@ release tags. Releases build binaries for every platform in the table above.
 | M1 · Playable | Zobrist, UCI, alpha-beta, iterative deepening, time management, quiescence; shell basics: board display, play a full game, thinking display, `perft`, `bb` (stages 4–7) | Plays complete games in En Croissant and the shell with no illegal moves or time losses |
 | M2 · Classical search | TT, move ordering, PVS, null move, LMR, pruning (stages 8–14) | ~2200 CCRL by gauntlet; every technique has an SPRT result in the ledger |
 | M3 · Evaluation | Full HCE, eval trace, Texel tuner, self-play data generation, `eval`/`explain`/`tree`/`stats` (stages 15–16) | ≥2400 CCRL by gauntlet |
-| M4 · Complete engine | Lazy SMP, Syzygy, Polyglot, Chess960, MultiPV, pondering, levels, XBoard, Lichess bot (stages 17–20) | GUI compatibility matrix passes; levels calibrated |
+| M4 · Complete engine | Lazy SMP, Syzygy, Polyglot, Chess960, MultiPV, pondering, levels, XBoard, Lichess bot, shell `match` command (stages 17–20) | GUI compatibility matrix passes; levels calibrated |
 | M5 · v1.0 release | Strength work towards 2600–2700, book finished, release binaries, robustness run | ≥2400 CCRL Blitz (goal 2600+); 10,000-game robustness run clean; book complete for stages 1–20 |
 | M6 · NNUE (stretch) | NNUE inference with SIMD, our own trainer, self-play data, HCE kept as a mode (stage 21) | Beats the HCE version by SPRT; book chapter done |
 
@@ -620,6 +630,8 @@ these with measured figures from the first real SPRT runs.
 - [x] En Croissant is installed on the test Mac and is the first GUI cb2026 is checked in, from
       M1 on (2026-10-10).
 - [x] Repo goes public around October 2027, with the book on GitHub Pages (2026-10-10).
+- [x] Shell `match` command (cb2026 against another UCI engine) is in v1, arriving in M4
+      (cjus/chessengine#9, 2026-10-10).
 - [x] Windows: Carlos tests on a Windows machine once the Windows build runs well
       (cjus/chessengine#11, 2026-10-10).
 - [x] `main` protected by the ruleset `main: PR + CI`: PR required, three CI checks required,
@@ -628,4 +640,3 @@ these with measured figures from the first real SPRT runs.
 ## Open questions
 
 - [ ] Which commercial Mac GUIs Carlos owns or will buy (HIARCS Chess Explorer, ChessBase for Mac).
-- [ ] Should the shell `match` command (mini tournament manager) be in v1 or later?
