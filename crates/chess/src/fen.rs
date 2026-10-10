@@ -35,8 +35,8 @@
 //!
 //! Parsing rejects malformed text and positions that can't be played from: a missing or extra
 //! king, pawns on the first or last rank, castling rights without the king and rook in place,
-//! and an en passant square with no pawn that could have just made a double step. (Stage 2,
-//! with attack generation, adds "the side that just moved must not be in check".)
+//! an en passant square with no pawn that could have just made a double step, and the side that
+//! just moved still being in check.
 //!
 //! See the Chess Programming Wiki, [Forsyth-Edwards Notation](https://www.chessprogramming.org/Forsyth-Edwards_Notation)
 //! and [X-FEN](https://www.chessprogramming.org/X-FEN).
@@ -85,6 +85,8 @@ pub enum FenError {
     },
     /// A pawn stands on the first or last rank, which can never happen in a game.
     PawnOnBackRank(Square),
+    /// The side that just moved is in check, which can never happen in a game.
+    OpponentInCheck(Color),
 }
 
 impl fmt::Display for FenError {
@@ -118,6 +120,10 @@ impl fmt::Display for FenError {
                     "pawn on {square}: pawns can't stand on the first or last rank"
                 )
             }
+            FenError::OpponentInCheck(color) => write!(
+                f,
+                "{color} is in check but it isn't {color}'s turn, so the last move was illegal"
+            ),
         }
     }
 }
@@ -153,6 +159,11 @@ impl Position {
 
         pos.set_castling(parse_castling(&pos, fields[2])?);
         pos.set_en_passant(parse_en_passant(&pos, fields[3])?);
+
+        let waiting = !side;
+        if pos.is_attacked(pos.king_square(waiting), side) {
+            return Err(FenError::OpponentInCheck(waiting));
+        }
 
         if fields.len() == 6 {
             let halfmove = parse_counter(fields[4])?;
@@ -547,6 +558,11 @@ mod tests {
             Position::from_fen("4k3/8/8/8/8/8/8/4K3 b - e3 0 1"),
             Err(FenError::BadEnPassant(_))
         ));
+        // Black is in check from the rook, but it's White's turn.
+        assert_eq!(
+            Position::from_fen("4k3/8/8/8/8/8/8/4RK2 w - - 0 1"),
+            Err(FenError::OpponentInCheck(Color::Black))
+        );
     }
 
     #[test]

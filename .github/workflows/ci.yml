@@ -30,6 +30,8 @@ jobs:
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Tests
         run: cargo test --workspace --locked
+      - name: Perft suites (release build, every depth)
+        run: cargo run --release --locked -p cb2026-tools --bin perft-suite
       - name: Docs
         run: cargo doc --workspace --no-deps --document-private-items --locked
         env:

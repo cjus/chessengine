@@ -92,6 +92,18 @@ impl Position {
     }
     // ANCHOR_END: put_piece
 
+    /// Removes the piece on `square` and returns it, updating both views of the board.
+    pub(crate) fn remove_piece(&mut self, square: Square) -> Option<Piece> {
+        let piece = self.mailbox[square.index()].take()?;
+        self.by_type[piece.piece_type.index()] &= !Bitboard::from_square(square);
+        self.by_color[piece.color.index()] &= !Bitboard::from_square(square);
+        Some(piece)
+    }
+
+    pub(crate) fn castling_mut(&mut self) -> &mut CastlingRights {
+        &mut self.castling
+    }
+
     /// What stands on `square`, if anything.
     pub fn piece_at(&self, square: Square) -> Option<Piece> {
         self.mailbox[square.index()]

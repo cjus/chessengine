@@ -35,7 +35,9 @@ that is also a learning tool. Product requirements: `docs/PRD.md`. Owner: Carlos
    around it.
    **Claude may merge its own PRs** (granted by Carlos 2026-10-10) once all three checks are green
    on the latest commit, the PR merges cleanly and no review comment is unanswered. After a
-   stage's last PR merges, tag `main` as `stage-NN-<name>` and push the tag.
+   stage's last PR merges, it gets a `stage-NN-<name>` tag on `main`. Cloud sessions can't push
+   tags (the git proxy refuses them), so add the tag command to the open `needs-carlos` issue
+   "Push stage tags" (cjus/chessengine#17, or a new one if that is closed).
 7. If the change affects `docs/PRD.md` scope or decisions, update it in the same PR.
 
 ## What Claude runs and what Carlos runs
