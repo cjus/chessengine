@@ -13,6 +13,7 @@
 //! - [`position`]: a full position, kept as bitboards and as a mailbox array.
 //! - [`fen`]: reading and writing positions in Forsyth–Edwards Notation.
 //! - [`attacks`]: which squares each piece attacks, and the lines between squares.
+//! - [`magic`]: magic bitboards, fast table lookups for sliding-piece attacks.
 //! - [`moves`]: moves packed into 16 bits, and move lists.
 //! - [`movegen`]: legal move generation with check and pin masks.
 //! - [`makemove`]: playing a move on a position.
@@ -22,7 +23,6 @@
 //!
 //! The crate grows stage by stage (see `docs/PRD.md`, "Stages", and the companion book):
 //!
-//! - **Stage 3 (magics):** magic bitboards replace the ray walks for sliding pieces.
 //! - **Stage 4:** make/unmake with an undo stack, and incremental Zobrist hashing.
 //!
 //! ## Further reading
@@ -37,6 +37,7 @@ pub mod attacks;
 pub mod bitboard;
 pub mod castling;
 pub mod fen;
+pub mod magic;
 pub mod makemove;
 pub mod movegen;
 pub mod moves;

@@ -9,7 +9,7 @@
 //! - [`run`] reads lines from any input, executes them and writes the results, adding a prompt
 //!   when a person is typing.
 //!
-//! ## Commands so far (stages 1–2)
+//! ## Commands so far (stages 1–3)
 //!
 //! | Command | What it does |
 //! | --- | --- |
@@ -24,13 +24,15 @@
 //! | `legal`, `moves` | List the legal moves |
 //! | `perft <depth>`, `divide <depth>` | Count positions (move generation check) |
 //! | `attacks <square>`, `attackers <square>` | What a piece attacks; what attacks a square |
+//! | `magic <square>` | How the magic-bitboard lookup works out a slider's attacks there |
+//! | `set sliders rays\|magics` | Compute sliding attacks by walking rays or by magic lookup |
 //! | `bb <set>` | Show a bitboard: `occupied`, `empty`, `white`, `black`, `checkers`, `pinned`, or a piece letter (`P`, `n`, ...) |
 //! | `help` | List commands |
 //! | `quit`, `exit` | Leave |
 //!
 //! ## Coming in later stages
 //!
-//! - **Stage 3:** magic lookups (`magic <square>`) and moves in algebraic notation (`Nf3`).
+//! - **Stage 4:** moves in algebraic notation (`Nf3`).
 //! - **Stage 4:** playing complete games against the engine with clocks and levels, and a live
 //!   display of the engine's thinking.
 //! - **Stage 9 on:** the explain commands: `eval`, `explain`, `tree` and `stats`.
@@ -47,8 +49,10 @@ use std::io::{self, BufRead, Write};
 use std::time::Instant;
 
 use cb2026_chess::attacks::{
-    bishop_attacks, king_attacks, knight_attacks, pawn_attacks, queen_attacks, rook_attacks,
+    SliderMethod, bishop_attacks, king_attacks, knight_attacks, pawn_attacks, queen_attacks,
+    rook_attacks, set_slider_method, slider_method,
 };
+use cb2026_chess::magic::{self, Magic};
 use cb2026_chess::perft::{divide, perft};
 use cb2026_chess::{Bitboard, Color, Piece, PieceType, Position, Square};
 pub use render::Style;
@@ -70,6 +74,9 @@ Commands:
   divide <depth>       The same, split by first move
   attacks <square>     The squares the piece on <square> attacks
   attackers <square>   The pieces (both colours) attacking <square>
+  magic <square>       Step through the magic-bitboard lookup for a rook and bishop there
+  set sliders rays|magics
+                       Compute sliding attacks by walking rays or by magic lookup
   bb <set>             Show a bitboard: occupied, empty, white, black, checkers,
                        pinned, or a piece letter (P N B R Q K for White, p n b r q k)
   help                 This list
@@ -195,6 +202,11 @@ impl Shell {
                 Ok(square) => self.attacks(square, command == "attackers"),
                 Err(e) => Response::text(format!("Usage: {command} <square>: {e}")),
             },
+            "magic" => match args.parse::<Square>() {
+                Ok(square) => self.magic(square),
+                Err(e) => Response::text(format!("Usage: magic <square>: {e}")),
+            },
+            "set" => self.set(args),
             // Anything else that is a legal move is played.
             other if self.position.parse_uci_move(other).is_some() => self.play(line),
             other => Response::text(format!(
@@ -279,6 +291,64 @@ impl Shell {
             nodes as f64 / seconds.max(1e-9) / 1e6
         ));
         Response::text(out)
+    }
+
+    /// Shows each step of the magic lookup for a rook and a bishop on `square`, using the
+    /// current position's occupied squares.
+    fn magic(&self, square: Square) -> Response {
+        let occupied = self.position.occupied();
+        let mut out = String::new();
+        let sliders: [(&str, Magic, Bitboard); 2] = [
+            (
+                "Rook",
+                magic::rook_magic(square),
+                magic::rook_attacks(square, occupied),
+            ),
+            (
+                "Bishop",
+                magic::bishop_magic(square),
+                magic::bishop_attacks(square, occupied),
+            ),
+        ];
+        for (name, m, attacks) in sliders {
+            let relevant = occupied & m.mask;
+            out.push_str(&format!(
+                "{name} on {square}\n\
+                 1. Relevant squares (mask), {} of them:\n{}\
+                 2. Occupied relevant squares: {:#018x}\n\
+                 3. Multiply by the magic {:#018x} and keep the top {} bits: index {}\n   \
+                    (table offset {} + {})\n\
+                 4. The table entry is the attack set:\n{}\n",
+                m.mask.count(),
+                render::bitboard(m.mask, self.style),
+                relevant.0,
+                m.magic,
+                64 - m.shift,
+                m.index(occupied),
+                m.offset,
+                m.index(occupied) - m.offset,
+                render::bitboard(attacks, self.style),
+            ));
+        }
+        Response::text(out)
+    }
+
+    /// `set <option> <value>`: engine settings that are useful to switch while learning.
+    fn set(&mut self, args: &str) -> Response {
+        let mut words = args.split_whitespace();
+        match (words.next(), words.next()) {
+            (Some("sliders"), Some("rays")) => set_slider_method(SliderMethod::Rays),
+            (Some("sliders"), Some("magics")) => set_slider_method(SliderMethod::Magics),
+            (Some("sliders"), None) => {}
+            _ => return Response::text("Usage: set sliders rays|magics"),
+        }
+        Response::text(format!(
+            "Sliding attacks: {}",
+            match slider_method() {
+                SliderMethod::Rays => "walking rays",
+                SliderMethod::Magics => "magic bitboards",
+            }
+        ))
     }
 
     fn attacks(&self, square: Square, attackers: bool) -> Response {
@@ -525,6 +595,32 @@ mod tests {
         assert!(shell.execute("attackers f3").output.contains("(3 squares)"));
         assert_eq!(shell.execute("attacks e4").output, "e4 is empty.");
         assert!(shell.execute("attacks z9").output.starts_with("Usage"));
+    }
+
+    #[test]
+    fn magic_walkthrough() {
+        let mut shell = ascii_shell();
+        let out = shell.execute("magic d4").output;
+        assert!(out.contains("Rook on d4"));
+        assert!(out.contains("Relevant squares (mask), 10 of them"));
+        assert!(out.contains("Bishop on d4"));
+        assert!(shell.execute("magic x").output.starts_with("Usage"));
+    }
+
+    #[test]
+    fn slider_setting() {
+        // The setting is global, so this test sets it back to the default at the end.
+        let mut shell = ascii_shell();
+        assert_eq!(
+            shell.execute("set sliders rays").output,
+            "Sliding attacks: walking rays"
+        );
+        assert!(shell.execute("perft 3").output.contains("8902 nodes"));
+        assert_eq!(
+            shell.execute("set sliders magics").output,
+            "Sliding attacks: magic bitboards"
+        );
+        assert!(shell.execute("set colour blue").output.starts_with("Usage"));
     }
 
     #[test]

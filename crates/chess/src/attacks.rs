@@ -7,14 +7,20 @@
 //! 64-entry table, and "where does a knight on g1 attack?" becomes one array read:
 //! `KNIGHT_ATTACKS[g1]`.
 //!
-//! ## Sliding pieces: walking rays
+//! ## Sliding pieces: rays or magics
 //!
 //! Bishops, rooks and queens slide until they hit something, so their attacks depend on which
-//! squares are occupied. Here they are computed the obvious way: from the piece, step in each
-//! direction, adding squares, and stop after the first occupied square (which is attacked too,
-//! whoever owns it). Stage 3 replaces this with *magic bitboards*, a table lookup that gives
-//! the same answer much faster; this version stays as the reference the magics are tested
-//! against.
+//! squares are occupied. Two methods compute them, and [`set_slider_method`] chooses which one
+//! [`rook_attacks`] and [`bishop_attacks`] use:
+//!
+//! - **Rays** ([`rook_attacks_by_rays`]): from the piece, step in each direction, adding squares,
+//!   and stop after the first occupied square (which is attacked too, whoever owns it). Simple
+//!   and obviously right; it is the reference the magics are tested against.
+//! - **Magics** (the default, see [`crate::magic`]): a table lookup that gives the same answer
+//!   several times faster.
+//!
+//! Switching is for learning and measuring (try `set sliders rays` then `perft 5` in the
+//! shell); the choice costs one predictable branch per call.
 //!
 //! ## Lines between squares
 //!
@@ -28,6 +34,7 @@
 //! [Classical Approach](https://www.chessprogramming.org/Classical_Approach).
 
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::bitboard::Bitboard;
 use crate::piece::Color;
@@ -148,14 +155,58 @@ fn slider_attacks(square: Square, occupied: Bitboard, directions: &[(i8, i8)]) -
 }
 // ANCHOR_END: slider
 
+/// The squares a rook on `square` attacks, found by walking rays.
+pub fn rook_attacks_by_rays(square: Square, occupied: Bitboard) -> Bitboard {
+    slider_attacks(square, occupied, &ROOK_DIRECTIONS)
+}
+
+/// The squares a bishop on `square` attacks, found by walking rays.
+pub fn bishop_attacks_by_rays(square: Square, occupied: Bitboard) -> Bitboard {
+    slider_attacks(square, occupied, &BISHOP_DIRECTIONS)
+}
+
+/// How sliding-piece attacks are computed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SliderMethod {
+    /// Walk each ray square by square.
+    Rays,
+    /// Look the answer up with magic bitboards (the default).
+    Magics,
+}
+
+/// Whether [`rook_attacks`] and [`bishop_attacks`] use rays instead of magics.
+static USE_RAYS: AtomicBool = AtomicBool::new(false);
+
+/// Chooses how sliding-piece attacks are computed, for the whole program.
+pub fn set_slider_method(method: SliderMethod) {
+    USE_RAYS.store(method == SliderMethod::Rays, Ordering::Relaxed);
+}
+
+/// The current way sliding-piece attacks are computed.
+pub fn slider_method() -> SliderMethod {
+    if USE_RAYS.load(Ordering::Relaxed) {
+        SliderMethod::Rays
+    } else {
+        SliderMethod::Magics
+    }
+}
+
 /// The squares a rook on `square` attacks, given the occupied squares.
 pub fn rook_attacks(square: Square, occupied: Bitboard) -> Bitboard {
-    slider_attacks(square, occupied, &ROOK_DIRECTIONS)
+    if USE_RAYS.load(Ordering::Relaxed) {
+        rook_attacks_by_rays(square, occupied)
+    } else {
+        crate::magic::rook_attacks(square, occupied)
+    }
 }
 
 /// The squares a bishop on `square` attacks, given the occupied squares.
 pub fn bishop_attacks(square: Square, occupied: Bitboard) -> Bitboard {
-    slider_attacks(square, occupied, &BISHOP_DIRECTIONS)
+    if USE_RAYS.load(Ordering::Relaxed) {
+        bishop_attacks_by_rays(square, occupied)
+    } else {
+        crate::magic::bishop_attacks(square, occupied)
+    }
 }
 
 /// The squares a queen on `square` attacks: a rook's and a bishop's together.
