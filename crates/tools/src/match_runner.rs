@@ -107,7 +107,7 @@ pub fn run_match(
     drop(sender);
 
     let mut score = Score::default();
-    for (game, first_white) in results {
+    for (game, first_white) in &results {
         let first_won = match game.outcome {
             Outcome::Draw => None,
             Outcome::WhiteWins => Some(first_white),
@@ -126,9 +126,14 @@ pub fn run_match(
             verdict,
         });
         if matches!(verdict, Some(Verdict::Pass | Verdict::Fail)) {
+            // The test is decided the moment the LLR crosses a bound. Games still being
+            // played could pull it back across, so they are finished but not counted.
             stop.store(true, Ordering::Relaxed);
+            break;
         }
     }
+    // Wait for the workers to finish the games they had started.
+    for _ in results {}
     for worker in workers {
         let _ = worker.join();
     }
