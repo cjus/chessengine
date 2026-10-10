@@ -256,17 +256,18 @@ Status as of 2026-10-10 (details and sources in the Research log):
 | GUI / tool | Platform | License | Role | Who checks |
 | --- | --- | --- | --- | --- |
 | fastchess, cutechess-cli | Linux/macOS | Open source (GPL-3.0 / MIT) | Automated matches, SPRT, gauntlets | Claude (scripted, every release) |
-| En Croissant | macOS (.dmg) | Open source (GPL-3.0) | **Primary GUI**: modern analysis and play, any UCI engine. Installed on the test Mac and ready (2026-10-10) | Carlos |
+| En Croissant | macOS (.dmg) | Open source (GPL-3.0) | **Primary GUI**: modern analysis and play, any UCI engine. Installed and running on the M1 Max (2026-10-10, cjus/chessengine#12) | Carlos |
 | Cute Chess | macOS (Apple Silicon build exists) | Open source (GPL-3.0) | **Primary for engine-vs-engine** games and tournaments | Carlos |
 | Scid vs. PC / Scid | macOS | Open source (GPL-2.0) | Database and analysis; UCI and XBoard engines | Carlos |
 | XBoard | macOS (Homebrew) | Open source (GPL-3.0) | The reference CECP GUI | Carlos (CECP mode) |
 | Nibbler | macOS (community package) | Open source (GPL-3.0) | Analysis GUI built for Lc0, works with UCI engines | Optional |
 | ChessX | macOS (Intel build, runs under Rosetta 2) | Open source (GPL-2.0) | Database with engine analysis | Optional |
 | Banksia | macOS | Free, closed source | Tournament GUI | Optional |
-| HIARCS Chess Explorer (Pro) | macOS | Commercial | Commercial target | Carlos. Primary commercial target: the 2026 Mac release runs natively on Apple Silicon; external UCI engine support still to be confirmed (see Research log) |
-| ChessBase for Mac | macOS | Commercial | Commercial target | Carlos, once it ships (announced for November 2026). First check whether it accepts local UCI engines; the announcement only mentions Fritz, cloud and remote engines |
-| Shredder 13 | macOS | Commercial | Optional | Optional. Accepts UCI engines, but the last major release was 2016 |
-| ChessBase/Fritz, Arena | Windows | Commercial / free | Windows coverage | Carlos, on a Windows machine, once the Windows build runs well (cjus/chessengine#11); until then UCI conformance tests and the Cross-platform CI job stand in |
+| HIARCS Chess Explorer (Pro) | macOS | Commercial | **Carlos's commercial Mac GUI** (cjus/chessengine#10) | Carlos. The 2026 Mac release runs natively on Apple Silicon; check that it loads cb2026 as an external UCI engine at the first GUI check |
+| ChessBase for Mac | macOS | Commercial | Not planned | Carlos uses ChessBase on Windows instead (cjus/chessengine#10) |
+| Shredder 13 | macOS | Commercial | Not planned | Accepts UCI engines, but the last major release was 2016 |
+| ChessBase (Windows) | Windows | Commercial | **Carlos's commercial Windows GUI** (cjus/chessengine#10) | Carlos, on his Windows machine, once the Windows build runs well (cjus/chessengine#11); until then UCI conformance tests and the Cross-platform CI job stand in |
+| Arena | Windows | Free | Optional | Carlos, on the same Windows machine, if time allows |
 | lichess-bot | Linux/macOS | Open source (AGPL-3.0) | Online play on Lichess | Claude sets it up; Carlos runs it |
 
 Claude can't operate GUIs, so it also maintains a **protocol conformance test**: a script that
@@ -571,7 +572,7 @@ Sources:
 
 | Product | Finding | To confirm |
 | --- | --- | --- |
-| En Croissant | Free, GPL-3.0, built with Tauri; macOS .dmg from encroissant.org, macOS 10.13 or later; supports any UCI engine, added from a local file | Installed on Carlos's M1 Max (2026-10-10). Native Apple Silicon build still to check (Finder → Get Info → Kind) |
+| En Croissant | Free, GPL-3.0, built with Tauri; macOS .dmg from encroissant.org, macOS 10.13 or later; supports any UCI engine, added from a local file | Installed and running on Carlos's M1 Max (2026-10-10, cjus/chessengine#12) |
 | Cute Chess | GPL-3.0; a third-party site provides a build for Apple Silicon and Intel; widely recommended for engine matches | Official vs third-party Mac build |
 | Scid | A forum user reports it runs well on Apple Silicon | Which variant (Scid vs. PC or Scid) and its current Mac build |
 | Nibbler | No official Mac build; the community project Nibbler-for-macOS packages it with Electron and Lc0 | Using it with a non-Lc0 UCI engine |
@@ -625,8 +626,9 @@ these with measured figures from the first real SPRT runs.
       SPRTs and gauntlets at 7 games at once, via scripts that post results to the PR; cloud
       sessions for short tests; OpenBench later if needed (2026-10-10).
 - [x] GUI testing is Mac-first and open-source-first: En Croissant and Cute Chess as the primary
-      GUIs, plus Scid and XBoard; HIARCS Chess Explorer as the commercial target, ChessBase for
-      Mac once it ships, Shredder 13 optional (2026-10-10).
+      GUIs, plus Scid and XBoard (2026-10-10). Commercial GUIs: HIARCS Chess Explorer on the
+      Mac and ChessBase on Windows; ChessBase for Mac and Shredder are not planned
+      (cjus/chessengine#10, 2026-10-10).
 - [x] En Croissant is installed on the test Mac and is the first GUI cb2026 is checked in, from
       M1 on (2026-10-10).
 - [x] Repo goes public around October 2027, with the book on GitHub Pages (2026-10-10).
@@ -639,4 +641,5 @@ these with measured figures from the first real SPRT runs.
 
 ## Open questions
 
-- [ ] Which commercial Mac GUIs Carlos owns or will buy (HIARCS Chess Explorer, ChessBase for Mac).
+None right now. New questions for Carlos go in GitHub issues labelled `needs-carlos` and are
+recorded here when answered.
