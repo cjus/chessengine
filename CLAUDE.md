@@ -30,6 +30,9 @@ that is also a learning tool. Product requirements: `docs/PRD.md`. Owner: Carlos
    `docs/PRD.md` "Testing"), or say "No functional change" with an unchanged bench.
 5. Book chapter and `docs/elo-ledger.md` updated when a technique is added or changed.
 6. Work is on a `claude/<topic>` branch from the latest `main`, with a PR to `main` and green CI.
+   `main` is protected (ruleset `main: PR + CI`): changes land only through a PR whose three CI
+   checks (`fmt, clippy, test, doc`, `licences and advisories`, `book`) passed. Never try to get
+   around it.
 7. If the change affects `docs/PRD.md` scope or decisions, update it in the same PR.
 
 ## What Claude runs and what Carlos runs

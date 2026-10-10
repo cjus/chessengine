@@ -31,7 +31,9 @@ and the search tree.
 
 **Non-goals for v1**
 
-- No graphical interface. GUIs and the shell are the front ends.
+- No graphical interface and no full-screen terminal UI. cb2026 is an engine used under chess
+  GUIs; the line-based shell is for playing, studying and debugging it (decided 2026-10-10,
+  cjus/chessengine#9).
 - No Monte Carlo tree search or large GPU neural networks (the AlphaZero/Leela family).
 - No chess variants beyond Chess960.
 - No code, nets or training data copied from other engines unless the license allows it and we
@@ -173,7 +175,7 @@ Each technique below is a separate function or clearly marked block, has its own
 
 ### Tablebase probing
 
-Recommended 2026-10-10 (confirm in review). Syzygy files use a complex compressed format, so
+Decided 2026-10-10 (confirmed by Carlos in cjus/chessengine#8). Syzygy files use a complex compressed format, so
 the probing code is a real choice:
 
 | Option | For | Against |
@@ -254,17 +256,18 @@ Status as of 2026-10-10 (details and sources in the Research log):
 | GUI / tool | Platform | License | Role | Who checks |
 | --- | --- | --- | --- | --- |
 | fastchess, cutechess-cli | Linux/macOS | Open source (GPL-3.0 / MIT) | Automated matches, SPRT, gauntlets | Claude (scripted, every release) |
-| En Croissant | macOS (.dmg) | Open source (GPL-3.0) | **Primary GUI**: modern analysis and play, any UCI engine. Installed on the test Mac and ready (2026-10-10) | Carlos |
+| En Croissant | macOS (.dmg) | Open source (GPL-3.0) | **Primary GUI**: modern analysis and play, any UCI engine. Installed and running on the M1 Max (2026-10-10, cjus/chessengine#12) | Carlos |
 | Cute Chess | macOS (Apple Silicon build exists) | Open source (GPL-3.0) | **Primary for engine-vs-engine** games and tournaments | Carlos |
 | Scid vs. PC / Scid | macOS | Open source (GPL-2.0) | Database and analysis; UCI and XBoard engines | Carlos |
 | XBoard | macOS (Homebrew) | Open source (GPL-3.0) | The reference CECP GUI | Carlos (CECP mode) |
 | Nibbler | macOS (community package) | Open source (GPL-3.0) | Analysis GUI built for Lc0, works with UCI engines | Optional |
 | ChessX | macOS (Intel build, runs under Rosetta 2) | Open source (GPL-2.0) | Database with engine analysis | Optional |
 | Banksia | macOS | Free, closed source | Tournament GUI | Optional |
-| HIARCS Chess Explorer (Pro) | macOS | Commercial | Commercial target | Carlos. Primary commercial target: the 2026 Mac release runs natively on Apple Silicon; external UCI engine support still to be confirmed (see Research log) |
-| ChessBase for Mac | macOS | Commercial | Commercial target | Carlos, once it ships (announced for November 2026). First check whether it accepts local UCI engines; the announcement only mentions Fritz, cloud and remote engines |
-| Shredder 13 | macOS | Commercial | Optional | Optional. Accepts UCI engines, but the last major release was 2016 |
-| ChessBase/Fritz, Arena | Windows | Commercial / free | Windows coverage | Only if a Windows PC or VM becomes available; until then UCI conformance tests stand in |
+| HIARCS Chess Explorer (Pro) | macOS | Commercial | **Carlos's commercial Mac GUI** (cjus/chessengine#10) | Carlos. The 2026 Mac release runs natively on Apple Silicon; check that it loads cb2026 as an external UCI engine at the first GUI check |
+| ChessBase for Mac | macOS | Commercial | Not planned | Carlos uses ChessBase on Windows instead (cjus/chessengine#10) |
+| Shredder 13 | macOS | Commercial | Not planned | Accepts UCI engines, but the last major release was 2016 |
+| ChessBase (Windows) | Windows | Commercial | **Carlos's commercial Windows GUI** (cjus/chessengine#10) | Carlos, on his Windows machine, once the Windows build runs well (cjus/chessengine#11); until then UCI conformance tests and the Cross-platform CI job stand in |
+| Arena | Windows | Free | Optional | Carlos, on the same Windows machine, if time allows |
 | lichess-bot | Linux/macOS | Open source (AGPL-3.0) | Online play on Lichess | Claude sets it up; Carlos runs it |
 
 Claude can't operate GUIs, so it also maintains a **protocol conformance test**: a script that
@@ -309,7 +312,17 @@ side, `board ascii|unicode` to switch styles.
 | Look inside | `bb <piece\|occupancy\|attacks\|pins\|checkers>`: bitboard as an 8×8 grid plus hex; `attacks <square>`; `magic <square>` (mask, magic number, index, result); `zobrist` (hash broken into its parts); `see <move>`; `legal` (all legal moves with SAN and their move-ordering scores); `perft <n>`, `divide <n>` |
 | Explain | `eval` (term-by-term breakdown, middlegame/endgame/blended, both sides); `eval diff <move>` (what a move changes); `explain <move>` (searches the move and compares it with the best move, showing the refutation); `tree <depth>` (prints or exports the search tree, with pruned and reduced nodes marked); `stats` (TT hit rate, first-move cutoff rate, nodes saved by each pruning technique, LMR re-searches) |
 | Techniques | `techniques` (lists them, on/off); `set <technique> on\|off`; `ab <depth>` (searches with and without one technique and compares nodes, time and move) |
-| Tools | `bench`, `selfplay <n> [tc]`, `match <engine-path> <n> [tc]` (a small match against another UCI engine, should-have), `uci` / `xboard` (switches the session to that protocol), `help [command]`, `quit` |
+| Tools | `bench`, `selfplay <n> [tc]`, `match <engine-path> <n> [tc]` (a small match against another UCI engine: must-have in v1, cjus/chessengine#9; see below), `uci` / `xboard` (switches the session to that protocol), `help [command]`, `quit` |
+
+### The `match` command
+
+Decided 2026-10-10 (cjus/chessengine#9): in v1. `match <engine-path> <n> [tc]` plays `n` games
+between cb2026 and another UCI engine from inside the shell, alternating colours, and shows the
+running score, a live board for the current game, and the final result with an Elo estimate and
+error margin. Games are saved as PGN. It's for quick, friendly comparisons and for learners
+("does my change beat the previous stage?"); rigorous testing still uses fastchess and SPRT.
+It needs the shell to drive a second engine over UCI, so it arrives in M4, with an optional
+opening file (EPD or PGN) and Chess960 support.
 
 ### Engine thinking display
 
@@ -478,7 +491,10 @@ and short SPRT matches itself. What Claude can't do is look at GUIs or run long 
 
 **Workflow:** `claude/<topic>` branches from the latest `main`, one PR each; CI (fmt, clippy,
 tests, quick perft, bench, conformance, book build) must be green; the PR states bench and SPRT
-results. Each stage ends with a tag, a book chapter and an Elo ledger entry.
+results. Each stage ends with a tag, a book chapter and an Elo ledger entry. `main` is
+protected by the ruleset `main: PR + CI` (since 2026-10-10): every change arrives through a PR,
+the three CI checks (`fmt, clippy, test, doc`, `licences and advisories`, `book`) must pass, and
+force pushes and branch deletion are blocked.
 
 **CI cost.** GitHub Actions minutes are limited on private repos, and macOS and Windows minutes
 have historically cost 10× and 2× Linux minutes. So PRs run on Linux; macOS and Windows builds run nightly and on
@@ -513,7 +529,7 @@ release tags. Releases build binaries for every platform in the table above.
 | M1 · Playable | Zobrist, UCI, alpha-beta, iterative deepening, time management, quiescence; shell basics: board display, play a full game, thinking display, `perft`, `bb` (stages 4–7) | Plays complete games in En Croissant and the shell with no illegal moves or time losses |
 | M2 · Classical search | TT, move ordering, PVS, null move, LMR, pruning (stages 8–14) | ~2200 CCRL by gauntlet; every technique has an SPRT result in the ledger |
 | M3 · Evaluation | Full HCE, eval trace, Texel tuner, self-play data generation, `eval`/`explain`/`tree`/`stats` (stages 15–16) | ≥2400 CCRL by gauntlet |
-| M4 · Complete engine | Lazy SMP, Syzygy, Polyglot, Chess960, MultiPV, pondering, levels, XBoard, Lichess bot (stages 17–20) | GUI compatibility matrix passes; levels calibrated |
+| M4 · Complete engine | Lazy SMP, Syzygy, Polyglot, Chess960, MultiPV, pondering, levels, XBoard, Lichess bot, shell `match` command (stages 17–20) | GUI compatibility matrix passes; levels calibrated |
 | M5 · v1.0 release | Strength work towards 2600–2700, book finished, release binaries, robustness run | ≥2400 CCRL Blitz (goal 2600+); 10,000-game robustness run clean; book complete for stages 1–20 |
 | M6 · NNUE (stretch) | NNUE inference with SIMD, our own trainer, self-play data, HCE kept as a mode (stage 21) | Beats the HCE version by SPRT; book chapter done |
 
@@ -529,7 +545,7 @@ release tags. Releases build binaries for every platform in the table above.
 | Strength limiting feels unnatural | Players don't enjoy low levels | MultiPV-based move choice; calibration; Carlos playtests the levels |
 | Tablebase crate changes or is abandoned | Tablebase support breaks | Behind a `Tablebase` trait and a cargo feature; Fathom or our own port can replace it |
 | CI minutes on a private repo | CI throttled or costly | Linux on PRs; macOS/Windows nightly and on tags |
-| Only a Mac for GUI testing | Windows GUIs (ChessBase/Fritz, Arena) untested | Strict UCI conformance tests; a Windows VM or PC check before going public |
+| Windows GUIs tested late | Windows-only GUI problems (ChessBase/Fritz, Arena) found late | Strict UCI conformance tests and Windows CI builds throughout; Carlos tests on a Windows machine once the Windows build runs well, before going public |
 
 ## Research log
 
@@ -543,7 +559,7 @@ dated entry whenever a decision rests on outside facts.
 | HIARCS Chess Explorer (Pro) | 2026 Mac release; macOS 10.14 or later including macOS 26; native on Intel and Apple Silicon (vendor page). A third-party listing says it supports external UCI engines | Vendor claim for the platform; UCI support from a third party | External UCI engine support in the current version (ask HIARCS or try the demo) |
 | ChessBase for Mac | Native Mac version announced, built from the ground up, release November 2026. The announcement lists Fritz, Stockfish from the Engine Cloud and remote engines | From search summaries; fetching the article failed | Whether it can load a local UCI engine, once it ships |
 | Shredder 13 | Last major release October 2016, Mac and Linux builds November 2016. Users report its GUI accepts any Mac UCI engine | Old and anecdotal; no native Apple Silicon build confirmed | Whether it still runs on current macOS (likely through Rosetta 2) |
-| ChessBase/Fritz on Windows | Not native on Mac before the new version; workarounds were Boot Camp, a VM or Wine/CrossOver | Forum reports | Only if a Windows PC or VM is available |
+| ChessBase/Fritz on Windows | Not native on Mac before the new version; workarounds were Boot Camp, a VM or Wine/CrossOver | Forum reports | Carlos has a Windows machine for this once the Windows build runs well |
 
 Sources:
 [HIARCS Mac chess software](https://www.hiarcs.com/mac-chess-software.html),
@@ -556,7 +572,7 @@ Sources:
 
 | Product | Finding | To confirm |
 | --- | --- | --- |
-| En Croissant | Free, GPL-3.0, built with Tauri; macOS .dmg from encroissant.org, macOS 10.13 or later; supports any UCI engine, added from a local file | Installed on Carlos's M1 Max (2026-10-10). Native Apple Silicon build still to check (Finder → Get Info → Kind) |
+| En Croissant | Free, GPL-3.0, built with Tauri; macOS .dmg from encroissant.org, macOS 10.13 or later; supports any UCI engine, added from a local file | Installed and running on Carlos's M1 Max (2026-10-10, cjus/chessengine#12) |
 | Cute Chess | GPL-3.0; a third-party site provides a build for Apple Silicon and Intel; widely recommended for engine matches | Official vs third-party Mac build |
 | Scid | A forum user reports it runs well on Apple Silicon | Which variant (Scid vs. PC or Scid) and its current Mac build |
 | Nibbler | No official Mac build; the community project Nibbler-for-macOS packages it with Electron and Lc0 | Using it with a non-Lc0 UCI engine |
@@ -597,26 +613,33 @@ these with measured figures from the first real SPRT runs.
 - [x] Language: Rust, stable toolchain (2026-10-10).
 - [x] Strength target: 2400–2700 CCRL; v1.0 gate ≥2400 Blitz, goal 2600+ (2026-10-10).
 - [x] Evaluation: tuned HCE for v1; NNUE as a stretch milestone, with HCE kept as a mode (2026-10-10).
-- [x] Licence: GPL-3.0; repo private at first (2026-10-10).
+- [x] Licence: GPL-3.0; repo private at first (2026-10-10). Crates declare `GPL-3.0-or-later`
+      (cjus/chessengine#7, 2026-10-10).
 - [x] Protocols: UCI, XBoard/CECP, Chess960, Lichess bot setup (2026-10-10).
-- [x] Shell: rich line-based REPL; no full-screen TUI in v1 (2026-10-10).
+- [x] Shell: rich line-based REPL. No full-screen TUI at all: cb2026 is an engine used under
+      chess GUIs (cjus/chessengine#9, 2026-10-10).
 - [x] Learning features: book, milestone tags, explain commands, technique switches (2026-10-10).
 - [x] PRD lives in `docs/PRD.md` in the repo (2026-10-10).
 - [x] Name: **cb2026** (ChessBrain 2026); the repo stays `cjus/chessengine` (2026-10-10).
-- [x] Tablebases: `shakmaty-syzygy` behind a `Tablebase` trait (recommended 2026-10-10; confirm in review).
+- [x] Tablebases: `shakmaty-syzygy` behind a `Tablebase` trait (confirmed, cjus/chessengine#8, 2026-10-10).
 - [x] Test machine: Carlos's Apple M1 Max (8 performance + 2 efficiency cores, 64 GB) for long
       SPRTs and gauntlets at 7 games at once, via scripts that post results to the PR; cloud
       sessions for short tests; OpenBench later if needed (2026-10-10).
 - [x] GUI testing is Mac-first and open-source-first: En Croissant and Cute Chess as the primary
-      GUIs, plus Scid and XBoard; HIARCS Chess Explorer as the commercial target, ChessBase for
-      Mac once it ships, Shredder 13 optional (2026-10-10).
+      GUIs, plus Scid and XBoard (2026-10-10). Commercial GUIs: HIARCS Chess Explorer on the
+      Mac and ChessBase on Windows; ChessBase for Mac and Shredder are not planned
+      (cjus/chessengine#10, 2026-10-10).
 - [x] En Croissant is installed on the test Mac and is the first GUI cb2026 is checked in, from
       M1 on (2026-10-10).
 - [x] Repo goes public around October 2027, with the book on GitHub Pages (2026-10-10).
+- [x] Shell `match` command (cb2026 against another UCI engine) is in v1, arriving in M4
+      (cjus/chessengine#9, 2026-10-10).
+- [x] Windows: Carlos tests on a Windows machine once the Windows build runs well
+      (cjus/chessengine#11, 2026-10-10).
+- [x] `main` protected by the ruleset `main: PR + CI`: PR required, three CI checks required,
+      no force pushes or deletion (cjus/chessengine#5, 2026-10-10).
 
 ## Open questions
 
-- [ ] Which commercial Mac GUIs Carlos owns or will buy (HIARCS Chess Explorer, ChessBase for Mac).
-- [ ] Is a Windows PC or VM available for ChessBase/Fritz and Arena checks before going public?
-- [ ] Is a full-screen TUI wanted after v1?
-- [ ] Should the shell `match` command (mini tournament manager) be in v1 or later?
+None right now. New questions for Carlos go in GitHub issues labelled `needs-carlos` and are
+recorded here when answered.
