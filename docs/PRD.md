@@ -419,12 +419,22 @@ testing only and are never included in the repo.
 Decided 2026-10-10: long tests run on Carlos's Apple Silicon Mac, short ones in Claude's cloud
 sessions.
 
+**The test machine:** Apple M1 Max, 10 cores (8 performance, 2 efficiency), 64 GB RAM. This gives:
+- **SPRTs and gauntlets:** 7 games at once, single-threaded engines, 16 MB hash each
+  (at most 14 engine processes, well within memory).
+- **Lazy SMP tests:** up to 8 threads on one engine against one opponent, run on their own, not
+  mixed with other tests.
+- **Tablebases:** the full 3-4-5-piece Syzygy set (about 1 GB) fits easily; the 6-piece set
+  (about 150 GB on disk) works only with an external drive and is not needed for v1.
+- **Speed baseline:** the ≥100 Mnps perft gate and all `bench` speed figures are measured on
+  this machine.
+
 - **`scripts/mac-sprt.sh <PR>`** (Claude writes it, Carlos runs it): builds the PR branch and
   `main` in release mode, runs the fastchess SPRT, and posts the result to the PR as a
   `<!-- sprt -->` comment through `gh`. Carlos only starts it and lets it run overnight;
   `scripts/mac-gauntlet.sh` does the same for rating gauntlets.
-- **Performance cores only:** concurrency = performance cores − 1 (`sysctl
-  hw.perflevel0.physicalcpu`). Efficiency cores run at a different speed and would skew results
+- **Performance cores only:** concurrency = performance cores − 1, so 7 on the M1 Max (`sysctl
+  hw.perflevel0.physicalcpu` reports 8). Efficiency cores run at a different speed and would skew results
   at a fixed time control.
 - **Steady conditions:** `caffeinate -i` so the Mac doesn't sleep, on mains power, other heavy
   apps closed. A laptop may throttle under hours of full load; a Mac mini or Studio is steadier.
@@ -494,7 +504,7 @@ release tags. Releases build binaries for every platform in the table above.
 
 | Milestone | Scope | Gate |
 | --- | --- | --- |
-| M0 · Foundations | Workspace, CI, licence checks, board, FEN, move generation, magics, perft (stages 1–3) | All perft suites exact; ≥100 Mnps perft on the test Mac |
+| M0 · Foundations | Workspace, CI, licence checks, board, FEN, move generation, magics, perft (stages 1–3) | All perft suites exact; ≥100 Mnps perft on the M1 Max |
 | M1 · Playable | Zobrist, UCI, alpha-beta, iterative deepening, time management, quiescence; shell basics: board display, play a full game, thinking display, `perft`, `bb` (stages 4–7) | Plays complete games in Cute Chess and the shell with no illegal moves or time losses |
 | M2 · Classical search | TT, move ordering, PVS, null move, LMR, pruning (stages 8–14) | ~2200 CCRL by gauntlet; every technique has an SPRT result in the ledger |
 | M3 · Evaluation | Full HCE, eval trace, Texel tuner, self-play data generation, `eval`/`explain`/`tree`/`stats` (stages 15–16) | ≥2400 CCRL by gauntlet |
@@ -551,7 +561,7 @@ and Chessprogramming wiki engine lists and trademarks before the repo goes publi
 
 **2026-10-10: Test throughput (estimate, not measured)**
 
-At 8+0.08 a game takes about 20 s, so a Mac running 7 games at once (8 performance cores − 1)
+At 8+0.08 a game takes about 20 s, so the M1 Max running 7 games at once (8 performance cores − 1)
 plays about 1,200 games an hour; the 4-core cloud session (3 games at once) about 540. Replace
 these with measured figures from the first real SPRT runs.
 
@@ -567,15 +577,15 @@ these with measured figures from the first real SPRT runs.
 - [x] PRD lives in `docs/PRD.md` in the repo (2026-10-10).
 - [x] Name: **cb2026** (ChessBrain 2026); the repo stays `cjus/chessengine` (2026-10-10).
 - [x] Tablebases: `shakmaty-syzygy` behind a `Tablebase` trait (recommended 2026-10-10; confirm in review).
-- [x] Test machine: Carlos's Apple Silicon Mac for long SPRTs and gauntlets, via scripts that post
-      results to the PR; cloud sessions for short tests; OpenBench later if needed (2026-10-10).
+- [x] Test machine: Carlos's Apple M1 Max (8 performance + 2 efficiency cores, 64 GB) for long
+      SPRTs and gauntlets at 7 games at once, via scripts that post results to the PR; cloud
+      sessions for short tests; OpenBench later if needed (2026-10-10).
 - [x] GUI testing is Mac-first: HIARCS Chess Explorer as the commercial target, ChessBase for Mac
       once it ships, Shredder 13 optional (2026-10-10).
 - [x] Repo goes public around October 2027, with the book on GitHub Pages (2026-10-10).
 
 ## Open questions
 
-- [ ] Which Mac is the test machine, and how many performance cores it has (sets SPRT concurrency).
 - [ ] Which commercial Mac GUIs Carlos owns or will buy (HIARCS Chess Explorer, ChessBase for Mac).
 - [ ] Is a Windows PC or VM available for ChessBase/Fritz and Arena checks before going public?
 - [ ] Is a full-screen TUI wanted after v1?
