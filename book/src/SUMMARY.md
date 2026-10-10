@@ -12,7 +12,7 @@
 
 # Part II: Searching
 
-- [Material, negamax and alpha-beta]()
+- [Material, negamax and alpha-beta](ch05-alphabeta.md)
 - [Iterative deepening and time management]()
 - [Quiescence search]()
 - [The transposition table]()

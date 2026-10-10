@@ -29,11 +29,12 @@
 //! - The **history** argument holds the hash keys of the positions before this one in the
 //!   game, for spotting repetitions.
 //!
-//! ## What the "search" is right now
+//! ## What's here now
 //!
-//! Stage 4 has no search: the engine plays a **random legal move**. That is enough to test
-//! the whole path from a GUI to the engine and back. Stage 5 brings material evaluation and
-//! alpha-beta search.
+//! - [`eval`]: material evaluation (stage 5).
+//! - [`search`]: negamax with alpha-beta to a fixed depth, mate scores and draw detection
+//!   (stage 5).
+//! - [`bench`](mod@bench): the fixed benchmark behind `cb2026 bench` and every commit's `Bench:` line.
 //!
 //! ## What will live here
 //!
@@ -54,11 +55,18 @@
 
 #![deny(unsafe_code)]
 
+pub mod bench;
+pub mod eval;
+pub mod search;
+
 use std::fmt;
 use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
 use cb2026_chess::{Move, Position};
+
+use eval::EvalParams;
+use search::{DEFAULT_DEPTH, MAX_PLY, Searcher, Techniques, to_score};
 
 /// The engine's name, as reported to GUIs (`id name` in UCI, `myname` in XBoard).
 pub const NAME: &str = "cb2026";
@@ -157,41 +165,22 @@ pub struct SearchResult {
 }
 
 /// The engine: its settings and everything it remembers between searches.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Engine {
-    rng: u64,
-}
-
-impl Default for Engine {
-    fn default() -> Engine {
-        Engine::new()
-    }
+    /// The evaluation's numbers.
+    pub params: EvalParams,
+    /// Which search techniques are switched on.
+    pub techniques: Techniques,
 }
 
 impl Engine {
-    /// A new engine, seeded from the clock so that games vary.
+    /// A new engine with the default settings.
     pub fn new() -> Engine {
-        let seed = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0x2026, |d| d.as_nanos() as u64);
-        Engine::with_seed(seed)
-    }
-
-    /// A new engine whose random choices are fixed by `seed` (for reproducible tests).
-    pub fn with_seed(seed: u64) -> Engine {
-        Engine { rng: seed | 1 }
+        Engine::default()
     }
 
     /// Forgets everything learned in the previous game.
     pub fn new_game(&mut self) {}
-
-    /// A pseudo-random number (xorshift64).
-    fn random(&mut self) -> u64 {
-        self.rng ^= self.rng << 13;
-        self.rng ^= self.rng >> 7;
-        self.rng ^= self.rng << 17;
-        self.rng
-    }
 
     // ANCHOR: search
     /// Chooses a move in `position`.
@@ -201,36 +190,43 @@ impl Engine {
     pub fn search(
         &mut self,
         position: &Position,
-        _history: &[u64],
+        history: &[u64],
         limits: &Limits,
-        _stop: &AtomicBool,
+        stop: &AtomicBool,
         on_info: &mut dyn FnMut(&SearchInfo),
     ) -> SearchResult {
         let start = Instant::now();
-        let legal = position.legal_moves();
-        let candidates: Vec<Move> = legal
+        let root_moves: Vec<Move> = position
+            .legal_moves()
             .iter()
             .copied()
             .filter(|mv| limits.search_moves.is_empty() || limits.search_moves.contains(mv))
             .collect();
-        // Stage 4: no search yet, just a random legal move.
-        let best_move = match candidates.len() {
-            0 => None,
-            n => Some(candidates[(self.random() % n as u64) as usize]),
-        };
-        if let Some(mv) = best_move {
-            on_info(&SearchInfo {
-                depth: 1,
-                seldepth: 1,
-                score: Score::Centipawns(0),
-                nodes: candidates.len() as u64,
-                time: start.elapsed(),
-                pv: vec![mv],
-            });
+        if root_moves.is_empty() {
+            return SearchResult::default();
         }
+        let depth = limits.depth.unwrap_or(DEFAULT_DEPTH).clamp(1, MAX_PLY);
+        let mut searcher = Searcher::new(
+            &self.params,
+            self.techniques,
+            stop,
+            limits,
+            position,
+            history,
+            start,
+        );
+        let result = searcher.search_root(position, &root_moves, depth);
+        on_info(&SearchInfo {
+            depth: result.depth,
+            seldepth: result.seldepth,
+            score: to_score(result.score),
+            nodes: result.nodes,
+            time: start.elapsed(),
+            pv: result.pv.clone(),
+        });
         SearchResult {
-            best_move,
-            ponder_move: None,
+            best_move: result.best_move,
+            ponder_move: result.pv.get(1).copied(),
         }
     }
     // ANCHOR_END: search
@@ -240,10 +236,12 @@ impl Engine {
 mod tests {
     use super::*;
 
-    fn search(engine: &mut Engine, pos: &Position, limits: &Limits) -> (SearchResult, usize) {
+    fn search(pos: &Position, limits: &Limits) -> (SearchResult, Vec<SearchInfo>) {
         let stop = AtomicBool::new(false);
-        let mut reports = 0;
-        let result = engine.search(pos, &[], limits, &stop, &mut |_| reports += 1);
+        let mut reports = Vec::new();
+        let result = Engine::new().search(pos, &[], limits, &stop, &mut |info| {
+            reports.push(info.clone())
+        });
         (result, reports)
     }
 
@@ -254,20 +252,12 @@ mod tests {
 
     #[test]
     fn plays_a_legal_move_and_reports_progress() {
-        let mut engine = Engine::with_seed(7);
         let pos = Position::startpos();
-        let (result, reports) = search(&mut engine, &pos, &Limits::depth(1));
+        let (result, reports) = search(&pos, &Limits::depth(2));
         let mv = result.best_move.expect("a move");
         assert!(pos.legal_moves().contains(&mv));
-        assert_eq!(reports, 1);
-    }
-
-    #[test]
-    fn same_seed_same_moves() {
-        let pos = Position::startpos();
-        let a = search(&mut Engine::with_seed(42), &pos, &Limits::default()).0;
-        let b = search(&mut Engine::with_seed(42), &pos, &Limits::default()).0;
-        assert_eq!(a, b);
+        assert_eq!(reports.len(), 1);
+        assert_eq!(reports[0].pv.first(), Some(&mv));
     }
 
     #[test]
@@ -276,12 +266,21 @@ mod tests {
         let only = pos.parse_uci_move("a2a3").unwrap();
         let limits = Limits {
             search_moves: vec![only],
+            ..Limits::depth(2)
+        };
+        assert_eq!(search(&pos, &limits).0.best_move, Some(only));
+    }
+
+    #[test]
+    fn stops_at_the_node_limit() {
+        let limits = Limits {
+            nodes: Some(2000),
+            depth: Some(MAX_PLY),
             ..Limits::default()
         };
-        for seed in 1..20 {
-            let result = search(&mut Engine::with_seed(seed), &pos, &limits).0;
-            assert_eq!(result.best_move, Some(only));
-        }
+        let (result, reports) = search(&Position::startpos(), &limits);
+        assert!(result.best_move.is_some(), "a move even when stopped early");
+        assert!(reports[0].nodes < 2000 + 1024 + 64);
     }
 
     #[test]
@@ -289,9 +288,9 @@ mod tests {
         let mated =
             Position::from_fen("rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3")
                 .unwrap();
-        let (result, reports) = search(&mut Engine::with_seed(1), &mated, &Limits::default());
+        let (result, reports) = search(&mated, &Limits::default());
         assert_eq!(result.best_move, None);
-        assert_eq!(reports, 0);
+        assert!(reports.is_empty());
     }
 
     #[test]

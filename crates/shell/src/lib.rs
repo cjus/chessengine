@@ -21,7 +21,7 @@
 //! | `color on\|off` | Coloured squares |
 //! | `e4`, `Nf3`, `e2e4`, `move e4 e5 Nf3 ...` | Play moves (algebraic or UCI notation) |
 //! | `undo` | Take back the last move |
-//! | `go` | The engine moves now |
+//! | `go [depth N\|nodes N\|movetime MS]` | The engine moves now and explains its choice |
 //! | `play white\|black\|both\|none` | Which sides the engine plays |
 //! | `legal`, `moves` | List the legal moves |
 //! | `perft <depth>`, `divide <depth>` | Count positions (move generation check) |
@@ -29,6 +29,8 @@
 //! | `magic <square>` | How the magic-bitboard lookup works out a slider's attacks there |
 //! | `zobrist` | The position's hash key and the parts it is built from |
 //! | `set sliders rays\|magics` | Compute sliding attacks by walking rays or by magic lookup |
+//! | `set depth <N>`, `set alphabeta on\|off` | Search depth for engine moves; switch alpha-beta off to compare with plain minimax |
+//! | `bench` | The fixed benchmark |
 //! | `bb <set>` | Show a bitboard: `occupied`, `empty`, `white`, `black`, `checkers`, `pinned`, or a piece letter (`P`, `n`, ...) |
 //! | `help` | List commands |
 //! | `quit`, `exit` | Leave |
@@ -59,7 +61,9 @@ use cb2026_chess::zobrist;
 use std::sync::atomic::AtomicBool;
 
 use cb2026_chess::{Bitboard, Color, Move, Piece, PieceType, Position, Square};
-use cb2026_engine::{Engine, Limits, NAME};
+use std::time::Duration;
+
+use cb2026_engine::{Engine, Limits, NAME, Score, SearchInfo, bench, search};
 pub use render::Style;
 
 /// The help text for the `help` command.
@@ -74,7 +78,8 @@ Commands:
   e4, Nf3, O-O, e2e4   Play a move (algebraic or UCI notation)
   move <m1> <m2> ...   Play several moves
   undo                 Take back the last move
-  go                   The engine makes a move now
+  go [depth N|nodes N|movetime MS]
+                       The engine makes a move now and explains its choice
   play white|black|both|none
                        Which sides the engine plays (it replies to your moves)
   legal, moves         List the legal moves
@@ -86,12 +91,15 @@ Commands:
   zobrist              The position's hash key and the parts it is built from
   set sliders rays|magics
                        Compute sliding attacks by walking rays or by magic lookup
+  set depth <N>        How deep the engine searches for its moves (default 4)
+  set alphabeta on|off Alpha-beta pruning (off: plain minimax, same moves, more nodes)
+  bench                The fixed benchmark: total nodes and speed
   bb <set>             Show a bitboard: occupied, empty, white, black, checkers,
                        pinned, or a piece letter (P N B R Q K for White, p n b r q k)
   help                 This list
   quit, exit           Leave the shell
 
-The engine plays random moves until stage 5 adds a search.";
+The engine searches with alpha-beta and counts material; stages 6 and up make it stronger.";
 
 /// The result of running one command.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -121,6 +129,8 @@ pub struct Shell {
     engine: Engine,
     /// Which sides the engine plays, indexed by [`Color::index`].
     engine_plays: [bool; 2],
+    /// How deep the engine searches for its own moves.
+    depth: u32,
 }
 
 impl Shell {
@@ -137,6 +147,7 @@ impl Shell {
             style,
             engine,
             engine_plays: [false, false],
+            depth: search::DEFAULT_DEPTH,
         }
     }
 
@@ -226,7 +237,15 @@ impl Shell {
                 Err(e) => Response::text(format!("Usage: magic <square>: {e}")),
             },
             "set" => self.set(args),
-            "go" => self.go(),
+            "go" => self.go(args),
+            "bench" => {
+                let (nodes, time) = bench::bench(&mut self.engine.clone(), bench::BENCH_DEPTH);
+                Response::text(format!(
+                    "Bench: {nodes} nodes in {:.2} s ({:.0} nodes/s)",
+                    time.as_secs_f64(),
+                    nodes as f64 / time.as_secs_f64().max(1e-9)
+                ))
+            }
             "play" => self.set_engine_sides(args),
             "zobrist" => self.zobrist(),
             // Anything else that is a legal move is played.
@@ -283,19 +302,37 @@ impl Shell {
         self.position.make_move(mv);
     }
 
-    /// The engine's choice in the current position.
-    fn engine_move(&mut self) -> Option<Move> {
+    /// The engine's choice in the current position, with a one-line summary of its thinking.
+    fn engine_move(&mut self, limits: &Limits) -> Option<(Move, String)> {
         let hashes: Vec<u64> = self.history.iter().map(|(pos, _)| pos.hash()).collect();
         let stop = AtomicBool::new(false);
-        self.engine
-            .search(
-                &self.position,
-                &hashes,
-                &Limits::default(),
-                &stop,
-                &mut |_| {},
-            )
-            .best_move
+        let mut last_info = None;
+        let result = self.engine.search(
+            &self.position,
+            &hashes,
+            limits,
+            &stop,
+            &mut |info: &SearchInfo| last_info = Some(info.clone()),
+        );
+        let mv = result.best_move?;
+        let san = self.position.to_san(mv);
+        let summary = match last_info {
+            Some(info) => format!(
+                "{NAME} plays {san}   (depth {}, {}, {} nodes, {} ms; line: {})",
+                info.depth,
+                score_text(info.score),
+                info.nodes,
+                info.time.as_millis(),
+                pv_san(&self.position, &info.pv)
+            ),
+            None => format!("{NAME} plays {san}"),
+        };
+        Some((mv, summary))
+    }
+
+    /// The limits for the engine's own moves (the `set depth` setting).
+    fn default_limits(&self) -> Limits {
+        Limits::depth(self.depth)
     }
 
     /// Lets the engine move while it is the engine's turn and the game isn't over, then shows
@@ -303,10 +340,12 @@ impl Shell {
     fn engine_replies(&mut self, mut log: String) -> Response {
         while self.game_over().is_none() && self.engine_plays[self.position.side_to_move().index()]
         {
-            let Some(mv) = self.engine_move() else {
+            let limits = self.default_limits();
+            let Some((mv, summary)) = self.engine_move(&limits) else {
                 break;
             };
-            log.push_str(&format!("{} plays {}\n", NAME, self.position.to_san(mv)));
+            log.push_str(&summary);
+            log.push('\n');
             self.make_move(mv);
         }
         let mut response = self.show();
@@ -318,17 +357,34 @@ impl Shell {
         response
     }
 
-    /// `go`: the engine makes one move now, whoever's turn it is.
-    fn go(&mut self) -> Response {
+    /// `go [depth N] [nodes N] [movetime MS]`: the engine makes one move now, whoever's turn
+    /// it is.
+    fn go(&mut self, args: &str) -> Response {
         if let Some(result) = self.game_over() {
             return Response::text(format!("The game is over: {result}"));
         }
-        let Some(mv) = self.engine_move() else {
+        let mut limits = self.default_limits();
+        let words: Vec<&str> = args.split_whitespace().collect();
+        for pair in words.chunks(2) {
+            let value = pair.get(1).and_then(|v| v.parse::<u64>().ok());
+            match (pair[0], value) {
+                ("depth", Some(d)) => limits.depth = Some(d as u32),
+                ("nodes", Some(n)) => {
+                    limits.nodes = Some(n);
+                    limits.depth = Some(search::MAX_PLY);
+                }
+                ("movetime", Some(ms)) => {
+                    limits.movetime = Some(Duration::from_millis(ms));
+                    limits.depth = Some(search::MAX_PLY);
+                }
+                _ => return Response::text("Usage: go [depth N] [nodes N] [movetime MS]"),
+            }
+        }
+        let Some((mv, summary)) = self.engine_move(&limits) else {
             return Response::text("No legal moves.");
         };
-        let log = format!("{} plays {}\n", NAME, self.position.to_san(mv));
         self.make_move(mv);
-        self.engine_replies(log)
+        self.engine_replies(format!("{summary}\n"))
     }
 
     /// `play white|black|both|none`: which sides the engine plays from now on.
@@ -496,18 +552,36 @@ impl Shell {
     /// `set <option> <value>`: engine settings that are useful to switch while learning.
     fn set(&mut self, args: &str) -> Response {
         let mut words = args.split_whitespace();
+        let on_off = |word: Option<&str>| match word {
+            Some("on") => Some(true),
+            Some("off") => Some(false),
+            _ => None,
+        };
         match (words.next(), words.next()) {
             (Some("sliders"), Some("rays")) => set_slider_method(SliderMethod::Rays),
             (Some("sliders"), Some("magics")) => set_slider_method(SliderMethod::Magics),
-            (Some("sliders"), None) => {}
-            _ => return Response::text("Usage: set sliders rays|magics"),
+            (Some("depth"), Some(d)) => match d.parse::<u32>() {
+                Ok(depth) if (1..=search::MAX_PLY).contains(&depth) => self.depth = depth,
+                _ => return Response::text("Usage: set depth <1-128>"),
+            },
+            (Some("alphabeta"), value) if on_off(value).is_some() => {
+                self.engine.techniques.alpha_beta = on_off(value).unwrap_or(true);
+            }
+            (None, _) => {}
+            _ => return Response::text(SET_USAGE),
         }
         Response::text(format!(
-            "Sliding attacks: {}",
+            "Sliding attacks: {}\nSearch depth for engine moves: {}\nAlpha-beta pruning: {}",
             match slider_method() {
                 SliderMethod::Rays => "walking rays",
                 SliderMethod::Magics => "magic bitboards",
-            }
+            },
+            self.depth,
+            if self.engine.techniques.alpha_beta {
+                "on"
+            } else {
+                "off (plain minimax)"
+            },
         ))
     }
 
@@ -564,6 +638,31 @@ impl Shell {
 fn parse_move(pos: &Position, text: &str) -> Option<Move> {
     pos.parse_uci_move(text)
         .or_else(|| pos.parse_san(text).ok())
+}
+
+/// Usage for the `set` command.
+const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set alphabeta on|off";
+
+/// A score for people: `+0.35` (pawns) or `#3` / `#-2` (mate in moves).
+fn score_text(score: Score) -> String {
+    match score {
+        Score::Centipawns(cp) => format!("{:+.2}", cp as f64 / 100.0),
+        Score::Mate(moves) => format!("#{moves}"),
+    }
+}
+
+/// A principal variation in algebraic notation.
+fn pv_san(pos: &Position, pv: &[Move]) -> String {
+    let mut pos = pos.clone();
+    let mut out = Vec::new();
+    for &mv in pv {
+        if !pos.legal_moves().contains(&mv) {
+            break;
+        }
+        out.push(pos.to_san(mv));
+        pos.make_move(mv);
+    }
+    out.join(" ")
 }
 
 fn plural(n: usize) -> &'static str {
@@ -628,7 +727,7 @@ mod tests {
                 color: false,
                 flipped: false,
             },
-            Engine::with_seed(3),
+            Engine::new(),
         )
     }
 
@@ -747,6 +846,9 @@ mod tests {
     #[test]
     fn engine_against_itself_plays_to_the_end() {
         let mut shell = ascii_shell();
+        // A quick game: a shallow search from a simple endgame.
+        shell.execute("set depth 2");
+        shell.execute("fen 8/8/4k3/8/8/2K5/3R4/8 w - - 0 1");
         let out = shell.execute("play both").output;
         let finished = [
             "Checkmate",
@@ -762,6 +864,42 @@ mod tests {
                 .output
                 .starts_with("The game is over")
         );
+    }
+
+    #[test]
+    fn go_explains_its_choice() {
+        let mut shell = ascii_shell();
+        shell.execute("fen 6k1/5ppp/8/8/8/8/8/4R1K1 w - - 0 1");
+        assert!(shell.execute("go sideways").output.starts_with("Usage"));
+        let out = shell.execute("go depth 2").output;
+        assert!(out.contains("cb2026 plays Re8#"), "{out}");
+        assert!(out.contains("#1"), "the score is mate in one: {out}");
+        assert!(out.contains("Checkmate: White wins."));
+    }
+
+    #[test]
+    fn search_settings() {
+        let mut shell = ascii_shell();
+        assert!(
+            shell
+                .execute("set depth 3")
+                .output
+                .contains("engine moves: 3")
+        );
+        assert!(
+            shell
+                .execute("set alphabeta off")
+                .output
+                .contains("plain minimax")
+        );
+        assert!(
+            shell
+                .execute("set alphabeta on")
+                .output
+                .contains("pruning: on")
+        );
+        assert!(shell.execute("set depth 0").output.starts_with("Usage"));
+        assert!(shell.execute("set colour blue").output.starts_with("Usage"));
     }
 
     #[test]
@@ -838,16 +976,19 @@ mod tests {
     fn slider_setting() {
         // The setting is global, so this test sets it back to the default at the end.
         let mut shell = ascii_shell();
-        assert_eq!(
-            shell.execute("set sliders rays").output,
-            "Sliding attacks: walking rays"
+        assert!(
+            shell
+                .execute("set sliders rays")
+                .output
+                .contains("Sliding attacks: walking rays")
         );
         assert!(shell.execute("perft 3").output.contains("8902 nodes"));
-        assert_eq!(
-            shell.execute("set sliders magics").output,
-            "Sliding attacks: magic bitboards"
+        assert!(
+            shell
+                .execute("set sliders magics")
+                .output
+                .contains("Sliding attacks: magic bitboards")
         );
-        assert!(shell.execute("set colour blue").output.starts_with("Usage"));
     }
 
     #[test]
