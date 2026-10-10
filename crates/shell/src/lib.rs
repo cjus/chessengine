@@ -29,7 +29,9 @@
 //! | `magic <square>` | How the magic-bitboard lookup works out a slider's attacks there |
 //! | `zobrist` | The position's hash key and the parts it is built from |
 //! | `set sliders rays\|magics` | Compute sliding attacks by walking rays or by magic lookup |
-//! | `set depth <N>`, `set alphabeta on\|off` | Search depth for engine moves; switch alpha-beta off to compare with plain minimax |
+//! | `set depth <N>`, `set movetime <MS>` | How long the engine thinks about its own moves |
+//! | `think on\|off` | Show the engine's thinking depth by depth |
+//! | `set alphabeta on\|off` | Switch alpha-beta off to compare with plain minimax |
 //! | `bench` | The fixed benchmark |
 //! | `bb <set>` | Show a bitboard: `occupied`, `empty`, `white`, `black`, `checkers`, `pinned`, or a piece letter (`P`, `n`, ...) |
 //! | `help` | List commands |
@@ -91,7 +93,9 @@ Commands:
   zobrist              The position's hash key and the parts it is built from
   set sliders rays|magics
                        Compute sliding attacks by walking rays or by magic lookup
-  set depth <N>        How deep the engine searches for its moves (default 4)
+  set depth <N>        The engine searches its moves to depth N
+  set movetime <MS>    The engine thinks MS milliseconds per move (default 1000)
+  think on|off         Show the engine's thinking, depth by depth (default on)
   set alphabeta on|off Alpha-beta pruning (off: plain minimax, same moves, more nodes)
   bench                The fixed benchmark: total nodes and speed
   bb <set>             Show a bitboard: occupied, empty, white, black, checkers,
@@ -129,8 +133,10 @@ pub struct Shell {
     engine: Engine,
     /// Which sides the engine plays, indexed by [`Color::index`].
     engine_plays: [bool; 2],
-    /// How deep the engine searches for its own moves.
-    depth: u32,
+    /// How long the engine thinks about its own moves.
+    engine_limit: EngineLimit,
+    /// Whether to show the engine's thinking, depth by depth.
+    think: bool,
 }
 
 impl Shell {
@@ -147,7 +153,8 @@ impl Shell {
             style,
             engine,
             engine_plays: [false, false],
-            depth: search::DEFAULT_DEPTH,
+            engine_limit: EngineLimit::Movetime(DEFAULT_MOVETIME_MS),
+            think: true,
         }
     }
 
@@ -247,6 +254,13 @@ impl Shell {
                 ))
             }
             "play" => self.set_engine_sides(args),
+            "think" => match args {
+                "on" | "off" => {
+                    self.think = args == "on";
+                    Response::text(format!("Show thinking: {args}"))
+                }
+                _ => Response::text("Usage: think on|off"),
+            },
             "zobrist" => self.zobrist(),
             // Anything else that is a legal move is played.
             other if parse_move(&self.position, other).is_some() => self.play(line),
@@ -302,37 +316,56 @@ impl Shell {
         self.position.make_move(mv);
     }
 
-    /// The engine's choice in the current position, with a one-line summary of its thinking.
+    /// The engine's choice in the current position, with its thinking (one line per depth,
+    /// if `think` is on) and a summary.
     fn engine_move(&mut self, limits: &Limits) -> Option<(Move, String)> {
         let hashes: Vec<u64> = self.history.iter().map(|(pos, _)| pos.hash()).collect();
         let stop = AtomicBool::new(false);
-        let mut last_info = None;
+        let mut infos: Vec<SearchInfo> = Vec::new();
         let result = self.engine.search(
             &self.position,
             &hashes,
             limits,
             &stop,
-            &mut |info: &SearchInfo| last_info = Some(info.clone()),
+            &mut |info: &SearchInfo| infos.push(info.clone()),
         );
         let mv = result.best_move?;
+        let mut text = String::new();
+        if self.think {
+            for info in &infos {
+                text.push_str(&format!(
+                    "  depth {:>2}  {:>7}  {:>10} nodes  {:>6} ms  {}\n",
+                    info.depth,
+                    score_text(info.score),
+                    info.nodes,
+                    info.time.as_millis(),
+                    pv_san(&self.position, &info.pv)
+                ));
+            }
+        }
         let san = self.position.to_san(mv);
-        let summary = match last_info {
-            Some(info) => format!(
-                "{NAME} plays {san}   (depth {}, {}, {} nodes, {} ms; line: {})",
+        match infos.last() {
+            Some(info) => text.push_str(&format!(
+                "{NAME} plays {san}   (depth {}, {}, {} nodes, {} ms)",
                 info.depth,
                 score_text(info.score),
                 info.nodes,
                 info.time.as_millis(),
-                pv_san(&self.position, &info.pv)
-            ),
-            None => format!("{NAME} plays {san}"),
-        };
-        Some((mv, summary))
+            )),
+            None => text.push_str(&format!("{NAME} plays {san}")),
+        }
+        Some((mv, text))
     }
 
-    /// The limits for the engine's own moves (the `set depth` setting).
+    /// The limits for the engine's own moves (`set depth` or `set movetime`).
     fn default_limits(&self) -> Limits {
-        Limits::depth(self.depth)
+        match self.engine_limit {
+            EngineLimit::Depth(depth) => Limits::depth(depth),
+            EngineLimit::Movetime(ms) => Limits {
+                movetime: Some(Duration::from_millis(ms)),
+                ..Limits::default()
+            },
+        }
     }
 
     /// Lets the engine move while it is the engine's turn and the game isn't over, then shows
@@ -561,8 +594,14 @@ impl Shell {
             (Some("sliders"), Some("rays")) => set_slider_method(SliderMethod::Rays),
             (Some("sliders"), Some("magics")) => set_slider_method(SliderMethod::Magics),
             (Some("depth"), Some(d)) => match d.parse::<u32>() {
-                Ok(depth) if (1..=search::MAX_PLY).contains(&depth) => self.depth = depth,
+                Ok(depth) if (1..=search::MAX_PLY).contains(&depth) => {
+                    self.engine_limit = EngineLimit::Depth(depth)
+                }
                 _ => return Response::text("Usage: set depth <1-128>"),
+            },
+            (Some("movetime"), Some(ms)) => match ms.parse::<u64>() {
+                Ok(ms) if ms > 0 => self.engine_limit = EngineLimit::Movetime(ms),
+                _ => return Response::text("Usage: set movetime <milliseconds>"),
             },
             (Some("alphabeta"), value) if on_off(value).is_some() => {
                 self.engine.techniques.alpha_beta = on_off(value).unwrap_or(true);
@@ -571,12 +610,15 @@ impl Shell {
             _ => return Response::text(SET_USAGE),
         }
         Response::text(format!(
-            "Sliding attacks: {}\nSearch depth for engine moves: {}\nAlpha-beta pruning: {}",
+            "Sliding attacks: {}\nEngine moves: {}\nAlpha-beta pruning: {}",
             match slider_method() {
                 SliderMethod::Rays => "walking rays",
                 SliderMethod::Magics => "magic bitboards",
             },
-            self.depth,
+            match self.engine_limit {
+                EngineLimit::Depth(depth) => format!("search to depth {depth}"),
+                EngineLimit::Movetime(ms) => format!("think for {ms} ms"),
+            },
             if self.engine.techniques.alpha_beta {
                 "on"
             } else {
@@ -641,7 +683,20 @@ fn parse_move(pos: &Position, text: &str) -> Option<Move> {
 }
 
 /// Usage for the `set` command.
-const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set alphabeta on|off";
+const SET_USAGE: &str =
+    "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set alphabeta on|off";
+
+/// How long the engine thinks per move by default in the shell.
+const DEFAULT_MOVETIME_MS: u64 = 1000;
+
+/// How the shell limits the engine's own moves.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum EngineLimit {
+    /// Search to this depth.
+    Depth(u32),
+    /// Think for this many milliseconds.
+    Movetime(u64),
+}
 
 /// A score for people: `+0.35` (pawns) or `#3` / `#-2` (mate in moves).
 fn score_text(score: Score) -> String {
@@ -874,6 +929,7 @@ mod tests {
         let out = shell.execute("go depth 2").output;
         assert!(out.contains("cb2026 plays Re8#"), "{out}");
         assert!(out.contains("#1"), "the score is mate in one: {out}");
+        assert!(out.contains("depth  1"), "the thinking is shown: {out}");
         assert!(out.contains("Checkmate: White wins."));
     }
 
@@ -884,8 +940,15 @@ mod tests {
             shell
                 .execute("set depth 3")
                 .output
-                .contains("engine moves: 3")
+                .contains("search to depth 3")
         );
+        assert!(
+            shell
+                .execute("set movetime 250")
+                .output
+                .contains("think for 250 ms")
+        );
+        assert_eq!(shell.execute("think off").output, "Show thinking: off");
         assert!(
             shell
                 .execute("set alphabeta off")

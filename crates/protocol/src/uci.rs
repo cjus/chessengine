@@ -6,6 +6,7 @@
 //! > uci
 //! < id name cb2026 0.1.0
 //! < id author the cb2026 authors
+//! < option name Move Overhead type spin default 30 min 0 max 5000
 //! < option name UCI_Chess960 type check default false
 //! < uciok
 //! > isready
@@ -123,6 +124,10 @@ impl Session {
                 send(&self.output, &format!("id author {AUTHOR}"));
                 send(
                     &self.output,
+                    "option name Move Overhead type spin default 30 min 0 max 5000",
+                );
+                send(
+                    &self.output,
                     "option name UCI_Chess960 type check default false",
                 );
                 send(&self.output, "uciok");
@@ -173,6 +178,17 @@ impl Session {
         // Option names are case-insensitive in UCI.
         match name.to_ascii_lowercase().as_str() {
             "uci_chess960" => self.options.chess960 = value.eq_ignore_ascii_case("true"),
+            "move overhead" => match value.parse::<u64>() {
+                Ok(ms) if ms <= 5000 => {
+                    if let Some(engine) = self.engine.as_mut() {
+                        engine.time.move_overhead = Duration::from_millis(ms);
+                    }
+                }
+                _ => send(
+                    &self.output,
+                    &format!("info string Move Overhead must be 0-5000, not '{value}'"),
+                ),
+            },
             _ => send(
                 &self.output,
                 &format!("info string unknown option '{name}'"),
@@ -438,6 +454,21 @@ mod tests {
         );
         assert!(lines.iter().any(|l| l.contains("unknown option 'Hash'")));
         assert_eq!(lines.last().unwrap(), "readyok");
+    }
+
+    #[test]
+    fn reports_every_depth_and_accepts_move_overhead() {
+        let lines = session(
+            "setoption name Move Overhead value 50\nposition startpos\ngo depth 3\nisready\n",
+        );
+        let depths = lines.iter().filter(|l| l.starts_with("info depth")).count();
+        assert_eq!(depths, 3, "{lines:?}");
+        assert!(!lines.iter().any(|l| l.contains("Move Overhead must")));
+        let bad = session("setoption name Move Overhead value lots\nisready\n");
+        assert!(
+            bad.iter()
+                .any(|l| l.contains("Move Overhead must be 0-5000"))
+        );
     }
 
     #[test]

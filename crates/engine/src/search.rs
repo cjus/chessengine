@@ -30,9 +30,9 @@
 //! [Checkmate](https://www.chessprogramming.org/Checkmate).
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
-use cb2026_chess::{Color, Move, Position};
+use cb2026_chess::{Move, Position};
 
 use crate::eval::{EvalParams, evaluate};
 use crate::{Limits, Score};
@@ -43,13 +43,10 @@ pub const MATE: i32 = 32_000;
 pub const INFINITY: i32 = 32_001;
 /// The deepest the search ever goes, in plies from the root.
 pub const MAX_PLY: u32 = 128;
-/// Search depth when the caller gives no depth (stage 6 replaces this with iterative
-/// deepening and time management).
-pub const DEFAULT_DEPTH: u32 = 4;
+/// Search depth when the caller gives no limit at all (no depth, time, nodes or `infinite`).
+pub const DEFAULT_DEPTH: u32 = 6;
 /// How many nodes pass between checks of the stop flag, the clock and the node limit.
 const CHECK_INTERVAL: u64 = 1024;
-/// When playing on a clock, spend about this fraction of the remaining time on one move.
-const TIME_FRACTION: u32 = 30;
 
 /// Search techniques that can be switched off, to see what each one is worth.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -76,22 +73,6 @@ pub fn to_score(value: i32) -> Score {
     }
 }
 
-/// The time to stop searching, if the limits set one.
-fn deadline(start: Instant, limits: &Limits, side: Color) -> Option<Instant> {
-    if let Some(movetime) = limits.movetime {
-        return Some(start + movetime);
-    }
-    let remaining = limits.time[side.index()]?;
-    let increment = limits.increment[side.index()].unwrap_or(Duration::ZERO);
-    let moves_left = limits
-        .moves_to_go
-        .unwrap_or(TIME_FRACTION)
-        .clamp(1, TIME_FRACTION);
-    // A share of the remaining time plus most of the increment, never more than half the clock.
-    let budget = (remaining / moves_left + increment * 3 / 4).min(remaining / 2);
-    Some(start + budget)
-}
-
 /// The result of a root search.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct RootResult {
@@ -101,6 +82,8 @@ pub(crate) struct RootResult {
     pub nodes: u64,
     pub seldepth: u32,
     pub depth: u32,
+    /// Whether every root move was searched (false if the search was stopped part-way).
+    pub complete: bool,
 }
 
 /// The state of one search.
@@ -124,15 +107,14 @@ impl<'a> Searcher<'a> {
         techniques: Techniques,
         stop: &'a AtomicBool,
         limits: &Limits,
-        root: &Position,
         history: &[u64],
-        start: Instant,
+        deadline: Option<Instant>,
     ) -> Searcher<'a> {
         Searcher {
             params,
             techniques,
             stop,
-            deadline: deadline(start, limits, root.side_to_move()),
+            deadline,
             max_nodes: limits.nodes,
             nodes: 0,
             seldepth: 0,
@@ -232,10 +214,11 @@ impl<'a> Searcher<'a> {
     }
     // ANCHOR_END: negamax
 
-    /// Searches the root position to `depth`, considering only `root_moves`.
+    /// Searches the root position to `depth`, trying `root_moves` in the order given.
     ///
-    /// If the search is stopped early, the best move found so far is kept (or, if not even one
-    /// move was searched, the first legal move, so there's always something to play).
+    /// If the search is stopped early, the best fully searched move is kept and `complete` is
+    /// false; if not even one move was finished, `best_move` is the first move and `score`
+    /// is `-INFINITY`.
     pub(crate) fn search_root(
         &mut self,
         pos: &Position,
@@ -279,7 +262,13 @@ impl<'a> Searcher<'a> {
         self.keys.pop();
         result.nodes = self.nodes;
         result.seldepth = self.seldepth;
+        result.complete = !self.aborted;
         result
+    }
+
+    /// Whether the search has been stopped (stop flag, hard time limit or node limit).
+    pub(crate) fn aborted(&self) -> bool {
+        self.aborted
     }
 }
 
@@ -292,15 +281,7 @@ mod tests {
         let params = EvalParams::default();
         let stop = AtomicBool::new(false);
         let limits = Limits::depth(depth);
-        let mut searcher = Searcher::new(
-            &params,
-            techniques,
-            &stop,
-            &limits,
-            &pos,
-            &[],
-            Instant::now(),
-        );
+        let mut searcher = Searcher::new(&params, techniques, &stop, &limits, &[], None);
         let moves: Vec<Move> = pos.legal_moves().iter().copied().collect();
         searcher.search_root(&pos, &moves, depth)
     }
@@ -370,22 +351,5 @@ mod tests {
         assert_eq!(to_score(MATE - 3), Score::Mate(2));
         assert_eq!(to_score(-MATE + 2), Score::Mate(-1));
         assert_eq!(to_score(57), Score::Centipawns(57));
-    }
-
-    #[test]
-    fn clock_budget() {
-        let start = Instant::now();
-        let limits = Limits {
-            time: [Some(Duration::from_secs(60)), None],
-            increment: [Some(Duration::from_secs(1)), None],
-            ..Limits::default()
-        };
-        let budget = deadline(start, &limits, Color::White).unwrap() - start;
-        assert_eq!(budget, Duration::from_millis(2000 + 750));
-        assert_eq!(
-            deadline(start, &limits, Color::Black),
-            None,
-            "no clock for Black"
-        );
     }
 }
