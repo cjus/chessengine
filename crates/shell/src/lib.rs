@@ -21,6 +21,8 @@
 //! | `color on\|off` | Coloured squares |
 //! | `e4`, `Nf3`, `e2e4`, `move e4 e5 Nf3 ...` | Play moves (algebraic or UCI notation) |
 //! | `undo` | Take back the last move |
+//! | `go` | The engine moves now |
+//! | `play white\|black\|both\|none` | Which sides the engine plays |
 //! | `legal`, `moves` | List the legal moves |
 //! | `perft <depth>`, `divide <depth>` | Count positions (move generation check) |
 //! | `attacks <square>`, `attackers <square>` | What a piece attacks; what attacks a square |
@@ -33,9 +35,7 @@
 //!
 //! ## Coming in later stages
 //!
-//! - **Stage 4:** moves in algebraic notation (`Nf3`).
-//! - **Stage 4:** playing complete games against the engine with clocks and levels, and a live
-//!   display of the engine's thinking.
+//! - **Stages 5–6:** a real search, clocks, levels and a live display of the engine's thinking.
 //! - **Stage 9 on:** the explain commands: `eval`, `explain`, `tree` and `stats`.
 //! - **M4:** `match`, a short match against another UCI engine.
 //!
@@ -56,7 +56,10 @@ use cb2026_chess::attacks::{
 use cb2026_chess::magic::{self, Magic};
 use cb2026_chess::perft::{divide, perft};
 use cb2026_chess::zobrist;
+use std::sync::atomic::AtomicBool;
+
 use cb2026_chess::{Bitboard, Color, Move, Piece, PieceType, Position, Square};
+use cb2026_engine::{Engine, Limits, NAME};
 pub use render::Style;
 
 /// The help text for the `help` command.
@@ -71,6 +74,9 @@ Commands:
   e4, Nf3, O-O, e2e4   Play a move (algebraic or UCI notation)
   move <m1> <m2> ...   Play several moves
   undo                 Take back the last move
+  go                   The engine makes a move now
+  play white|black|both|none
+                       Which sides the engine plays (it replies to your moves)
   legal, moves         List the legal moves
   perft <depth>        Count the positions <depth> moves ahead, with speed
   divide <depth>       The same, split by first move
@@ -85,7 +91,7 @@ Commands:
   help                 This list
   quit, exit           Leave the shell
 
-Playing against the engine arrives in stage 4.";
+The engine plays random moves until stage 5 adds a search.";
 
 /// The result of running one command.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -112,15 +118,25 @@ pub struct Shell {
     /// Earlier positions and the moves played from them (in SAN), for `undo` and display.
     history: Vec<(Position, String)>,
     style: Style,
+    engine: Engine,
+    /// Which sides the engine plays, indexed by [`Color::index`].
+    engine_plays: [bool; 2],
 }
 
 impl Shell {
     /// A shell at the starting position, drawing boards in `style`.
     pub fn new(style: Style) -> Shell {
+        Shell::with_engine(style, Engine::new())
+    }
+
+    /// A shell using `engine` (tests pass a seeded engine for repeatable games).
+    pub fn with_engine(style: Style, engine: Engine) -> Shell {
         Shell {
             position: Position::startpos(),
             history: Vec::new(),
             style,
+            engine,
+            engine_plays: [false, false],
         }
     }
 
@@ -210,6 +226,8 @@ impl Shell {
                 Err(e) => Response::text(format!("Usage: magic <square>: {e}")),
             },
             "set" => self.set(args),
+            "go" => self.go(),
+            "play" => self.set_engine_sides(args),
             "zobrist" => self.zobrist(),
             // Anything else that is a legal move is played.
             other if parse_move(&self.position, other).is_some() => self.play(line),
@@ -236,12 +254,16 @@ impl Shell {
         self.history.clear();
     }
 
-    /// Plays the space-separated moves in `moves`, stopping at the first one that isn't legal.
+    /// Plays the space-separated moves in `moves`, stopping at the first one that isn't legal,
+    /// then lets the engine reply if it plays the side to move.
     fn play(&mut self, moves: &str) -> Response {
         if moves.is_empty() {
             return Response::text("Usage: move <move> [<move> ...], e.g. move e2e4 e7e5");
         }
         for text in moves.split_whitespace() {
+            if let Some(result) = self.game_over() {
+                return Response::text(format!("The game is over: {result} Type 'new' or 'undo'."));
+            }
             let Some(mv) = parse_move(&self.position, text) else {
                 let mut response = self.show();
                 response.output.push_str(&format!(
@@ -249,16 +271,103 @@ impl Shell {
                 ));
                 return response;
             };
-            let san = self.position.to_san(mv);
-            self.history.push((self.position.clone(), san));
-            self.position.make_move(mv);
+            self.make_move(mv);
+        }
+        self.engine_replies(String::new())
+    }
+
+    /// Plays `mv`, recording it for `undo` and the move display.
+    fn make_move(&mut self, mv: Move) {
+        let san = self.position.to_san(mv);
+        self.history.push((self.position.clone(), san));
+        self.position.make_move(mv);
+    }
+
+    /// The engine's choice in the current position.
+    fn engine_move(&mut self) -> Option<Move> {
+        let hashes: Vec<u64> = self.history.iter().map(|(pos, _)| pos.hash()).collect();
+        let stop = AtomicBool::new(false);
+        self.engine
+            .search(
+                &self.position,
+                &hashes,
+                &Limits::default(),
+                &stop,
+                &mut |_| {},
+            )
+            .best_move
+    }
+
+    /// Lets the engine move while it is the engine's turn and the game isn't over, then shows
+    /// the board (after `log`, the moves already reported).
+    fn engine_replies(&mut self, mut log: String) -> Response {
+        while self.game_over().is_none() && self.engine_plays[self.position.side_to_move().index()]
+        {
+            let Some(mv) = self.engine_move() else {
+                break;
+            };
+            log.push_str(&format!("{} plays {}\n", NAME, self.position.to_san(mv)));
+            self.make_move(mv);
         }
         let mut response = self.show();
-        if let Some(result) = game_over(&self.position) {
+        response.output.insert_str(0, &log);
+        if let Some(result) = self.game_over() {
             response.output.push_str(&result);
             response.output.push('\n');
         }
         response
+    }
+
+    /// `go`: the engine makes one move now, whoever's turn it is.
+    fn go(&mut self) -> Response {
+        if let Some(result) = self.game_over() {
+            return Response::text(format!("The game is over: {result}"));
+        }
+        let Some(mv) = self.engine_move() else {
+            return Response::text("No legal moves.");
+        };
+        let log = format!("{} plays {}\n", NAME, self.position.to_san(mv));
+        self.make_move(mv);
+        self.engine_replies(log)
+    }
+
+    /// `play white|black|both|none`: which sides the engine plays from now on.
+    fn set_engine_sides(&mut self, args: &str) -> Response {
+        self.engine_plays = match args {
+            "white" => [true, false],
+            "black" => [false, true],
+            "both" => [true, true],
+            "none" => [false, false],
+            _ => return Response::text("Usage: play white|black|both|none"),
+        };
+        self.engine_replies(String::new())
+    }
+
+    /// Why the game is over in the current position, if it is.
+    fn game_over(&self) -> Option<String> {
+        let pos = &self.position;
+        if pos.legal_moves().is_empty() {
+            return Some(if pos.in_check() {
+                format!("Checkmate: {} wins.", !pos.side_to_move())
+            } else {
+                "Stalemate: the game is a draw.".to_string()
+            });
+        }
+        if pos.halfmove_clock() >= 100 {
+            return Some("Draw by the fifty-move rule.".to_string());
+        }
+        if pos.is_insufficient_material() {
+            return Some("Draw: neither side has enough material to mate.".to_string());
+        }
+        let repetitions = self
+            .history
+            .iter()
+            .filter(|(earlier, _)| earlier.hash() == pos.hash())
+            .count();
+        if repetitions >= 2 {
+            return Some("Draw by threefold repetition.".to_string());
+        }
+        None
     }
 
     fn legal(&self) -> Response {
@@ -457,18 +566,6 @@ fn parse_move(pos: &Position, text: &str) -> Option<Move> {
         .or_else(|| pos.parse_san(text).ok())
 }
 
-/// A message if the game is over in `pos` (checkmate or stalemate).
-fn game_over(pos: &Position) -> Option<String> {
-    if !pos.legal_moves().is_empty() {
-        return None;
-    }
-    Some(if pos.in_check() {
-        format!("Checkmate: {} wins.", !pos.side_to_move())
-    } else {
-        "Stalemate: the game is a draw.".to_string()
-    })
-}
-
 fn plural(n: usize) -> &'static str {
     if n == 1 { "" } else { "s" }
 }
@@ -525,11 +622,14 @@ mod tests {
     const KIWIPETE: &str = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
 
     fn ascii_shell() -> Shell {
-        Shell::new(Style {
-            unicode: false,
-            color: false,
-            flipped: false,
-        })
+        Shell::with_engine(
+            Style {
+                unicode: false,
+                color: false,
+                flipped: false,
+            },
+            Engine::with_seed(3),
+        )
     }
 
     #[test]
@@ -631,6 +731,49 @@ mod tests {
             "r1bqkbnr/pppp1ppp/2n5/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3"
         );
         assert!(shell.execute("a6").output.contains("Last move: 3... a6"));
+    }
+
+    #[test]
+    fn engine_replies_when_it_plays_a_side() {
+        let mut shell = ascii_shell();
+        assert!(shell.execute("play black").output.contains("White to move"));
+        let out = shell.execute("e4").output;
+        assert!(out.contains("cb2026 plays "), "{out}");
+        assert_eq!(shell.position().side_to_move(), Color::White);
+        assert!(shell.execute("go").output.contains("cb2026 plays "));
+        assert!(shell.execute("play nobody").output.starts_with("Usage"));
+    }
+
+    #[test]
+    fn engine_against_itself_plays_to_the_end() {
+        let mut shell = ascii_shell();
+        let out = shell.execute("play both").output;
+        let finished = [
+            "Checkmate",
+            "Stalemate",
+            "fifty-move",
+            "enough material",
+            "repetition",
+        ];
+        assert!(finished.iter().any(|f| out.contains(f)), "{out}");
+        assert!(
+            shell
+                .execute("move e4")
+                .output
+                .starts_with("The game is over")
+        );
+    }
+
+    #[test]
+    fn detects_draws() {
+        let mut shell = ascii_shell();
+        // Knights out and back twice: the start position for the third time.
+        let out = shell.execute("move Nf3 Nf6 Ng1 Ng8 Nf3 Nf6 Ng1 Ng8").output;
+        assert!(out.contains("Draw by threefold repetition."), "{out}");
+        shell.execute("fen 4k3/8/8/8/8/8/8/4K2N w - - 0 1");
+        assert!(shell.execute("Ng3").output.contains("enough material"));
+        shell.execute("fen 4k3/8/8/8/8/8/8/R3K3 w - - 99 80");
+        assert!(shell.execute("Ra2").output.contains("fifty-move"));
     }
 
     #[test]

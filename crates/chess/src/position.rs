@@ -244,6 +244,32 @@ impl Position {
     }
 }
 
+impl Position {
+    // ANCHOR: insufficient_material
+    /// Whether neither side has enough material to checkmate, so the game is a draw: king
+    /// against king, king and one minor piece against king, or kings and bishops where every
+    /// bishop stands on the same colour of square.
+    pub fn is_insufficient_material(&self) -> bool {
+        let heavy = self.pieces_of_type(PieceType::Pawn)
+            | self.pieces_of_type(PieceType::Rook)
+            | self.pieces_of_type(PieceType::Queen);
+        if !heavy.is_empty() {
+            return false;
+        }
+        let knights = self.pieces_of_type(PieceType::Knight);
+        let bishops = self.pieces_of_type(PieceType::Bishop);
+        let minors = (knights | bishops).count();
+        if minors <= 1 {
+            return true;
+        }
+        // Only bishops, all on light squares or all on dark squares.
+        const DARK_SQUARES: Bitboard = Bitboard(0xaa55_aa55_aa55_aa55);
+        knights.is_empty()
+            && ((bishops & DARK_SQUARES).is_empty() || (bishops & !DARK_SQUARES).is_empty())
+    }
+    // ANCHOR_END: insufficient_material
+}
+
 impl Default for Position {
     /// The standard starting position.
     fn default() -> Position {
@@ -320,6 +346,28 @@ mod tests {
             );
         }
         assert_eq!(pos.pieces_of_color(Color::White), Bitboard(0xffff));
+    }
+
+    #[test]
+    fn insufficient_material() {
+        let draw = |fen: &str| Position::from_fen(fen).unwrap().is_insufficient_material();
+        assert!(draw("4k3/8/8/8/8/8/8/4K3 w - - 0 1"), "two kings");
+        assert!(draw("4k3/8/8/8/8/8/8/4KN2 w - - 0 1"), "one knight");
+        assert!(draw("4k3/8/8/8/8/8/8/4KB2 w - - 0 1"), "one bishop");
+        assert!(
+            draw("2b1k3/8/8/8/8/8/8/4KB2 w - - 0 1"),
+            "bishops on the same colour"
+        );
+        assert!(
+            !draw("1b2k3/8/8/8/8/8/8/4KB2 w - - 0 1"),
+            "opposite-coloured bishops"
+        );
+        assert!(
+            !draw("4k3/8/8/8/8/8/8/3NKN2 w - - 0 1"),
+            "two knights can't force mate but can mate"
+        );
+        assert!(!draw("4k3/8/8/8/8/8/4P3/4K3 w - - 0 1"), "a pawn");
+        assert!(!Position::startpos().is_insufficient_material());
     }
 
     #[test]
