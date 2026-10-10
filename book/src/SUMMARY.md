@@ -7,7 +7,7 @@
 
 - [Board representation and FEN](ch01-board.md)
 - [Move generation and perft](ch02-movegen.md)
-- [Magic bitboards]()
+- [Magic bitboards](ch03-magics.md)
 - [Zobrist hashing and talking to GUIs (UCI)]()
 
 # Part II: Searching
