@@ -49,7 +49,7 @@ fn run(mode: Mode) -> ExitCode {
         forced => (forced, None),
     };
     match mode {
-        Mode::Uci => not_implemented("UCI mode", "stage 4"),
+        Mode::Uci => run_uci(first_line),
         Mode::Xboard => not_implemented("XBoard mode", "stage 20"),
         Mode::Shell | Mode::Auto => run_shell(first_line),
     }
@@ -78,6 +78,18 @@ fn detect_mode() -> (Mode, Option<String>) {
         None => Mode::Shell,
     };
     (mode, Some(first_line))
+}
+
+/// Speaks UCI on standard input and output until `quit`.
+fn run_uci(first_line: Option<String>) -> ExitCode {
+    let stdin = io::stdin();
+    match cb2026_protocol::uci::run(stdin.lock(), Box::new(io::stdout()), first_line) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("cb2026: {e}");
+            ExitCode::FAILURE
+        }
+    }
 }
 
 /// Runs the interactive shell (or a script of shell commands piped in).

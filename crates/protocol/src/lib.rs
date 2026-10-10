@@ -9,7 +9,7 @@
 //!   other GUIs. Here the engine keeps track of the game itself.
 //!
 //! This crate turns those text commands into calls on the Engine API and turns search results
-//! back into protocol output. Stage 4 brings UCI; stage 20 brings XBoard.
+//! back into protocol output. [`uci`] is here now; XBoard arrives in stage 20.
 //!
 //! ## Further reading
 //!
@@ -17,6 +17,8 @@
 //! - Chess Programming Wiki, [Chess Engine Communication Protocol](https://www.chessprogramming.org/Chess_Engine_Communication_Protocol)
 
 #![forbid(unsafe_code)]
+
+pub mod uci;
 
 /// A text protocol a GUI can use to talk to the engine.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
