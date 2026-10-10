@@ -94,14 +94,31 @@ impl Score {
 
     // ANCHOR: llr
     /// The log-likelihood ratio of "the Elo difference is `elo1`" against "it is `elo0`".
+    ///
+    /// If every game so far had the same result, the variance is zero and the formula breaks
+    /// down; one imaginary draw is added in that case, so a long run of wins (or losses) still
+    /// ends the test after a reasonable number of games.
     pub fn llr(&self, elo0: f64, elo1: f64) -> f64 {
-        let n = self.games() as f64;
-        let variance = self.variance();
-        if self.games() == 0 || variance == 0.0 {
+        if self.games() == 0 {
+            return 0.0;
+        }
+        let one_sided = self.wins == self.games() || self.losses == self.games();
+        let score = if one_sided {
+            Score {
+                draws: self.draws + 1,
+                ..*self
+            }
+        } else {
+            *self
+        };
+        let n = score.games() as f64;
+        let variance = score.variance();
+        if variance == 0.0 {
+            // Only draws: no evidence either way.
             return 0.0;
         }
         let (p0, p1) = (expected_score(elo0), expected_score(elo1));
-        n * (p1 - p0) * (2.0 * self.ratio() - p0 - p1) / (2.0 * variance)
+        n * (p1 - p0) * (2.0 * score.ratio() - p0 - p1) / (2.0 * variance)
     }
     // ANCHOR_END: llr
 }
@@ -244,6 +261,27 @@ mod tests {
             losses: 4,
         };
         assert_eq!(sprt.verdict(&too_early), Verdict::Continue);
+    }
+
+    #[test]
+    fn a_run_of_wins_or_losses_ends_the_test() {
+        let sprt = Sprt::new(0.0, 5.0);
+        let wins = |n| Score {
+            wins: n,
+            ..Score::default()
+        };
+        assert_eq!(sprt.verdict(&wins(5)), Verdict::Continue);
+        assert_eq!(sprt.verdict(&wins(30)), Verdict::Pass);
+        let losses = Score {
+            losses: 30,
+            ..Score::default()
+        };
+        assert_eq!(sprt.verdict(&losses), Verdict::Fail);
+        let draws = Score {
+            draws: 100,
+            ..Score::default()
+        };
+        assert_eq!(sprt.verdict(&draws), Verdict::Continue);
     }
 
     #[test]
