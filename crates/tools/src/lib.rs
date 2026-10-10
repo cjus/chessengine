@@ -7,5 +7,17 @@
 //!   positions with their results, for tuning (and later for NNUE training).
 //! - **Test helpers:** shared code for perft suites, EPD suites and the protocol conformance
 //!   tests.
+//!
+//! ## What's here now
+//!
+//! - [`uci_client`], [`game`] and [`match_runner`]: a small tournament manager that plays two
+//!   UCI engines against each other, used by the `match` tool to measure changes.
+//! - [`sprt`]: Elo estimates and the sequential probability ratio test.
+//! - The `perft-suite`, `find-magics` and `match` command-line tools (`src/bin/`).
 
 #![forbid(unsafe_code)]
+
+pub mod game;
+pub mod match_runner;
+pub mod sprt;
+pub mod uci_client;
