@@ -33,6 +33,9 @@ that is also a learning tool. Product requirements: `docs/PRD.md`. Owner: Carlos
    `main` is protected (ruleset `main: PR + CI`): changes land only through a PR whose three CI
    checks (`fmt, clippy, test, doc`, `licences and advisories`, `book`) passed. Never try to get
    around it.
+   **Claude may merge its own PRs** (granted by Carlos 2026-10-10) once all three checks are green
+   on the latest commit, the PR merges cleanly and no review comment is unanswered. After a
+   stage's last PR merges, tag `main` as `stage-NN-<name>` and push the tag.
 7. If the change affects `docs/PRD.md` scope or decisions, update it in the same PR.
 
 ## What Claude runs and what Carlos runs
