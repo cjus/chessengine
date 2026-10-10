@@ -19,12 +19,7 @@
 //! - [`makemove`]: playing a move on a position.
 //! - [`perft`]: counting positions to prove move generation correct.
 //! - [`zobrist`]: 64-bit hash keys for positions, updated incrementally.
-//!
-//! ## What's coming
-//!
-//! The crate grows stage by stage (see `docs/PRD.md`, "Stages", and the companion book):
-//!
-//! - **Stage 4:** standard algebraic notation (SAN) for moves.
+//! - [`san`]: standard algebraic notation (`Nf3`, `exd5`, `O-O`), written and read.
 //!
 //! ## Further reading
 //!
@@ -45,6 +40,7 @@ pub mod moves;
 pub mod perft;
 pub mod piece;
 pub mod position;
+pub mod san;
 pub mod square;
 pub mod zobrist;
 
@@ -54,4 +50,5 @@ pub use fen::{FenError, STARTING_FEN};
 pub use moves::{Move, MoveKind, MoveList};
 pub use piece::{Color, Piece, PieceType};
 pub use position::Position;
+pub use san::SanError;
 pub use square::{File, Rank, Square};

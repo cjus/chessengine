@@ -19,7 +19,7 @@
 //! | `flip` | Draw the board from the other side |
 //! | `board unicode\|ascii` | Chess symbols or letters |
 //! | `color on\|off` | Coloured squares |
-//! | `e2e4`, `move e2e4 e7e5 ...` | Play moves (UCI notation) |
+//! | `e4`, `Nf3`, `e2e4`, `move e4 e5 Nf3 ...` | Play moves (algebraic or UCI notation) |
 //! | `undo` | Take back the last move |
 //! | `legal`, `moves` | List the legal moves |
 //! | `perft <depth>`, `divide <depth>` | Count positions (move generation check) |
@@ -56,7 +56,7 @@ use cb2026_chess::attacks::{
 use cb2026_chess::magic::{self, Magic};
 use cb2026_chess::perft::{divide, perft};
 use cb2026_chess::zobrist;
-use cb2026_chess::{Bitboard, Color, Piece, PieceType, Position, Square};
+use cb2026_chess::{Bitboard, Color, Move, Piece, PieceType, Position, Square};
 pub use render::Style;
 
 /// The help text for the `help` command.
@@ -68,7 +68,7 @@ Commands:
   flip                 Draw the board from the other side
   board unicode|ascii  Chess symbols or letters
   color on|off         Coloured squares
-  e2e4                 Play a move (UCI notation; castling as e1g1 or e1h1)
+  e4, Nf3, O-O, e2e4   Play a move (algebraic or UCI notation)
   move <m1> <m2> ...   Play several moves
   undo                 Take back the last move
   legal, moves         List the legal moves
@@ -109,8 +109,8 @@ impl Response {
 #[derive(Clone, Debug)]
 pub struct Shell {
     position: Position,
-    /// Earlier positions, for `undo`.
-    history: Vec<Position>,
+    /// Earlier positions and the moves played from them (in SAN), for `undo` and display.
+    history: Vec<(Position, String)>,
     style: Style,
 }
 
@@ -190,7 +190,7 @@ impl Shell {
             },
             "move" | "m" => self.play(args),
             "undo" => match self.history.pop() {
-                Some(previous) => {
+                Some((previous, _)) => {
                     self.position = previous;
                     self.show()
                 }
@@ -212,7 +212,7 @@ impl Shell {
             "set" => self.set(args),
             "zobrist" => self.zobrist(),
             // Anything else that is a legal move is played.
-            other if self.position.parse_uci_move(other).is_some() => self.play(line),
+            other if parse_move(&self.position, other).is_some() => self.play(line),
             other => Response::text(format!(
                 "Unknown command '{other}'. Type 'help' for a list."
             )),
@@ -220,7 +220,14 @@ impl Shell {
     }
 
     fn show(&self) -> Response {
-        Response::text(render::board(&self.position, self.style))
+        let last = self.history.last().map(|(before, san)| {
+            let number = before.fullmove_number();
+            match before.side_to_move() {
+                Color::White => format!("{number}. {san}"),
+                Color::Black => format!("{number}... {san}"),
+            }
+        });
+        Response::text(render::board(&self.position, self.style, last.as_deref()))
     }
 
     /// Starts over from `position`, forgetting the move history.
@@ -235,14 +242,15 @@ impl Shell {
             return Response::text("Usage: move <move> [<move> ...], e.g. move e2e4 e7e5");
         }
         for text in moves.split_whitespace() {
-            let Some(mv) = self.position.parse_uci_move(text) else {
+            let Some(mv) = parse_move(&self.position, text) else {
                 let mut response = self.show();
                 response.output.push_str(&format!(
                     "'{text}' is not a legal move here. Type 'legal' to list them.\n"
                 ));
                 return response;
             };
-            self.history.push(self.position.clone());
+            let san = self.position.to_san(mv);
+            self.history.push((self.position.clone(), san));
             self.position.make_move(mv);
         }
         let mut response = self.show();
@@ -258,7 +266,7 @@ impl Shell {
             .position
             .legal_moves()
             .iter()
-            .map(|mv| mv.to_string())
+            .map(|&mv| self.position.to_san(mv))
             .collect();
         moves.sort();
         let mut out = format!("{} legal move{}", moves.len(), plural(moves.len()));
@@ -443,6 +451,12 @@ impl Shell {
     }
 }
 
+/// Reads a move in UCI notation (`g1f3`) or algebraic notation (`Nf3`).
+fn parse_move(pos: &Position, text: &str) -> Option<Move> {
+    pos.parse_uci_move(text)
+        .or_else(|| pos.parse_san(text).ok())
+}
+
 /// A message if the game is over in `pos` (checkmate or stalemate).
 fn game_over(pos: &Position) -> Option<String> {
     if !pos.legal_moves().is_empty() {
@@ -608,6 +622,18 @@ mod tests {
     }
 
     #[test]
+    fn accepts_algebraic_notation_and_shows_the_last_move() {
+        let mut shell = ascii_shell();
+        let out = shell.execute("move e4 e5 Nf3 Nc6 Bb5").output;
+        assert!(out.contains("Last move: 3. Bb5"), "{out}");
+        assert_eq!(
+            shell.position().to_fen(),
+            "r1bqkbnr/pppp1ppp/2n5/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3"
+        );
+        assert!(shell.execute("a6").output.contains("Last move: 3... a6"));
+    }
+
+    #[test]
     fn reports_checkmate() {
         let mut shell = ascii_shell();
         let response = shell.execute("move f2f3 e7e5 g2g4 d8h4");
@@ -617,7 +643,12 @@ mod tests {
     #[test]
     fn legal_perft_and_divide() {
         let mut shell = ascii_shell();
-        assert!(shell.execute("legal").output.starts_with("20 legal moves:"));
+        let legal = shell.execute("legal").output;
+        assert!(legal.starts_with("20 legal moves:"));
+        assert!(
+            legal.contains("Nf3"),
+            "moves are listed in algebraic notation"
+        );
         assert!(
             shell
                 .execute("perft 3")

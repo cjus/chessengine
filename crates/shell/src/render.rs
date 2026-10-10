@@ -121,7 +121,7 @@ fn draw_square(
 }
 
 /// The lines of information shown to the right of the board.
-fn side_panel(pos: &Position) -> Vec<String> {
+fn side_panel(pos: &Position, last_move: Option<&str>) -> Vec<String> {
     let castling = {
         let rights = pos.castling();
         let mut s = String::new();
@@ -155,6 +155,7 @@ fn side_panel(pos: &Position) -> Vec<String> {
         ),
         format!("50-move counter: {}/100", pos.halfmove_clock()),
         format!("Hash: {:#018x}", pos.hash()),
+        last_move.map_or(String::new(), |m| format!("Last move: {m}")),
         if pos.in_check() {
             "Check!".to_string()
         } else {
@@ -164,8 +165,9 @@ fn side_panel(pos: &Position) -> Vec<String> {
 }
 
 /// Draws a position: the board with coordinates, an information panel and the FEN.
-pub fn board(pos: &Position, style: Style) -> String {
-    let panel = side_panel(pos);
+/// `last_move` (like `"12... Nf6"`) is shown in the panel if given.
+pub fn board(pos: &Position, style: Style, last_move: Option<&str>) -> String {
+    let panel = side_panel(pos, last_move);
     let mut out = String::new();
     for (row, rank) in ranks_top_down(style).into_iter().enumerate() {
         let mut line = format!(" {} ", rank.to_char());
@@ -259,7 +261,7 @@ mod tests {
             "",
         ]
         .join("\n");
-        assert_eq!(board(&Position::startpos(), ASCII), expected);
+        assert_eq!(board(&Position::startpos(), ASCII, None), expected);
     }
 
     #[test]
@@ -268,7 +270,7 @@ mod tests {
             flipped: true,
             ..ASCII
         };
-        let text = board(&Position::startpos(), style);
+        let text = board(&Position::startpos(), style, None);
         // From Black's side the h-file is on the left, so the king (e1) comes before the queen (d1).
         assert!(text.starts_with(" 1  R  N  B  K  Q  B  N  R    White to move"));
         assert!(text.contains("    h  g  f  e  d  c  b  a\n"));
@@ -276,7 +278,7 @@ mod tests {
 
     #[test]
     fn unicode_symbols() {
-        let text = board(&Position::startpos(), Style::default());
+        let text = board(&Position::startpos(), Style::default(), None);
         assert!(text.contains(" ♜  ♞  ♝  ♛  ♚  ♝  ♞  ♜ "));
         assert!(text.contains(" ♖  ♘  ♗  ♕  ♔  ♗  ♘  ♖\n"));
     }
@@ -287,7 +289,7 @@ mod tests {
             color: true,
             ..Style::default()
         };
-        let text = board(&Position::startpos(), style);
+        let text = board(&Position::startpos(), style, None);
         assert!(text.contains(ansi::LIGHT_SQUARE));
         assert!(text.contains(ansi::DARK_SQUARE));
         assert_eq!(
