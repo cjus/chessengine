@@ -4,12 +4,19 @@
 //! about *good* moves: that's the job of `cb2026-engine`. It does no I/O and has no
 //! dependencies, so everything in it can be tested exhaustively and reused by every other crate.
 //!
-//! ## What will live here
+//! ## What's here
+//!
+//! - [`square`]: squares, files and ranks, and how the 64 squares are numbered.
+//! - [`piece`]: colours, piece types and pieces.
+//! - [`bitboard`]: sets of squares packed into a `u64`, the core data structure.
+//! - [`castling`]: castling rights, stored so that Chess960 works the same way.
+//! - [`position`]: a full position, kept as bitboards and as a mailbox array.
+//! - [`fen`]: reading and writing positions in Forsyth–Edwards Notation.
+//!
+//! ## What's coming
 //!
 //! The crate grows stage by stage (see `docs/PRD.md`, "Stages", and the companion book):
 //!
-//! - **Stage 1 (board):** squares, pieces, colours, bitboards (one 64-bit set per piece type and
-//!   colour), a mailbox array for "what's on this square?" lookups, FEN parsing and printing.
 //! - **Stage 2 (move generation):** attack tables for the leaping pieces, sliding attacks built
 //!   the obvious way (walking rays), legal move generation with check and pin masks, castling
 //!   (standard and Chess960), en passant, promotions, and *perft* to prove it all correct.
@@ -23,3 +30,17 @@
 //! - Chess Programming Wiki, [Perft](https://www.chessprogramming.org/Perft)
 
 #![forbid(unsafe_code)]
+
+pub mod bitboard;
+pub mod castling;
+pub mod fen;
+pub mod piece;
+pub mod position;
+pub mod square;
+
+pub use bitboard::Bitboard;
+pub use castling::{CastlingRights, CastlingSide};
+pub use fen::{FenError, STARTING_FEN};
+pub use piece::{Color, Piece, PieceType};
+pub use position::Position;
+pub use square::{File, Rank, Square};

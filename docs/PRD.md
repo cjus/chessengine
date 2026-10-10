@@ -365,7 +365,7 @@ stalemate), the engine offering and accepting draws and resigning in hopeless po
    reading. It's built and checked in CI; publishing it on GitHub Pages waits until the repo is
    public.
 3. **Milestone tags.** Git tags `stage-NN-<name>` mark each stage below. Every tag builds, passes
-   its tests, plays legal chess through UCI, and matches its book chapter, so a learner can run
+   its tests, matches its book chapter and, from stage 4 on, plays legal chess through UCI, so a learner can run
    `git checkout stage-07-quiescence` and play against that version.
 4. **Technique switches.** Every search technique and evaluation term group can be turned off at
    runtime (shell `set`, or `--dev` UCI options), so learners can measure each one themselves. An

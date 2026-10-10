@@ -8,11 +8,12 @@
 
 mod args;
 
-use std::io::{self, BufRead, IsTerminal};
+use std::io::{self, BufRead, IsTerminal, Read};
 use std::process::ExitCode;
 
 use args::{Command, Mode, USAGE};
 use cb2026_protocol::Protocol;
+use cb2026_shell::{Shell, Style};
 
 /// Exit code for a mode or command that a later stage will implement.
 const EXIT_NOT_IMPLEMENTED: u8 = 1;
@@ -43,39 +44,73 @@ fn main() -> ExitCode {
 
 /// Starts the requested mode, resolving [`Mode::Auto`] first.
 fn run(mode: Mode) -> ExitCode {
-    let mode = match mode {
+    let (mode, first_line) = match mode {
         Mode::Auto => detect_mode(),
-        forced => forced,
+        forced => (forced, None),
     };
     match mode {
         Mode::Uci => not_implemented("UCI mode", "stage 4"),
         Mode::Xboard => not_implemented("XBoard mode", "stage 20"),
-        Mode::Shell | Mode::Auto => not_implemented("the shell", "stage 1"),
+        Mode::Shell | Mode::Auto => run_shell(first_line),
     }
 }
 
-/// Picks a mode when none was forced.
+/// Picks a mode when none was forced, returning the first input line if it had to read one.
 ///
 /// A terminal means a person: open the shell. Otherwise something started us with a pipe,
 /// usually a GUI, and its first line says which protocol it speaks; anything else is treated
-/// as a script of shell commands.
+/// as a script of shell commands, starting with that line.
 ///
-/// The first line is consumed here. When the protocols are implemented, it will be handed to
-/// them so the handshake (`uci` → `id ...`, `uciok`) is still answered.
-fn detect_mode() -> Mode {
+/// When the protocols are implemented, the first line will be handed to them as well, so the
+/// handshake (`uci` → `id ...`, `uciok`) is still answered.
+fn detect_mode() -> (Mode, Option<String>) {
     let stdin = io::stdin();
     if stdin.is_terminal() {
-        return Mode::Shell;
+        return (Mode::Shell, None);
     }
     let mut first_line = String::new();
     if stdin.lock().read_line(&mut first_line).is_err() {
-        return Mode::Shell;
+        return (Mode::Shell, None);
     }
-    match cb2026_protocol::detect(&first_line) {
+    let mode = match cb2026_protocol::detect(&first_line) {
         Some(Protocol::Uci) => Mode::Uci,
         Some(Protocol::Xboard) => Mode::Xboard,
         None => Mode::Shell,
+    };
+    (mode, Some(first_line))
+}
+
+/// Runs the interactive shell (or a script of shell commands piped in).
+fn run_shell(first_line: Option<String>) -> ExitCode {
+    let stdin = io::stdin();
+    let interactive = stdin.is_terminal() && io::stdout().is_terminal();
+    let style = Style {
+        unicode: !dumb_terminal(),
+        color: io::stdout().is_terminal() && !no_color_requested() && !dumb_terminal(),
+        flipped: false,
+    };
+    let mut shell = Shell::new(style);
+    // A line already read while detecting the mode runs first, then the rest of the input.
+    let input = io::Cursor::new(first_line.unwrap_or_default()).chain(stdin.lock());
+    match cb2026_shell::run(&mut shell, input, io::stdout().lock(), interactive) {
+        Ok(()) => ExitCode::SUCCESS,
+        // A closed pipe (for example `cb2026 < script | head`) is a normal way to stop.
+        Err(e) if e.kind() == io::ErrorKind::BrokenPipe => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("cb2026: {e}");
+            ExitCode::FAILURE
+        }
     }
+}
+
+/// Whether the user asked for no colour (<https://no-color.org>: `NO_COLOR` set and non-empty).
+fn no_color_requested() -> bool {
+    std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty())
+}
+
+/// Whether the terminal says it can't do much (`TERM=dumb`): then use plain ASCII.
+fn dumb_terminal() -> bool {
+    std::env::var("TERM").is_ok_and(|t| t == "dumb")
 }
 
 /// Reports a feature that doesn't exist yet and the stage that will add it.
