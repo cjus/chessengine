@@ -256,7 +256,7 @@ Mac-first. Status of the commercial Mac GUIs as of 2026-10-10:
 | En Croissant | macOS | Open source | Carlos |
 | Banksia | macOS | Free | Carlos |
 | XBoard | macOS | Open source | Carlos (CECP mode) |
-| HIARCS Chess Explorer (Pro) | macOS | Commercial | Carlos. Primary commercial target: current Mac release supports Apple Silicon and external UCI engines |
+| HIARCS Chess Explorer (Pro) | macOS | Commercial | Carlos. Primary commercial target: the 2026 Mac release runs natively on Apple Silicon; external UCI engine support still to be confirmed (see Research log) |
 | ChessBase for Mac | macOS | Commercial | Carlos, once it ships (announced for November 2026). First check whether it accepts local UCI engines; the announcement only mentions Fritz, cloud and remote engines |
 | Shredder 13 | macOS | Commercial | Optional. Accepts UCI engines, but the last major release was 2016 |
 | ChessBase/Fritz, Arena | Windows | Commercial / free | Only if a Windows PC or VM becomes available; until then UCI conformance tests stand in |
@@ -515,6 +515,45 @@ release tags. Releases build binaries for every platform in the table above.
 | Tablebase crate changes or is abandoned | Tablebase support breaks | Behind a `Tablebase` trait and a cargo feature; Fathom or our own port can replace it |
 | CI minutes on a private repo | CI throttled or costly | Linux on PRs; macOS/Windows nightly and on tags |
 | Only a Mac for GUI testing | Windows GUIs (ChessBase/Fritz, Arena) untested | Strict UCI conformance tests; a Windows VM or PC check before going public |
+
+## Research log
+
+Findings behind the decisions above, with their sources, so they can be rechecked later. Add a
+dated entry whenever a decision rests on outside facts.
+
+**2026-10-10: Commercial chess GUIs on macOS**
+
+| Product | Finding | Confidence | To confirm |
+| --- | --- | --- | --- |
+| HIARCS Chess Explorer (Pro) | 2026 Mac release; macOS 10.14 or later including macOS 26; native on Intel and Apple Silicon (vendor page). A third-party listing says it supports external UCI engines | Vendor claim for the platform; UCI support from a third party | External UCI engine support in the current version (ask HIARCS or try the demo) |
+| ChessBase for Mac | Native Mac version announced, built from the ground up, release November 2026. The announcement lists Fritz, Stockfish from the Engine Cloud and remote engines | From search summaries; fetching the article failed | Whether it can load a local UCI engine, once it ships |
+| Shredder 13 | Last major release October 2016, Mac and Linux builds November 2016. Users report its GUI accepts any Mac UCI engine | Old and anecdotal; no native Apple Silicon build confirmed | Whether it still runs on current macOS (likely through Rosetta 2) |
+| ChessBase/Fritz on Windows | Not native on Mac before the new version; workarounds were Boot Camp, a VM or Wine/CrossOver | Forum reports | Only if a Windows PC or VM is available |
+
+Sources:
+[HIARCS Mac chess software](https://www.hiarcs.com/mac-chess-software.html),
+[HIARCS Chess Explorer Pro](https://www.hiarcs.com/chess-explorer-pro.html),
+[ChessBase: "ChessBase finally on Mac"](https://en.chessbase.com/post/chessbase-finally-on-mac),
+[Chess.com forum: Chess engines for Mac](https://chess.com/forum/view/chess-equipment/chess-engines-for-mac),
+[Chessprogramming wiki: Shredder](https://www.chessprogramming.org/Shredder).
+
+**2026-10-10: Tablebase probing crate**
+
+`shakmaty-syzygy` on crates.io: version 0.28.1, last updated 2026-06-19, licence
+GPL-3.0-or-later (compatible with our GPL-3.0). Source:
+[crates.io/crates/shakmaty-syzygy](https://crates.io/crates/shakmaty-syzygy).
+Recheck the version and maintenance status when stage 18 starts.
+
+**2026-10-10: Engine name**
+
+A web search for "cb2026" chess engine found no existing engine with that name. Recheck the CCRL
+and Chessprogramming wiki engine lists and trademarks before the repo goes public.
+
+**2026-10-10: Test throughput (estimate, not measured)**
+
+At 8+0.08 a game takes about 20 s, so a Mac running 7 games at once (8 performance cores − 1)
+plays about 1,200 games an hour; the 4-core cloud session (3 games at once) about 540. Replace
+these with measured figures from the first real SPRT runs.
 
 ## Decisions
 
