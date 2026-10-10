@@ -154,6 +154,11 @@ fn side_panel(pos: &Position) -> Vec<String> {
             pos.en_passant().map_or("-".to_string(), |s| s.to_string())
         ),
         format!("50-move counter: {}/100", pos.halfmove_clock()),
+        if pos.in_check() {
+            "Check!".to_string()
+        } else {
+            String::new()
+        },
     ]
 }
 

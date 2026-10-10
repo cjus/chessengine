@@ -12,14 +12,16 @@
 //! - [`castling`]: castling rights, stored so that Chess960 works the same way.
 //! - [`position`]: a full position, kept as bitboards and as a mailbox array.
 //! - [`fen`]: reading and writing positions in Forsyth–Edwards Notation.
+//! - [`attacks`]: which squares each piece attacks, and the lines between squares.
+//! - [`moves`]: moves packed into 16 bits, and move lists.
+//! - [`movegen`]: legal move generation with check and pin masks.
+//! - [`makemove`]: playing a move on a position.
+//! - [`perft`]: counting positions to prove move generation correct.
 //!
 //! ## What's coming
 //!
 //! The crate grows stage by stage (see `docs/PRD.md`, "Stages", and the companion book):
 //!
-//! - **Stage 2 (move generation):** attack tables for the leaping pieces, sliding attacks built
-//!   the obvious way (walking rays), legal move generation with check and pin masks, castling
-//!   (standard and Chess960), en passant, promotions, and *perft* to prove it all correct.
 //! - **Stage 3 (magics):** magic bitboards replace the ray walks for sliding pieces.
 //! - **Stage 4:** make/unmake with an undo stack, and incremental Zobrist hashing.
 //!
@@ -31,9 +33,14 @@
 
 #![forbid(unsafe_code)]
 
+pub mod attacks;
 pub mod bitboard;
 pub mod castling;
 pub mod fen;
+pub mod makemove;
+pub mod movegen;
+pub mod moves;
+pub mod perft;
 pub mod piece;
 pub mod position;
 pub mod square;
@@ -41,6 +48,7 @@ pub mod square;
 pub use bitboard::Bitboard;
 pub use castling::{CastlingRights, CastlingSide};
 pub use fen::{FenError, STARTING_FEN};
+pub use moves::{Move, MoveKind, MoveList};
 pub use piece::{Color, Piece, PieceType};
 pub use position::Position;
 pub use square::{File, Rank, Square};
