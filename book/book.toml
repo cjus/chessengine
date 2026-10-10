@@ -1,0 +1,9 @@
+[book]
+title = "Building a Chess Engine in Rust"
+description = "How cb2026 works, one technique at a time, from an empty board to master strength."
+authors = ["The cb2026 authors"]
+language = "en"
+src = "src"
+
+[output.html]
+git-repository-url = "https://github.com/cjus/chessengine"

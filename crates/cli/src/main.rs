@@ -1,0 +1,88 @@
+//! The `cb2026` binary.
+//!
+//! One executable serves every front end. A GUI starts it with no arguments and sends `uci` or
+//! `xboard` as its first line; a person in a terminal gets the shell. Flags force a mode when
+//! guessing isn't wanted. See `docs/PRD.md`, "One binary, three modes".
+
+#![forbid(unsafe_code)]
+
+mod args;
+
+use std::io::{self, BufRead, IsTerminal};
+use std::process::ExitCode;
+
+use args::{Command, Mode, USAGE};
+use cb2026_protocol::Protocol;
+
+/// Exit code for a mode or command that a later stage will implement.
+const EXIT_NOT_IMPLEMENTED: u8 = 1;
+/// Exit code for bad command-line arguments.
+const EXIT_USAGE: u8 = 2;
+
+fn main() -> ExitCode {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    match args::parse(&args) {
+        Ok(Command::Version) => {
+            println!("{}", cb2026_engine::id_name());
+            ExitCode::SUCCESS
+        }
+        Ok(Command::Help) => {
+            println!("{}\n\n{USAGE}", cb2026_engine::id_name());
+            ExitCode::SUCCESS
+        }
+        Ok(Command::Bench) => {
+            not_implemented("bench", "stage 5, when there is a search to measure")
+        }
+        Ok(Command::Run(mode)) => run(mode),
+        Err(message) => {
+            eprintln!("cb2026: {message}\n\n{USAGE}");
+            ExitCode::from(EXIT_USAGE)
+        }
+    }
+}
+
+/// Starts the requested mode, resolving [`Mode::Auto`] first.
+fn run(mode: Mode) -> ExitCode {
+    let mode = match mode {
+        Mode::Auto => detect_mode(),
+        forced => forced,
+    };
+    match mode {
+        Mode::Uci => not_implemented("UCI mode", "stage 4"),
+        Mode::Xboard => not_implemented("XBoard mode", "stage 20"),
+        Mode::Shell | Mode::Auto => not_implemented("the shell", "stage 1"),
+    }
+}
+
+/// Picks a mode when none was forced.
+///
+/// A terminal means a person: open the shell. Otherwise something started us with a pipe,
+/// usually a GUI, and its first line says which protocol it speaks; anything else is treated
+/// as a script of shell commands.
+///
+/// The first line is consumed here. When the protocols are implemented, it will be handed to
+/// them so the handshake (`uci` → `id ...`, `uciok`) is still answered.
+fn detect_mode() -> Mode {
+    let stdin = io::stdin();
+    if stdin.is_terminal() {
+        return Mode::Shell;
+    }
+    let mut first_line = String::new();
+    if stdin.lock().read_line(&mut first_line).is_err() {
+        return Mode::Shell;
+    }
+    match cb2026_protocol::detect(&first_line) {
+        Some(Protocol::Uci) => Mode::Uci,
+        Some(Protocol::Xboard) => Mode::Xboard,
+        None => Mode::Shell,
+    }
+}
+
+/// Reports a feature that doesn't exist yet and the stage that will add it.
+fn not_implemented(what: &str, stage: &str) -> ExitCode {
+    eprintln!(
+        "{}: {what} is not implemented yet (planned for {stage}; see docs/PRD.md).",
+        cb2026_engine::id_name()
+    );
+    ExitCode::from(EXIT_NOT_IMPLEMENTED)
+}
