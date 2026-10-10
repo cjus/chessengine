@@ -102,7 +102,7 @@ crates/
 book/         mdBook: "Building a chess engine in Rust".
 docs/         PRD, Elo ledger, testing guide, GUI compatibility matrix.
 tests/data/   perft suites, EPD test suites, bench positions.
-scripts/      SPRT and gauntlet runners (fastchess), release helpers.
+scripts/      SPRT and gauntlet runners for the test Mac, release helpers.
 ```
 
 **One binary, three modes.** GUIs launch the engine and send `uci` (or `xboard`) as their first
@@ -255,7 +255,7 @@ Status as of 2026-10-10 (details and sources in the Research log):
 
 | GUI / tool | Platform | License | Role | Who checks |
 | --- | --- | --- | --- | --- |
-| fastchess, cutechess-cli | Linux/macOS | Open source (GPL-3.0 / MIT) | Automated matches, SPRT, gauntlets | Claude (scripted, every release) |
+| cb2026 `match` tool; fastchess, cutechess-cli | Linux/macOS | Ours (GPL-3.0); open source (MIT / GPL-3.0) | Automated matches, SPRT, gauntlets | Claude (scripted, every release) |
 | En Croissant | macOS (.dmg) | Open source (GPL-3.0) | **Primary GUI**: modern analysis and play, any UCI engine. Installed and running on the M1 Max (2026-10-10, cjus/chessengine#12) | Carlos |
 | Cute Chess | macOS (Apple Silicon build exists) | Open source (GPL-3.0) | **Primary for engine-vs-engine** games and tournaments | Carlos |
 | Scid vs. PC / Scid | macOS | Open source (GPL-2.0) | Database and analysis; UCI and XBoard engines | Carlos |
@@ -320,7 +320,7 @@ Decided 2026-10-10 (cjus/chessengine#9): in v1. `match <engine-path> <n> [tc]` p
 between cb2026 and another UCI engine from inside the shell, alternating colours, and shows the
 running score, a live board for the current game, and the final result with an Elo estimate and
 error margin. Games are saved as PGN. It's for quick, friendly comparisons and for learners
-("does my change beat the previous stage?"); rigorous testing still uses fastchess and SPRT.
+("does my change beat the previous stage?"); rigorous testing uses the `match` tool's SPRT.
 It needs the shell to drive a second engine over UCI, so it arrives in M4, with an optional
 opening file (EPD or PGN) and Chess960 support.
 
@@ -416,7 +416,8 @@ bitboard views from stage 2–3, `eval` and `explain` from stage 9 on.
 | SPRT self-play | Did this change gain Elo? | Claude's session (short), Carlos's Mac (long) |
 | Gauntlet vs reference engines | Where we are on the CCRL scale | Each milestone gate |
 
-**SPRT rules.** Every change that affects search or evaluation is tested with fastchess using a
+**SPRT rules.** Every change that affects search or evaluation is tested with cb2026's own
+`match` tool (`cb2026-tools`; fastchess works too) using a
 sequential probability ratio test, against the current `main`:
 - gainers: `elo0=0, elo1=5` at short time control (8+0.08 s), and at long time control (40+0.4 s) for
   pruning and time-management changes;
@@ -448,7 +449,7 @@ sessions.
   this machine.
 
 - **`scripts/mac-sprt.sh <PR>`** (Claude writes it, Carlos runs it): builds the PR branch and
-  `main` in release mode, runs the fastchess SPRT, and posts the result to the PR as a
+  `main` in release mode, runs the SPRT with the `match` tool, and posts the result to the PR as a
   `<!-- sprt -->` comment through `gh`. Carlos only starts it and lets it run overnight;
   `scripts/mac-gauntlet.sh` does the same for rating gauntlets.
 - **Performance cores only:** concurrency = performance cores − 1, so 7 on the M1 Max (`sysctl
@@ -636,6 +637,10 @@ these with measured figures from the first real SPRT runs.
       (cjus/chessengine#9, 2026-10-10).
 - [x] Windows: Carlos tests on a Windows machine once the Windows build runs well
       (cjus/chessengine#11, 2026-10-10).
+- [x] Match tool: cb2026 has its own UCI match runner with SPRT (`cb2026-tools`, `match`). Cloud
+      sessions can't fetch fastchess (GitHub access is limited to this repo), a built-in tool
+      needs nothing installed on the Mac, and it is part of the teaching material. fastchess
+      still works for anyone who prefers it (2026-10-10).
 - [x] `main` protected by the ruleset `main: PR + CI`: PR required, three CI checks required,
       no force pushes or deletion (cjus/chessengine#5, 2026-10-10).
 
