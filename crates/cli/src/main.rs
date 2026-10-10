@@ -32,7 +32,18 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Ok(Command::Bench) => {
-            not_implemented("bench", "stage 5, when there is a search to measure")
+            let (nodes, time) = cb2026_engine::bench::bench(
+                &mut cb2026_engine::Engine::new(),
+                cb2026_engine::bench::BENCH_DEPTH,
+            );
+            // The same layout as Stockfish and OpenBench use, so tools can read it.
+            println!("Total time (ms) : {}", time.as_millis());
+            println!("Nodes searched  : {nodes}");
+            println!(
+                "Nodes/second    : {:.0}",
+                nodes as f64 / time.as_secs_f64().max(1e-9)
+            );
+            ExitCode::SUCCESS
         }
         Ok(Command::Run(mode)) => run(mode),
         Err(message) => {

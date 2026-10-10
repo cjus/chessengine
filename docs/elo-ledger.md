@@ -9,4 +9,4 @@ self-play unless noted, so it overstates gains against other engines.
 
 | Date | Stage / technique | PR | Test | Time control | Games | Elo ± 95% | LLR (bounds) |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| | *(no entries yet: the first search arrives in stage 5)* | | | | | | |
+| 2026-10-10 | Stage 5: material + negamax alpha-beta (vs stage 4 random mover) | stage 5 PR | SPRT | 8+0.08, cloud, 3 games at a time | 286 | +285 −0 =1 (no meaningful Elo) | passed, [0, 5] |

@@ -337,7 +337,7 @@ mod tests {
             script.as_bytes(),
             Box::new(captured.clone()),
             None,
-            Engine::with_seed(1),
+            Engine::new(),
         )
         .unwrap();
         let bytes = captured.0.lock().unwrap().clone();
@@ -353,6 +353,7 @@ mod tests {
             .iter()
             .rev()
             .find_map(|l| l.strip_prefix("bestmove "))
+            .and_then(|rest| rest.split_whitespace().next())
             .expect("a bestmove line")
             .to_string()
     }
