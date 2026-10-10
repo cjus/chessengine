@@ -1,0 +1,41 @@
+# The cb2026 workspace. See docs/PRD.md "Architecture" for what each crate is for.
+#
+# Chess logic lives in `chess` and `engine`, which do no I/O. `protocol`, `shell` and `cli` are
+# thin adapters on top, so UCI, XBoard and the interactive shell all drive the same engine.
+
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/cjus/chessengine"
+publish = false
+
+[workspace.dependencies]
+cb2026-chess = { path = "crates/chess" }
+cb2026-engine = { path = "crates/engine" }
+cb2026-protocol = { path = "crates/protocol" }
+cb2026-shell = { path = "crates/shell" }
+
+# Lints shared by every crate (each crate opts in with `[lints] workspace = true`).
+[workspace.lints.rust]
+# Every public item is documented: this is a learning project.
+missing_docs = "deny"
+# Inside an `unsafe fn`, each unsafe operation still needs its own `unsafe` block.
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+# Every `unsafe` block needs a `// SAFETY:` comment explaining why it is sound.
+undocumented_unsafe_blocks = "deny"
+
+[profile.release]
+# An engine spends almost all its time in a few hot loops, so we trade build time for speed:
+# whole-program optimisation across crates and a single codegen unit.
+lto = "fat"
+codegen-units = 1
+# A panic is a bug; abort instead of unwinding (smaller, slightly faster code).
+panic = "abort"

@@ -1,0 +1,12 @@
+[package]
+name = "cb2026-chess"
+description = "Board representation, move generation and chess rules for cb2026. No I/O, no dependencies."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
