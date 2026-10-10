@@ -5,7 +5,7 @@
 
 # Part I: The rules of chess
 
-- [Board representation and FEN]()
+- [Board representation and FEN](ch01-board.md)
 - [Move generation and perft]()
 - [Magic bitboards]()
 - [Zobrist hashing and talking to GUIs (UCI)]()
