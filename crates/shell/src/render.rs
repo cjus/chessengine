@@ -154,6 +154,7 @@ fn side_panel(pos: &Position) -> Vec<String> {
             pos.en_passant().map_or("-".to_string(), |s| s.to_string())
         ),
         format!("50-move counter: {}/100", pos.halfmove_clock()),
+        format!("Hash: {:#018x}", pos.hash()),
         if pos.in_check() {
             "Check!".to_string()
         } else {
@@ -248,7 +249,7 @@ mod tests {
             " 8  r  n  b  q  k  b  n  r    White to move · move 1",
             " 7  p  p  p  p  p  p  p  p    Castling: KQkq   En passant: -",
             " 6  .  .  .  .  .  .  .  .    50-move counter: 0/100",
-            " 5  .  .  .  .  .  .  .  .",
+            " 5  .  .  .  .  .  .  .  .    Hash: 0xd15760e4b44e8f30",
             " 4  .  .  .  .  .  .  .  .",
             " 3  .  .  .  .  .  .  .  .",
             " 2  P  P  P  P  P  P  P  P",

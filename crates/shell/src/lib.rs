@@ -25,6 +25,7 @@
 //! | `perft <depth>`, `divide <depth>` | Count positions (move generation check) |
 //! | `attacks <square>`, `attackers <square>` | What a piece attacks; what attacks a square |
 //! | `magic <square>` | How the magic-bitboard lookup works out a slider's attacks there |
+//! | `zobrist` | The position's hash key and the parts it is built from |
 //! | `set sliders rays\|magics` | Compute sliding attacks by walking rays or by magic lookup |
 //! | `bb <set>` | Show a bitboard: `occupied`, `empty`, `white`, `black`, `checkers`, `pinned`, or a piece letter (`P`, `n`, ...) |
 //! | `help` | List commands |
@@ -54,6 +55,7 @@ use cb2026_chess::attacks::{
 };
 use cb2026_chess::magic::{self, Magic};
 use cb2026_chess::perft::{divide, perft};
+use cb2026_chess::zobrist;
 use cb2026_chess::{Bitboard, Color, Piece, PieceType, Position, Square};
 pub use render::Style;
 
@@ -75,6 +77,7 @@ Commands:
   attacks <square>     The squares the piece on <square> attacks
   attackers <square>   The pieces (both colours) attacking <square>
   magic <square>       Step through the magic-bitboard lookup for a rook and bishop there
+  zobrist              The position's hash key and the parts it is built from
   set sliders rays|magics
                        Compute sliding attacks by walking rays or by magic lookup
   bb <set>             Show a bitboard: occupied, empty, white, black, checkers,
@@ -207,6 +210,7 @@ impl Shell {
                 Err(e) => Response::text(format!("Usage: magic <square>: {e}")),
             },
             "set" => self.set(args),
+            "zobrist" => self.zobrist(),
             // Anything else that is a legal move is played.
             other if self.position.parse_uci_move(other).is_some() => self.play(line),
             other => Response::text(format!(
@@ -330,6 +334,45 @@ impl Shell {
                 render::bitboard(attacks, self.style),
             ));
         }
+        Response::text(out)
+    }
+
+    /// Lists every part of the position's Zobrist key, then their XOR.
+    fn zobrist(&self) -> Response {
+        let pos = &self.position;
+        let mut out = String::from("The key is the XOR of one random number per feature:\n");
+        let mut total = 0u64;
+        let mut add = |label: String, key: u64| {
+            out.push_str(&format!("  {key:#018x}  {label}\n"));
+            total ^= key;
+        };
+        for square in Square::all() {
+            if let Some(piece) = pos.piece_at(square) {
+                add(
+                    format!("{piece} on {square}"),
+                    zobrist::piece_square(piece, square),
+                );
+            }
+        }
+        if pos.side_to_move() == Color::Black {
+            add("Black to move".to_string(), zobrist::black_to_move());
+        }
+        if !pos.castling().is_empty() {
+            add(
+                "castling rights".to_string(),
+                zobrist::castling(pos.castling()),
+            );
+        }
+        if let Some(square) = pos.en_passant() {
+            add(
+                format!("en passant on the {}-file", square.file().to_char()),
+                zobrist::en_passant(square.file()),
+            );
+        }
+        out.push_str(&format!(
+            "  ------------------\n  {total:#018x}  = the key (the position says {:#018x})\n",
+            pos.hash()
+        ));
         Response::text(out)
     }
 
@@ -605,6 +648,16 @@ mod tests {
         assert!(out.contains("Relevant squares (mask), 10 of them"));
         assert!(out.contains("Bishop on d4"));
         assert!(shell.execute("magic x").output.starts_with("Usage"));
+    }
+
+    #[test]
+    fn zobrist_breakdown_adds_up() {
+        let mut shell = ascii_shell();
+        shell.execute("e2e4");
+        let out = shell.execute("zobrist").output;
+        assert!(out.contains("Black to move"));
+        let hash = format!("{:#018x}", shell.position().hash());
+        assert!(out.contains(&format!("{hash}  = the key (the position says {hash})")));
     }
 
     #[test]
