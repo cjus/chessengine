@@ -39,3 +39,13 @@ Long SPRTs, gauntlets and checks in real GUIs are Carlos's, on his Apple Silicon
 writes the scripts (`scripts/mac-sprt.sh <PR>`, `scripts/mac-gauntlet.sh`), which post results to
 the PR as a comment; for GUI checks, hand Carlos the exact steps, the expected result and what to
 paste back.
+
+## Items for Carlos go in GitHub issues
+
+Anything Carlos needs to do, decide or answer (a setting, a check on the Mac, a scope question)
+is a GitHub issue assigned to `cjus` with the `needs-carlos` label, not only a line in chat or
+a PR description. Each issue says why it matters, the exact steps, the expected result, and
+"Done when". Before filing, check the open `needs-carlos` issues for a duplicate. When Carlos
+answers in a comment, act on it (update the PRD, open the PR) and close the issue; when he
+closes it himself, pick up any follow-up it names. His list:
+https://github.com/cjus/chessengine/issues?q=is%3Aopen+label%3Aneeds-carlos
