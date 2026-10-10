@@ -247,20 +247,25 @@ and which time controls to accept. lichess-bot is a separate project; we don't b
 A checklist in `docs/gui-compat.md`, re-run at each release, covering: load, options dialog,
 analysis with MultiPV, play a timed game, Chess960 game, pondering, and adding/removing the engine.
 GUI testing happens on Carlos's Apple Silicon Mac (decided 2026-10-10), so the matrix is
-Mac-first. Status of the commercial Mac GUIs as of 2026-10-10:
+Mac-first. **Open-source GUIs are the main targets**: they're free, they're what learners will
+use, and their source shows exactly how they drive an engine. Commercial GUIs come second.
+Status as of 2026-10-10 (details and sources in the Research log):
 
-| GUI / tool | Platform | License | Who checks |
-| --- | --- | --- | --- |
-| fastchess, cutechess-cli | Linux/macOS | Open source | Claude (scripted, every release) |
-| Cute Chess | macOS | Open source | Carlos |
-| En Croissant | macOS | Open source | Carlos |
-| Banksia | macOS | Free | Carlos |
-| XBoard | macOS | Open source | Carlos (CECP mode) |
-| HIARCS Chess Explorer (Pro) | macOS | Commercial | Carlos. Primary commercial target: the 2026 Mac release runs natively on Apple Silicon; external UCI engine support still to be confirmed (see Research log) |
-| ChessBase for Mac | macOS | Commercial | Carlos, once it ships (announced for November 2026). First check whether it accepts local UCI engines; the announcement only mentions Fritz, cloud and remote engines |
-| Shredder 13 | macOS | Commercial | Optional. Accepts UCI engines, but the last major release was 2016 |
-| ChessBase/Fritz, Arena | Windows | Commercial / free | Only if a Windows PC or VM becomes available; until then UCI conformance tests stand in |
-| lichess-bot | Linux/macOS | Open source | Claude sets it up; Carlos runs it |
+| GUI / tool | Platform | License | Role | Who checks |
+| --- | --- | --- | --- | --- |
+| fastchess, cutechess-cli | Linux/macOS | Open source (GPL-3.0 / MIT) | Automated matches, SPRT, gauntlets | Claude (scripted, every release) |
+| En Croissant | macOS (.dmg) | Open source (GPL-3.0) | **Primary GUI**: modern analysis and play, any UCI engine | Carlos |
+| Cute Chess | macOS (Apple Silicon build exists) | Open source (GPL-3.0) | **Primary for engine-vs-engine** games and tournaments | Carlos |
+| Scid vs. PC / Scid | macOS | Open source (GPL-2.0) | Database and analysis; UCI and XBoard engines | Carlos |
+| XBoard | macOS (Homebrew) | Open source (GPL-3.0) | The reference CECP GUI | Carlos (CECP mode) |
+| Nibbler | macOS (community package) | Open source (GPL-3.0) | Analysis GUI built for Lc0, works with UCI engines | Optional |
+| ChessX | macOS (Intel build, runs under Rosetta 2) | Open source (GPL-2.0) | Database with engine analysis | Optional |
+| Banksia | macOS | Free, closed source | Tournament GUI | Optional |
+| HIARCS Chess Explorer (Pro) | macOS | Commercial | Commercial target | Carlos. Primary commercial target: the 2026 Mac release runs natively on Apple Silicon; external UCI engine support still to be confirmed (see Research log) |
+| ChessBase for Mac | macOS | Commercial | Commercial target | Carlos, once it ships (announced for November 2026). First check whether it accepts local UCI engines; the announcement only mentions Fritz, cloud and remote engines |
+| Shredder 13 | macOS | Commercial | Optional | Optional. Accepts UCI engines, but the last major release was 2016 |
+| ChessBase/Fritz, Arena | Windows | Commercial / free | Windows coverage | Only if a Windows PC or VM becomes available; until then UCI conformance tests stand in |
+| lichess-bot | Linux/macOS | Open source (AGPL-3.0) | Online play on Lichess | Claude sets it up; Carlos runs it |
 
 Claude can't operate GUIs, so it also maintains a **protocol conformance test**: a script that
 plays scripted UCI and XBoard sessions against the binary and checks every response, including
@@ -547,6 +552,28 @@ Sources:
 [Chess.com forum: Chess engines for Mac](https://chess.com/forum/view/chess-equipment/chess-engines-for-mac),
 [Chessprogramming wiki: Shredder](https://www.chessprogramming.org/Shredder).
 
+**2026-10-10: Open-source chess GUIs on macOS**
+
+| Product | Finding | To confirm |
+| --- | --- | --- |
+| En Croissant | Free, GPL-3.0, built with Tauri; macOS .dmg from encroissant.org, macOS 10.13 or later; supports any UCI engine, added from a local file | Native Apple Silicon build (expected from Tauri, not checked) |
+| Cute Chess | GPL-3.0; a third-party site provides a build for Apple Silicon and Intel; widely recommended for engine matches | Official vs third-party Mac build |
+| Scid | A forum user reports it runs well on Apple Silicon | Which variant (Scid vs. PC or Scid) and its current Mac build |
+| Nibbler | No official Mac build; the community project Nibbler-for-macOS packages it with Electron and Lc0 | Using it with a non-Lc0 UCI engine |
+| ChessX | Open source; a compatibility tracker lists v1.6.10 as Intel-only | Whether it runs well under Rosetta 2 |
+| Banksia | Free but closed source | — |
+
+Sources:
+[En Croissant: getting started](https://encroissant.org/docs/getting-started),
+[En Croissant FAQ](https://www.mintlify.com/franciscoBSalgueiro/en-croissant/resources/faq),
+[En Croissant engines](https://www.mintlify.com/franciscoBSalgueiro/en-croissant/features/engines),
+[LinuxLinks: En Croissant review](https://www.linuxlinks.com/en-croissant-gui-chess-toolkit/),
+[Chessengeria: Cute Chess for Mac](https://chessengeria.eu/post/cute-chess-for-mac),
+[TalkChess: Chess GUI options for Apple Silicon](https://talkchess.com/viewtopic.php?p=968258),
+[Nibbler for macOS](https://github.com/twoplan/Nibbler-for-macOS),
+[Rosetta check: ChessX](https://rosettacheck.com/apps/a5naysyf),
+[Chessprogramming wiki: Mac OS](https://www.chessprogramming.org/Mac_OS).
+
 **2026-10-10: Tablebase probing crate**
 
 `shakmaty-syzygy` on crates.io: version 0.28.1, last updated 2026-06-19, licence
@@ -580,8 +607,9 @@ these with measured figures from the first real SPRT runs.
 - [x] Test machine: Carlos's Apple M1 Max (8 performance + 2 efficiency cores, 64 GB) for long
       SPRTs and gauntlets at 7 games at once, via scripts that post results to the PR; cloud
       sessions for short tests; OpenBench later if needed (2026-10-10).
-- [x] GUI testing is Mac-first: HIARCS Chess Explorer as the commercial target, ChessBase for Mac
-      once it ships, Shredder 13 optional (2026-10-10).
+- [x] GUI testing is Mac-first and open-source-first: En Croissant and Cute Chess as the primary
+      GUIs, plus Scid and XBoard; HIARCS Chess Explorer as the commercial target, ChessBase for
+      Mac once it ships, Shredder 13 optional (2026-10-10).
 - [x] Repo goes public around October 2027, with the book on GitHub Pages (2026-10-10).
 
 ## Open questions
