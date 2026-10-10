@@ -1,6 +1,7 @@
-# Chess Engine in Rust — Product Requirements
+# cb2026 — Product Requirements
 
-Working name: **chessengine** (the final engine name is an open question, see the end).
+A chess engine in Rust. Engine name: **cb2026** (ChessBrain 2026, decided 2026-10-10). The repository
+stays `cjus/chessengine`; the binary, crate prefix and UCI `id name` are `cb2026`.
 Status: draft for review. Last updated: 2026-10-10.
 
 ## Overview
@@ -95,7 +96,7 @@ crates/
   shell/      the interactive REPL: commands, board views, live thinking display.
   tools/      tuner (Texel), self-play data generation, bench, test helpers.
   nnue/       (M6) NNUE inference and trainer.
-  cli/        the single `chessengine` binary: picks UCI, XBoard or shell mode.
+  cli/        the single `cb2026` binary: picks UCI, XBoard or shell mode.
 book/         mdBook: "Building a chess engine in Rust".
 docs/         PRD, Elo ledger, testing guide, GUI compatibility matrix.
 tests/data/   perft suites, EPD test suites, bench positions.
@@ -105,7 +106,7 @@ scripts/      SPRT and gauntlet runners (fastchess), release helpers.
 **One binary, three modes.** GUIs launch the engine and send `uci` (or `xboard`) as their first
 line, so the binary chooses its mode from that first line: `uci` → UCI, `xboard` → CECP, anything
 else on an interactive terminal → the shell. `--uci`, `--xboard` and `--shell` force a mode, and
-`chessengine bench` runs the benchmark (see Testing).
+`cb2026 bench` runs the benchmark (see Testing).
 
 **Engine API.** `Engine::search(position, limits, options, on_info)` returns a best move (and a
 ponder move), and calls `on_info` with depth, score, PV, nodes, speed and other statistics while it
@@ -162,13 +163,33 @@ Each technique below is a separate function or clearly marked block, has its own
 
 | Feature | Priority | Notes |
 | --- | --- | --- |
-| Syzygy endgame tablebases | Must | WDL probes in search, DTZ at the root; `SyzygyPath`, `SyzygyProbeDepth`, `SyzygyProbeLimit`. Probing code is a dependency decision, see Open questions |
+| Syzygy endgame tablebases | Must | WDL probes in search, DTZ at the root; `SyzygyPath`, `SyzygyProbeDepth`, `SyzygyProbeLimit`. Probed through `shakmaty-syzygy`, see below |
 | Polyglot opening book | Must | Our own `.bin` reader; `OwnBook` and `BookFile` options; off by default so testing isn't affected |
 | MultiPV | Must | Up to 256 lines |
 | Strength limiting | Must | `UCI_LimitStrength`, `UCI_Elo`, `Skill Level` (see "Levels") |
 | Win/draw/loss output | Should | `UCI_ShowWDL`, from a model fitted to our self-play results |
 | Pondering | Must | `Ponder` option, `go ponder` / `ponderhit` |
 | Bench | Must | Fixed list of positions searched to a fixed depth; prints total nodes and speed. The node count is the search's fingerprint |
+
+### Tablebase probing
+
+Recommended 2026-10-10 (confirm in review). Syzygy files use a complex compressed format, so
+the probing code is a real choice:
+
+| Option | For | Against |
+| --- | --- | --- |
+| `shakmaty-syzygy` (pure Rust, GPL-3.0) | Builds with cargo on every platform; no C toolchain, no `unsafe` FFI; mature (used by Lichess's tablebase server); licence matches ours | Brings in the `shakmaty` chess library, and each probe converts our position to its type |
+| Fathom (C, MIT) through FFI | Used by many engines; takes bitboards directly; fast | C build on three platforms (MSVC is awkward), `unsafe` FFI, C code in a Rust teaching project |
+| Our own port | Best learning value | 2,000+ lines of tricky decompression code; a big bug risk for no strength gain |
+
+**Recommendation: `shakmaty-syzygy`**, as the one documented exception to the "no chess crates"
+rule. It sits behind a small `Tablebase` trait in `crates/engine` and a default-on cargo feature
+`syzygy`, so search code never sees `shakmaty` types and the prober can be replaced later.
+Probes only happen in positions with at most `SyzygyProbeLimit` pieces, where converting the
+position costs little next to reading the table. Tests check known results (won, drawn and
+lost positions) using the small 3- and 4-piece tables in CI and the 5-piece tables locally;
+the tables are downloaded by a script, never committed. The book chapter explains how tablebases
+are built and probed; writing our own prober is a possible post-1.0 chapter.
 
 ## Protocols and GUI compatibility
 
@@ -225,18 +246,26 @@ and which time controls to accept. lichess-bot is a separate project; we don't b
 
 A checklist in `docs/gui-compat.md`, re-run at each release, covering: load, options dialog,
 analysis with MultiPV, play a timed game, Chess960 game, pondering, and adding/removing the engine.
+GUI testing happens on Carlos's Apple Silicon Mac (decided 2026-10-10), so the matrix is
+Mac-first. **Open-source GUIs are the main targets**: they're free, they're what learners will
+use, and their source shows exactly how they drive an engine. Commercial GUIs come second.
+Status as of 2026-10-10 (details and sources in the Research log):
 
-| GUI / tool | Platform | License | Who checks |
-| --- | --- | --- | --- |
-| fastchess, cutechess-cli | Linux/macOS | Open source | Claude (scripted, every release) |
-| Cute Chess | macOS/Linux/Windows | Open source | Carlos |
-| En Croissant | macOS/Windows/Linux | Open source | Carlos |
-| Arena, Banksia | Windows (Banksia also macOS/Linux) | Free | Carlos |
-| XBoard | macOS/Linux | Open source | Carlos (CECP mode) |
-| ChessBase / Fritz | Windows | Commercial | Carlos (if available) |
-| Hiarcs Chess Explorer | macOS/Windows | Commercial | Carlos (if available) |
-| Shredder GUI | macOS/Windows | Commercial | Carlos (if available) |
-| lichess-bot | Linux/macOS | Open source | Claude sets it up; Carlos runs it |
+| GUI / tool | Platform | License | Role | Who checks |
+| --- | --- | --- | --- | --- |
+| fastchess, cutechess-cli | Linux/macOS | Open source (GPL-3.0 / MIT) | Automated matches, SPRT, gauntlets | Claude (scripted, every release) |
+| En Croissant | macOS (.dmg) | Open source (GPL-3.0) | **Primary GUI**: modern analysis and play, any UCI engine. Installed on the test Mac and ready (2026-10-10) | Carlos |
+| Cute Chess | macOS (Apple Silicon build exists) | Open source (GPL-3.0) | **Primary for engine-vs-engine** games and tournaments | Carlos |
+| Scid vs. PC / Scid | macOS | Open source (GPL-2.0) | Database and analysis; UCI and XBoard engines | Carlos |
+| XBoard | macOS (Homebrew) | Open source (GPL-3.0) | The reference CECP GUI | Carlos (CECP mode) |
+| Nibbler | macOS (community package) | Open source (GPL-3.0) | Analysis GUI built for Lc0, works with UCI engines | Optional |
+| ChessX | macOS (Intel build, runs under Rosetta 2) | Open source (GPL-2.0) | Database with engine analysis | Optional |
+| Banksia | macOS | Free, closed source | Tournament GUI | Optional |
+| HIARCS Chess Explorer (Pro) | macOS | Commercial | Commercial target | Carlos. Primary commercial target: the 2026 Mac release runs natively on Apple Silicon; external UCI engine support still to be confirmed (see Research log) |
+| ChessBase for Mac | macOS | Commercial | Commercial target | Carlos, once it ships (announced for November 2026). First check whether it accepts local UCI engines; the announcement only mentions Fritz, cloud and remote engines |
+| Shredder 13 | macOS | Commercial | Optional | Optional. Accepts UCI engines, but the last major release was 2016 |
+| ChessBase/Fritz, Arena | Windows | Commercial / free | Windows coverage | Only if a Windows PC or VM becomes available; until then UCI conformance tests stand in |
+| lichess-bot | Linux/macOS | Open source (AGPL-3.0) | Online play on Lichess | Claude sets it up; Carlos runs it |
 
 Claude can't operate GUIs, so it also maintains a **protocol conformance test**: a script that
 plays scripted UCI and XBoard sessions against the binary and checks every response, including
@@ -245,7 +274,7 @@ awkward GUI habits (options sent mid-search, `position` without `ucinewgame`, ve
 
 ## The interactive shell
 
-Started with `chessengine` in a terminal (or `chessengine --shell`). It's a line-based REPL
+Started with `cb2026` in a terminal (or `cb2026 --shell`). It's a line-based REPL
 with history, tab completion and colour. It works over SSH and in any terminal, falls back to ASCII
 when Unicode or colour isn't available, and respects `NO_COLOR`. `source <file>` runs a script of
 commands, which also makes the shell testable.
@@ -371,7 +400,7 @@ bitboard views from stage 2–3, `eval` and `explain` from stage 9 on.
 | Protocol conformance | Correct UCI/XBoard behaviour, including GUI quirks | CI |
 | Bench | Search didn't change by accident: same node count = same search | CI; recorded in every commit message |
 | Tactical suites (EPD) | Sanity check: e.g. most WAC positions solved in 1 s | Before tags |
-| SPRT self-play | Did this change gain Elo? | Claude's session (short), Carlos's Mac or a test box (long) |
+| SPRT self-play | Did this change gain Elo? | Claude's session (short), Carlos's Mac (long) |
 | Gauntlet vs reference engines | Where we are on the CCRL scale | Each milestone gate |
 
 **SPRT rules.** Every change that affects search or evaluation is tested with fastchess using a
@@ -387,7 +416,41 @@ SPRT result (Elo ± error, games played, LLR) or says "No functional change" wit
 **Rating.** At each gate, a gauntlet of several thousand games against 4–6 open-source engines
 whose CCRL Blitz ratings bracket our target (candidates: versions of Stash, Rustic, Blunder,
 Fruit 2.1, Ethereal and Berserk versions; final list chosen in M0), with Ordo to estimate our
-rating. These engines are downloaded by a script for testing only and are never included in the repo.
+rating. These engines are downloaded (or built from source for Apple Silicon) by a script for
+testing only and are never included in the repo.
+
+### Test machine
+
+Decided 2026-10-10: long tests run on Carlos's Apple Silicon Mac, short ones in Claude's cloud
+sessions.
+
+**The test machine:** Apple M1 Max, 10 cores (8 performance, 2 efficiency), 64 GB RAM. This gives:
+- **SPRTs and gauntlets:** 7 games at once, single-threaded engines, 16 MB hash each
+  (at most 14 engine processes, well within memory).
+- **Lazy SMP tests:** up to 8 threads on one engine against one opponent, run on their own, not
+  mixed with other tests.
+- **Tablebases:** the full 3-4-5-piece Syzygy set (about 1 GB) fits easily; the 6-piece set
+  (about 150 GB on disk) works only with an external drive and is not needed for v1.
+- **Speed baseline:** the ≥100 Mnps perft gate and all `bench` speed figures are measured on
+  this machine.
+
+- **`scripts/mac-sprt.sh <PR>`** (Claude writes it, Carlos runs it): builds the PR branch and
+  `main` in release mode, runs the fastchess SPRT, and posts the result to the PR as a
+  `<!-- sprt -->` comment through `gh`. Carlos only starts it and lets it run overnight;
+  `scripts/mac-gauntlet.sh` does the same for rating gauntlets.
+- **Performance cores only:** concurrency = performance cores − 1, so 7 on the M1 Max (`sysctl
+  hw.perflevel0.physicalcpu` reports 8). Efficiency cores run at a different speed and would skew results
+  at a fixed time control.
+- **Steady conditions:** `caffeinate -i` so the Mac doesn't sleep, on mains power, other heavy
+  apps closed. A laptop may throttle under hours of full load; a Mac mini or Studio is steadier.
+- **Throughput:** at 8+0.08 a game takes about 20 s, so 7 games at once give roughly 1,200
+  games an hour. Early stages gain tens of Elo and their SPRTs finish in minutes, so they run
+  in cloud sessions (4 cores, 3 games at once). Late-stage +3–5 Elo changes need 10,000–40,000
+  games: one or more nights on the Mac.
+- **If the queue backs up** (likely during M5 strength work): set up OpenBench, the open-source
+  distributed testing framework, with the Mac as one worker plus a rented multi-core Linux server.
+- x86-64 builds are tested for correctness in CI and for speed in cloud sessions; strength is
+  measured on the Mac.
 
 **Robustness requirements**
 - Zero illegal moves and zero crashes over 10,000+ games of testing per milestone.
@@ -409,7 +472,7 @@ and short SPRT matches itself. What Claude can't do is look at GUIs or run long 
 | Write code, tests, book chapters | Yes | Reviews PRs |
 | `cargo test`, clippy, fmt, perft, bench, fuzzing | Yes | Optional |
 | Short SPRT (a few thousand STC games on 4 cores) | Yes | |
-| Long SPRT, LTC, gauntlets | Prepares the scripts | Runs them on the Mac or a test box, pastes results |
+| Long SPRT, LTC, gauntlets | Writes `scripts/mac-sprt.sh` and `mac-gauntlet.sh`, reads the posted results | Starts them on the Mac; results post to the PR |
 | GUI compatibility checks | Protocol conformance tests | Checks real GUIs, especially commercial ones |
 | Playing and judging the shell UX | No | Yes |
 
@@ -424,7 +487,8 @@ release tags. Releases build binaries for every platform in the table above.
 ## License and IP
 
 - **License: GPL-3.0 (decided 2026-10-10).** This is the most common licence for open chess
-  engines. The repo starts private and is published later (date open).
+  engines. The repo starts private and goes public around October 2027 (decided 2026-10-10);
+  the book is published on GitHub Pages at the same time.
 - GPL-3.0 lets us study and adapt code from GPL engines (Stockfish, Ethereal, Berserk and others).
   The learning goal means we write our own code anyway; when an idea or code comes from a specific
   engine, the comment names the source and its licence. No code from engines with incompatible or
@@ -432,20 +496,21 @@ release tags. Releases build binaries for every platform in the table above.
 - **Dependencies:** chess logic (board, move generation, search, evaluation, book reader) is
   written from scratch, with no chess crates. Tooling crates are fine (line editing, terminal
   colour, argument parsing, property testing, benchmarks) if their licence is GPL-3.0-compatible.
-  `cargo deny` checks licences in CI. Syzygy probing is the one possible exception (see Open questions).
+  `cargo deny` checks licences in CI. The one exception is `shakmaty-syzygy` for tablebase
+  probing, kept behind an adapter (see "Tablebase probing").
 - **Data and nets:** tuning data and any NNUE nets are generated from our own engine's self-play,
   so we own them outright. No Stockfish or Leela nets or training data.
 - Test books, EPD suites and reference engines are downloaded by scripts, with their source and
   licence noted, and are not committed unless their licence allows it.
-- The engine needs a name that doesn't clash with existing engines (the CCRL and CPW engine lists)
-  or trademarks.
+- Name: a web search on 2026-10-10 found no chess engine called cb2026. Check the CCRL and CPW
+  engine lists and trademarks again before the repo goes public.
 
 ## Milestones
 
 | Milestone | Scope | Gate |
 | --- | --- | --- |
-| M0 · Foundations | Workspace, CI, licence checks, board, FEN, move generation, magics, perft (stages 1–3) | All perft suites exact; ≥100 Mnps perft on M1 |
-| M1 · Playable | Zobrist, UCI, alpha-beta, iterative deepening, time management, quiescence; shell basics: board display, play a full game, thinking display, `perft`, `bb` (stages 4–7) | Plays complete games in Cute Chess and the shell with no illegal moves or time losses |
+| M0 · Foundations | Workspace, CI, licence checks, board, FEN, move generation, magics, perft (stages 1–3) | All perft suites exact; ≥100 Mnps perft on the M1 Max |
+| M1 · Playable | Zobrist, UCI, alpha-beta, iterative deepening, time management, quiescence; shell basics: board display, play a full game, thinking display, `perft`, `bb` (stages 4–7) | Plays complete games in En Croissant and the shell with no illegal moves or time losses |
 | M2 · Classical search | TT, move ordering, PVS, null move, LMR, pruning (stages 8–14) | ~2200 CCRL by gauntlet; every technique has an SPRT result in the ledger |
 | M3 · Evaluation | Full HCE, eval trace, Texel tuner, self-play data generation, `eval`/`explain`/`tree`/`stats` (stages 15–16) | ≥2400 CCRL by gauntlet |
 | M4 · Complete engine | Lazy SMP, Syzygy, Polyglot, Chess960, MultiPV, pondering, levels, XBoard, Lichess bot (stages 17–20) | GUI compatibility matrix passes; levels calibrated |
@@ -456,14 +521,76 @@ release tags. Releases build binaries for every platform in the table above.
 
 | Risk | Impact | Mitigation |
 | --- | --- | --- |
-| Not enough test compute for SPRT | Changes are guessed, not measured; strength stalls | Short tests in cloud sessions; long tests on the Mac overnight; an OpenBench instance if needed |
+| Not enough test compute for SPRT | Changes are guessed, not measured; strength stalls | Short tests in cloud sessions; long tests on the Mac overnight; OpenBench with a rented Linux worker if the queue backs up |
 | Subtle move generation or hashing bugs | Wrong moves, crashes, weird draws | Perft suites, property tests, fuzzing, hash checks in debug builds |
 | Time losses in particular GUIs | Bad experience, rating list exclusion | `Move Overhead`, conformance tests, very short time controls in tests, GUI matrix |
 | Book and code drift apart | Learners get confused | Code included into the book from source with anchors; book built in CI; chapter per tag |
 | Readability vs speed | Either a slow engine or unreadable code | Clarity by default; optimise only measured hot spots, with comments explaining them |
 | Strength limiting feels unnatural | Players don't enjoy low levels | MultiPV-based move choice; calibration; Carlos playtests the levels |
-| Syzygy probing is a lot of work | Tablebases slip | Decide between a crate and our own port early (Open questions) |
+| Tablebase crate changes or is abandoned | Tablebase support breaks | Behind a `Tablebase` trait and a cargo feature; Fathom or our own port can replace it |
 | CI minutes on a private repo | CI throttled or costly | Linux on PRs; macOS/Windows nightly and on tags |
+| Only a Mac for GUI testing | Windows GUIs (ChessBase/Fritz, Arena) untested | Strict UCI conformance tests; a Windows VM or PC check before going public |
+
+## Research log
+
+Findings behind the decisions above, with their sources, so they can be rechecked later. Add a
+dated entry whenever a decision rests on outside facts.
+
+**2026-10-10: Commercial chess GUIs on macOS**
+
+| Product | Finding | Confidence | To confirm |
+| --- | --- | --- | --- |
+| HIARCS Chess Explorer (Pro) | 2026 Mac release; macOS 10.14 or later including macOS 26; native on Intel and Apple Silicon (vendor page). A third-party listing says it supports external UCI engines | Vendor claim for the platform; UCI support from a third party | External UCI engine support in the current version (ask HIARCS or try the demo) |
+| ChessBase for Mac | Native Mac version announced, built from the ground up, release November 2026. The announcement lists Fritz, Stockfish from the Engine Cloud and remote engines | From search summaries; fetching the article failed | Whether it can load a local UCI engine, once it ships |
+| Shredder 13 | Last major release October 2016, Mac and Linux builds November 2016. Users report its GUI accepts any Mac UCI engine | Old and anecdotal; no native Apple Silicon build confirmed | Whether it still runs on current macOS (likely through Rosetta 2) |
+| ChessBase/Fritz on Windows | Not native on Mac before the new version; workarounds were Boot Camp, a VM or Wine/CrossOver | Forum reports | Only if a Windows PC or VM is available |
+
+Sources:
+[HIARCS Mac chess software](https://www.hiarcs.com/mac-chess-software.html),
+[HIARCS Chess Explorer Pro](https://www.hiarcs.com/chess-explorer-pro.html),
+[ChessBase: "ChessBase finally on Mac"](https://en.chessbase.com/post/chessbase-finally-on-mac),
+[Chess.com forum: Chess engines for Mac](https://chess.com/forum/view/chess-equipment/chess-engines-for-mac),
+[Chessprogramming wiki: Shredder](https://www.chessprogramming.org/Shredder).
+
+**2026-10-10: Open-source chess GUIs on macOS**
+
+| Product | Finding | To confirm |
+| --- | --- | --- |
+| En Croissant | Free, GPL-3.0, built with Tauri; macOS .dmg from encroissant.org, macOS 10.13 or later; supports any UCI engine, added from a local file | Installed on Carlos's M1 Max (2026-10-10). Native Apple Silicon build still to check (Finder → Get Info → Kind) |
+| Cute Chess | GPL-3.0; a third-party site provides a build for Apple Silicon and Intel; widely recommended for engine matches | Official vs third-party Mac build |
+| Scid | A forum user reports it runs well on Apple Silicon | Which variant (Scid vs. PC or Scid) and its current Mac build |
+| Nibbler | No official Mac build; the community project Nibbler-for-macOS packages it with Electron and Lc0 | Using it with a non-Lc0 UCI engine |
+| ChessX | Open source; a compatibility tracker lists v1.6.10 as Intel-only | Whether it runs well under Rosetta 2 |
+| Banksia | Free but closed source | — |
+
+Sources:
+[En Croissant: getting started](https://encroissant.org/docs/getting-started),
+[En Croissant FAQ](https://www.mintlify.com/franciscoBSalgueiro/en-croissant/resources/faq),
+[En Croissant engines](https://www.mintlify.com/franciscoBSalgueiro/en-croissant/features/engines),
+[LinuxLinks: En Croissant review](https://www.linuxlinks.com/en-croissant-gui-chess-toolkit/),
+[Chessengeria: Cute Chess for Mac](https://chessengeria.eu/post/cute-chess-for-mac),
+[TalkChess: Chess GUI options for Apple Silicon](https://talkchess.com/viewtopic.php?p=968258),
+[Nibbler for macOS](https://github.com/twoplan/Nibbler-for-macOS),
+[Rosetta check: ChessX](https://rosettacheck.com/apps/a5naysyf),
+[Chessprogramming wiki: Mac OS](https://www.chessprogramming.org/Mac_OS).
+
+**2026-10-10: Tablebase probing crate**
+
+`shakmaty-syzygy` on crates.io: version 0.28.1, last updated 2026-06-19, licence
+GPL-3.0-or-later (compatible with our GPL-3.0). Source:
+[crates.io/crates/shakmaty-syzygy](https://crates.io/crates/shakmaty-syzygy).
+Recheck the version and maintenance status when stage 18 starts.
+
+**2026-10-10: Engine name**
+
+A web search for "cb2026" chess engine found no existing engine with that name. Recheck the CCRL
+and Chessprogramming wiki engine lists and trademarks before the repo goes public.
+
+**2026-10-10: Test throughput (estimate, not measured)**
+
+At 8+0.08 a game takes about 20 s, so the M1 Max running 7 games at once (8 performance cores − 1)
+plays about 1,200 games an hour; the 4-core cloud session (3 games at once) about 540. Replace
+these with measured figures from the first real SPRT runs.
 
 ## Decisions
 
@@ -475,14 +602,21 @@ release tags. Releases build binaries for every platform in the table above.
 - [x] Shell: rich line-based REPL; no full-screen TUI in v1 (2026-10-10).
 - [x] Learning features: book, milestone tags, explain commands, technique switches (2026-10-10).
 - [x] PRD lives in `docs/PRD.md` in the repo (2026-10-10).
+- [x] Name: **cb2026** (ChessBrain 2026); the repo stays `cjus/chessengine` (2026-10-10).
+- [x] Tablebases: `shakmaty-syzygy` behind a `Tablebase` trait (recommended 2026-10-10; confirm in review).
+- [x] Test machine: Carlos's Apple M1 Max (8 performance + 2 efficiency cores, 64 GB) for long
+      SPRTs and gauntlets at 7 games at once, via scripts that post results to the PR; cloud
+      sessions for short tests; OpenBench later if needed (2026-10-10).
+- [x] GUI testing is Mac-first and open-source-first: En Croissant and Cute Chess as the primary
+      GUIs, plus Scid and XBoard; HIARCS Chess Explorer as the commercial target, ChessBase for
+      Mac once it ships, Shredder 13 optional (2026-10-10).
+- [x] En Croissant is installed on the test Mac and is the first GUI cb2026 is checked in, from
+      M1 on (2026-10-10).
+- [x] Repo goes public around October 2027, with the book on GitHub Pages (2026-10-10).
 
 ## Open questions
 
-- [ ] Engine name (check the CCRL and CPW engine lists and trademarks).
-- [ ] Syzygy probing: use the pure-Rust `shakmaty-syzygy` crate (GPL-3.0, compatible) behind an
-      adapter, wrap Fathom (C, MIT) via FFI, or write our own port as a book chapter?
-- [ ] Long-test machine: Carlos's Mac overnight, a dedicated Linux box, or a cloud OpenBench instance?
-- [ ] Which commercial GUIs Carlos has (ChessBase/Fritz, Hiarcs, Shredder) for the compatibility matrix.
-- [ ] When to make the repo public, and whether to publish the book on GitHub Pages then.
+- [ ] Which commercial Mac GUIs Carlos owns or will buy (HIARCS Chess Explorer, ChessBase for Mac).
+- [ ] Is a Windows PC or VM available for ChessBase/Fritz and Arena checks before going public?
 - [ ] Is a full-screen TUI wanted after v1?
 - [ ] Should the shell `match` command (mini tournament manager) be in v1 or later?
