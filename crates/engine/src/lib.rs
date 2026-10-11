@@ -36,6 +36,7 @@
 //!   iterative deepening in [`Engine::search`] (stage 6), with a quiescence search at the
 //!   horizon (stage 7).
 //! - [`ordering`]: move ordering by MVV-LVA (stage 7).
+//! - [`tt`]: the transposition table (stage 8).
 //! - [`time`]: time management: soft and hard limits per move (stage 6).
 //! - [`bench`](mod@bench): the fixed benchmark behind `cb2026 bench` and every commit's `Bench:` line.
 //!
@@ -63,6 +64,7 @@ pub mod eval;
 pub mod ordering;
 pub mod search;
 pub mod time;
+pub mod tt;
 
 use std::fmt;
 use std::sync::atomic::AtomicBool;
@@ -73,6 +75,7 @@ use cb2026_chess::{Move, Position};
 use eval::EvalParams;
 use search::{DEFAULT_DEPTH, INFINITY, MATE, MAX_PLY, RootResult, Searcher, Techniques, to_score};
 use time::TimeParams;
+use tt::TranspositionTable;
 
 /// The engine's name, as reported to GUIs (`id name` in UCI, `myname` in XBoard).
 pub const NAME: &str = "cb2026";
@@ -159,6 +162,8 @@ pub struct SearchInfo {
     pub time: Duration,
     /// The principal variation: the best line found, starting with the best move.
     pub pv: Vec<Move>,
+    /// How full the transposition table is, in permille.
+    pub hashfull: u32,
 }
 
 /// The outcome of a search.
@@ -179,6 +184,8 @@ pub struct Engine {
     pub techniques: Techniques,
     /// The time manager's settings.
     pub time: TimeParams,
+    /// The transposition table, kept from one search to the next.
+    pub tt: TranspositionTable,
 }
 
 impl Engine {
@@ -188,7 +195,14 @@ impl Engine {
     }
 
     /// Forgets everything learned in the previous game.
-    pub fn new_game(&mut self) {}
+    pub fn new_game(&mut self) {
+        self.tt.clear();
+    }
+
+    /// Replaces the transposition table with an empty one of about `megabytes` MB.
+    pub fn set_hash_size(&mut self, megabytes: usize) {
+        self.tt = TranspositionTable::new(megabytes);
+    }
 
     // ANCHOR: search
     /// Chooses a move in `position`.
@@ -221,6 +235,14 @@ impl Engine {
         if self.techniques.mvv_lva {
             ordering::order_moves(position, &mut root_moves);
         }
+        // The previous search often left a best move for this position.
+        self.tt.new_search();
+        if self.techniques.tt
+            && let Some(mv) = self.tt.probe(position.hash()).and_then(|e| e.best_move)
+            && let Some(at) = root_moves.iter().position(|&m| m == mv)
+        {
+            root_moves[..=at].rotate_right(1);
+        }
 
         let budget = time::budget(limits, position.side_to_move(), &self.time);
         let unlimited = limits.depth.is_none()
@@ -239,6 +261,7 @@ impl Engine {
 
         let mut searcher = Searcher::new(
             &self.params,
+            &mut self.tt,
             self.techniques,
             stop,
             limits,
@@ -260,6 +283,7 @@ impl Engine {
                     nodes: result.nodes,
                     time: start.elapsed(),
                     pv: result.pv.clone(),
+                    hashfull: searcher.hashfull(),
                 });
             }
             if !result.complete {
@@ -303,6 +327,66 @@ mod tests {
             reports.push(info.clone())
         });
         (result, reports)
+    }
+
+    /// Searches with `engine`, returning the last report.
+    fn search_with(engine: &mut Engine, fen: &str, depth: u32) -> SearchInfo {
+        let stop = AtomicBool::new(false);
+        let mut last = None;
+        engine.search(
+            &Position::from_fen(fen).unwrap(),
+            &[],
+            &Limits::depth(depth),
+            &stop,
+            &mut |info| last = Some(info.clone()),
+        );
+        last.unwrap()
+    }
+
+    const KIWIPETE: &str = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
+
+    #[test]
+    fn transposition_table_saves_nodes_without_changing_the_result() {
+        let with = search_with(&mut Engine::new(), KIWIPETE, 4);
+        let mut engine = Engine::new();
+        engine.techniques.tt = false;
+        let without = search_with(&mut engine, KIWIPETE, 4);
+        assert_eq!(with.score, without.score);
+        assert_eq!(with.pv.first(), without.pv.first());
+        assert!(
+            with.nodes < without.nodes,
+            "{} vs {}",
+            with.nodes,
+            without.nodes
+        );
+        assert!(with.hashfull > 0);
+        assert_eq!(without.hashfull, 0);
+    }
+
+    #[test]
+    fn the_table_is_kept_between_searches_and_cleared_by_new_game() {
+        let mut engine = Engine::new();
+        let first = search_with(&mut engine, KIWIPETE, 4);
+        let again = search_with(&mut engine, KIWIPETE, 4);
+        assert_eq!(again.score, first.score);
+        assert!(
+            again.nodes < first.nodes / 2,
+            "{} vs {}",
+            again.nodes,
+            first.nodes
+        );
+        engine.new_game();
+        assert_eq!(search_with(&mut engine, KIWIPETE, 4).nodes, first.nodes);
+    }
+
+    #[test]
+    fn mate_scores_survive_the_table() {
+        // Doubled rooks on the back rank: mate in 2, searched again from the same table.
+        let fen = "2r3k1/5ppp/8/8/8/8/3R1PPP/3R2K1 w - - 0 1";
+        let mut engine = Engine::new();
+        for _ in 0..2 {
+            assert_eq!(search_with(&mut engine, fen, 6).score, Score::Mate(2));
+        }
     }
 
     #[test]
