@@ -123,7 +123,7 @@ tree to be a useful fingerprint.
 
 | Test | Result |
 | --- | --- |
-| Stage 14 vs stage 13, 8+0.08, SPRT [0, 5] | SPRT_RESULT |
+| Stage 14 vs stage 13, 8+0.08, SPRT [0, 5] | +174 −55 =99 over 328 games: passed (about +132 ± 33 Elo) |
 
 ## Further reading
 
