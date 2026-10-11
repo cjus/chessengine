@@ -127,6 +127,7 @@ Commands:
                        delta pruning
   set seeorder on|off  Search captures that lose material (by SEE) after quiet moves
   set pst on|off       Piece-square tables (off: material only)
+  set eval hand|tuned  Hand-set evaluation values (default) or stage 16's tuned ones
   set tapered on|off   Blend middlegame and endgame values by phase (off: middlegame only)
   set mobility|pawns|pieces|kingsafety|tempo on|off
                        Evaluation term groups: mobility, pawn structure and passed pawns,
@@ -701,6 +702,22 @@ impl Shell {
             (Some("mvvlva"), value) if on_off(value).is_some() => {
                 self.engine.techniques.mvv_lva = on_off(value).unwrap_or(true);
             }
+            (Some("eval"), Some(which @ ("hand" | "tuned"))) => {
+                let values = if which == "tuned" {
+                    eval::EvalParams::tuned()
+                } else {
+                    eval::EvalParams::hand_set()
+                };
+                self.engine.params.copy_values(&values);
+                return Response::text(format!(
+                    "Evaluation values: {}",
+                    if which == "tuned" {
+                        "tuned (stage 16's Texel tuning)"
+                    } else {
+                        "hand-set (the default)"
+                    }
+                ));
+            }
             (Some("pst"), value) if on_off(value).is_some() => {
                 self.engine.params.use_pst = on_off(value).unwrap_or(true);
             }
@@ -873,7 +890,7 @@ fn parse_move(pos: &Position, text: &str) -> Option<Move> {
 }
 
 /// Usage for the `set` command.
-const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set alphabeta|quiescence|mvvlva|tt|killers|countermoves|history|pvs|aspiration|nullmove|lmr|lmp|rfp|razoring|futility|seeprune|delta|seeorder|pst|tapered|mobility|pawns|pieces|kingsafety|tempo on|off";
+const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set eval hand|tuned | set alphabeta|quiescence|mvvlva|tt|killers|countermoves|history|pvs|aspiration|nullmove|lmr|lmp|rfp|razoring|futility|seeprune|delta|seeorder|pst|tapered|mobility|pawns|pieces|kingsafety|tempo on|off";
 
 /// How long the engine thinks per move by default in the shell.
 const DEFAULT_MOVETIME_MS: u64 = 1000;
@@ -1125,6 +1142,16 @@ mod tests {
         assert!(out.contains("#1"), "the score is mate in one: {out}");
         assert!(out.contains("depth  1"), "the thinking is shown: {out}");
         assert!(out.contains("Checkmate: White wins."));
+    }
+
+    #[test]
+    fn eval_values_can_be_switched() {
+        let mut shell = ascii_shell();
+        let hand = shell.execute("eval").output;
+        assert!(shell.execute("set eval tuned").output.contains("tuned"));
+        assert_ne!(shell.execute("eval").output, hand);
+        shell.execute("set eval hand");
+        assert_eq!(shell.execute("eval").output, hand);
     }
 
     #[test]

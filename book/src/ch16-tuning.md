@@ -104,9 +104,10 @@ cargo run --release -p cb2026-tools --bin tune -- --data data-all.txt --from han
     --epochs 1500 --lambda 3e-9 --min-count 500
 ```
 
-`tune` writes `crates/engine/src/tuned.rs`, a generated table of all 411 values, which
-`EvalParams::default()` uses. The hand-written values stay available as
-`EvalParams::hand_set()`, for comparison. The data file isn't committed (it's large, and
+`tune` writes `crates/engine/src/tuned.rs`, a generated table of all 411 values, available
+as `EvalParams::tuned()` (and in the shell with `set eval tuned`). The engine's default is
+still the hand-written set, `EvalParams::hand_set()`: the tuned values didn't measure stronger
+(see "What it's worth" below). The data file isn't committed (it's large, and
 anyone can regenerate it).
 
 ## What happened: overfitting, then regularisation
@@ -187,7 +188,23 @@ scarce. The values in `tuned.rs` come from the λ = 3 × 10⁻⁹ run.
 
 | Test | Result |
 | --- | --- |
-| Stage 16 vs stage 15, 8+0.08, SPRT [0, 5] | SPRT_RESULT |
+| Tuned vs hand-set values, 8+0.08, SPRT [0, 5], cloud | +310 −313 =187 over 810 games, −1.3 ± 21.0 Elo: no verdict (LLR −0.17) when the run hit the session's two-hour limit |
+
+No measurable gain. The 95% interval runs from about −22 to +20 Elo, so the tuned values might
+be a little better or a little worse, but they aren't the clear win the lower error promised.
+That is the "error isn't Elo" pitfall above, met for real. Likely causes:
+
+- **Too little data.** About 1.5 million positions from 24,000 short games is small for 411
+  parameters; strong engines tune on hundreds of millions.
+- **Strong regularisation.** The settings that stopped the overfitting also kept most values
+  close to the hand-set ones, so the evaluation barely changed.
+- **The hand-set values were reasonable.** Tuning helps most when the starting point is poor.
+
+So the engine keeps the hand-set values, and this stage contributes the tools: self-play data
+generation, the tuner, and a tuned set anyone can try (`set eval tuned`, or an SPRT of their
+own). A later round, with more data from the stronger engine of later stages, can try again.
+With the hand-set values as default the stage changes nothing in play: the bench is the same
+as stage 15's.
 
 ## Further reading
 

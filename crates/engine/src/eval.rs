@@ -79,17 +79,30 @@ pub struct EvalParams {
 // ANCHOR_END: params
 
 impl Default for EvalParams {
-    /// The tuned values (stage 16, see [`crate::tuned`]).
+    /// The hand-set values. The tuned ones ([`EvalParams::tuned`]) didn't measure stronger
+    /// (see book chapter 16), so they aren't the default.
     fn default() -> EvalParams {
+        EvalParams::hand_set()
+    }
+}
+
+impl EvalParams {
+    /// Copies every tunable value from `other`, keeping this one's switches.
+    pub fn copy_values(&mut self, other: &EvalParams) {
+        for param in Param::all() {
+            self.set_value(param, other.value(param));
+        }
+    }
+
+    /// The values found by Texel tuning (stage 16, see [`crate::tuned`]).
+    pub fn tuned() -> EvalParams {
         let mut params = EvalParams::hand_set();
         for param in Param::all() {
             params.set_value(param, crate::tuned::TUNED[param.index()]);
         }
         params
     }
-}
 
-impl EvalParams {
     /// The hand-written starting values from stages 9 and 15, before tuning.
     pub fn hand_set() -> EvalParams {
         EvalParams {
@@ -517,6 +530,22 @@ const KING_EG: Pst = [
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn hand_set_values_are_the_default_and_tuned_ones_are_available() {
+        assert_eq!(EvalParams::default(), EvalParams::hand_set());
+        let tuned = EvalParams::tuned();
+        assert_ne!(tuned, EvalParams::hand_set());
+        // Copying values keeps the switches.
+        let mut params = EvalParams::hand_set();
+        params.use_pst = false;
+        params.copy_values(&tuned);
+        assert!(!params.use_pst);
+        for param in Param::all() {
+            assert_eq!(params.value(param), tuned.value(param));
+        }
+    }
+
     use super::*;
 
     fn eval(fen: &str) -> i32 {
