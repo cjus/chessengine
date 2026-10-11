@@ -13,7 +13,7 @@
 # Part II: Searching
 
 - [Material, negamax and alpha-beta](ch05-alphabeta.md)
-- [Iterative deepening and time management]()
+- [Iterative deepening and time management](ch06-iterative.md)
 - [Quiescence search]()
 - [The transposition table]()
 - [Piece-square tables and tapered evaluation]()

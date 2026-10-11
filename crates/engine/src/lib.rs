@@ -32,8 +32,9 @@
 //! ## What's here now
 //!
 //! - [`eval`]: material evaluation (stage 5).
-//! - [`search`]: negamax with alpha-beta to a fixed depth, mate scores and draw detection
-//!   (stage 5).
+//! - [`search`]: negamax with alpha-beta, mate scores and draw detection (stage 5), driven by
+//!   iterative deepening in [`Engine::search`] (stage 6).
+//! - [`time`]: time management: soft and hard limits per move (stage 6).
 //! - [`bench`](mod@bench): the fixed benchmark behind `cb2026 bench` and every commit's `Bench:` line.
 //!
 //! ## What will live here
@@ -58,6 +59,7 @@
 pub mod bench;
 pub mod eval;
 pub mod search;
+pub mod time;
 
 use std::fmt;
 use std::sync::atomic::AtomicBool;
@@ -66,7 +68,8 @@ use std::time::{Duration, Instant};
 use cb2026_chess::{Move, Position};
 
 use eval::EvalParams;
-use search::{DEFAULT_DEPTH, MAX_PLY, Searcher, Techniques, to_score};
+use search::{DEFAULT_DEPTH, INFINITY, MATE, MAX_PLY, RootResult, Searcher, Techniques, to_score};
+use time::TimeParams;
 
 /// The engine's name, as reported to GUIs (`id name` in UCI, `myname` in XBoard).
 pub const NAME: &str = "cb2026";
@@ -171,6 +174,8 @@ pub struct Engine {
     pub params: EvalParams,
     /// Which search techniques are switched on.
     pub techniques: Techniques,
+    /// The time manager's settings.
+    pub time: TimeParams,
 }
 
 impl Engine {
@@ -186,7 +191,12 @@ impl Engine {
     /// Chooses a move in `position`.
     ///
     /// `history` holds the hash keys of the earlier positions in the game. `stop` may be set by
-    /// another thread to end the search early. `on_info` is called with progress reports.
+    /// another thread to end the search early. `on_info` is called after each completed depth,
+    /// and once more for a depth cut short if it found a move worth playing.
+    ///
+    /// The search uses **iterative deepening**: it searches to depth 1, then 2, then 3, and so
+    /// on, until a limit says stop. Each depth starts with the best move of the one before,
+    /// and when time runs out mid-depth the engine still has a complete answer to fall back on.
     pub fn search(
         &mut self,
         position: &Position,
@@ -196,7 +206,7 @@ impl Engine {
         on_info: &mut dyn FnMut(&SearchInfo),
     ) -> SearchResult {
         let start = Instant::now();
-        let root_moves: Vec<Move> = position
+        let mut root_moves: Vec<Move> = position
             .legal_moves()
             .iter()
             .copied()
@@ -205,28 +215,72 @@ impl Engine {
         if root_moves.is_empty() {
             return SearchResult::default();
         }
-        let depth = limits.depth.unwrap_or(DEFAULT_DEPTH).clamp(1, MAX_PLY);
+
+        let budget = time::budget(limits, position.side_to_move(), &self.time);
+        let unlimited = limits.depth.is_none()
+            && limits.nodes.is_none()
+            && limits.mate.is_none()
+            && budget.hard.is_none()
+            && !limits.infinite;
+        let mut max_depth = limits
+            .depth
+            .unwrap_or(if unlimited { DEFAULT_DEPTH } else { MAX_PLY });
+        if let Some(moves) = limits.mate {
+            // A mate in N moves is 2N - 1 plies away.
+            max_depth = max_depth.min(2 * moves);
+        }
+        let max_depth = max_depth.clamp(1, MAX_PLY);
+
         let mut searcher = Searcher::new(
             &self.params,
             self.techniques,
             stop,
             limits,
-            position,
             history,
-            start,
+            budget.hard.map(|hard| start + hard),
         );
-        let result = searcher.search_root(position, &root_moves, depth);
-        on_info(&SearchInfo {
-            depth: result.depth,
-            seldepth: result.seldepth,
-            score: to_score(result.score),
-            nodes: result.nodes,
-            time: start.elapsed(),
-            pv: result.pv.clone(),
-        });
+        let mut best: Option<RootResult> = None;
+        for depth in 1..=max_depth {
+            let result = searcher.search_root(position, &root_moves, depth);
+            // A stopped iteration still counts if it finished at least one move: the first
+            // move searched is the previous best, so its result is at least as well-founded.
+            let usable = result.complete || result.score > -INFINITY;
+            if usable {
+                best = Some(result.clone());
+                on_info(&SearchInfo {
+                    depth,
+                    seldepth: result.seldepth,
+                    score: to_score(result.score),
+                    nodes: result.nodes,
+                    time: start.elapsed(),
+                    pv: result.pv.clone(),
+                });
+            }
+            if !result.complete {
+                break;
+            }
+            // Next depth: try this depth's best move first.
+            if let Some(best_move) = result.best_move {
+                root_moves.retain(|&mv| mv != best_move);
+                root_moves.insert(0, best_move);
+            }
+            // A mate found at this depth can't be beaten by searching deeper.
+            if result.score.abs() >= MATE - depth as i32 {
+                break;
+            }
+            // Starting another depth now would probably not finish in time.
+            if budget.soft.is_some_and(|soft| start.elapsed() >= soft) {
+                break;
+            }
+            if searcher.aborted() {
+                break;
+            }
+        }
+
+        let best = best.unwrap_or_default();
         SearchResult {
-            best_move: result.best_move,
-            ponder_move: result.pv.get(1).copied(),
+            best_move: best.best_move.or(root_moves.first().copied()),
+            ponder_move: best.pv.get(1).copied(),
         }
     }
     // ANCHOR_END: search
@@ -256,8 +310,8 @@ mod tests {
         let (result, reports) = search(&pos, &Limits::depth(2));
         let mv = result.best_move.expect("a move");
         assert!(pos.legal_moves().contains(&mv));
-        assert_eq!(reports.len(), 1);
-        assert_eq!(reports[0].pv.first(), Some(&mv));
+        assert_eq!(reports.len(), 2, "one report per depth");
+        assert_eq!(reports[1].pv.first(), Some(&mv));
     }
 
     #[test]
@@ -281,6 +335,54 @@ mod tests {
         let (result, reports) = search(&Position::startpos(), &limits);
         assert!(result.best_move.is_some(), "a move even when stopped early");
         assert!(reports[0].nodes < 2000 + 1024 + 64);
+    }
+
+    #[test]
+    fn iterative_deepening_reports_every_depth() {
+        let (_, reports) = search(&Position::startpos(), &Limits::depth(4));
+        let depths: Vec<u32> = reports.iter().map(|r| r.depth).collect();
+        assert_eq!(depths, vec![1, 2, 3, 4]);
+        assert!(reports.windows(2).all(|w| w[0].nodes <= w[1].nodes));
+    }
+
+    #[test]
+    fn respects_movetime() {
+        let limits = Limits {
+            movetime: Some(Duration::from_millis(200)),
+            ..Limits::default()
+        };
+        let start = Instant::now();
+        let (result, reports) = search(&Position::startpos(), &limits);
+        assert!(
+            start.elapsed() < Duration::from_millis(400),
+            "{:?}",
+            start.elapsed()
+        );
+        // The last report, even for a depth cut short, describes the move played.
+        assert_eq!(
+            reports.last().unwrap().pv.first(),
+            result.best_move.as_ref()
+        );
+    }
+
+    #[test]
+    fn stops_when_it_finds_a_mate() {
+        // Mate in one: there's no need to search to depth 30.
+        let pos = Position::from_fen("6k1/5ppp/8/8/8/8/8/4R1K1 w - - 0 1").unwrap();
+        let (result, reports) = search(&pos, &Limits::depth(30));
+        assert_eq!(result.best_move.unwrap().to_string(), "e1e8");
+        assert!(reports.last().unwrap().depth <= 2);
+        assert_eq!(reports.last().unwrap().score, Score::Mate(1));
+    }
+
+    #[test]
+    fn go_mate_limits_the_depth() {
+        let limits = Limits {
+            mate: Some(1),
+            ..Limits::default()
+        };
+        let (_, reports) = search(&Position::startpos(), &limits);
+        assert_eq!(reports.last().unwrap().depth, 2);
     }
 
     #[test]
