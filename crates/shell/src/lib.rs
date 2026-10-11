@@ -41,6 +41,7 @@
 //! | `set rfp\|razoring\|futility\|seeprune\|delta\|seeorder on\|off` | Stage 14's pruning and SEE ordering |
 //! | `eval` | The static evaluation, term by term |
 //! | `set pst on\|off`, `set tapered on\|off` | Switch the piece-square tables or the middlegame/endgame blend off |
+//! | `set mobility\|pawns\|pieces\|kingsafety\|tempo on\|off` | Switch a group of evaluation terms off |
 //! | `bench` | The fixed benchmark |
 //! | `bb <set>` | Show a bitboard: `occupied`, `empty`, `white`, `black`, `checkers`, `pinned`, or a piece letter (`P`, `n`, ...) |
 //! | `help` | List commands |
@@ -127,6 +128,9 @@ Commands:
   set seeorder on|off  Search captures that lose material (by SEE) after quiet moves
   set pst on|off       Piece-square tables (off: material only)
   set tapered on|off   Blend middlegame and endgame values by phase (off: middlegame only)
+  set mobility|pawns|pieces|kingsafety|tempo on|off
+                       Evaluation term groups: mobility, pawn structure and passed pawns,
+                       bishop pair and rook files, king safety, tempo
   eval                 The static evaluation of the position, term by term
   bench                The fixed benchmark: total nodes and speed
   bb <set>             Show a bitboard: occupied, empty, white, black, checkers,
@@ -576,21 +580,37 @@ impl Shell {
     }
 
     /// Lists every part of the position's Zobrist key, then their XOR.
-    /// `eval`: the static evaluation, term by term.
+    /// `eval`: the static evaluation, term by term, for both sides.
     fn eval(&self) -> Response {
         let params = &self.engine.params;
         let t = eval::trace(&self.position, params);
-        let row = |name: &str, (mg, eg): (i32, i32)| {
-            format!("  {name:<16}{:>10}{:>10}\n", pawns(mg), pawns(eg))
+        let blend = |(mg, eg): (i32, i32)| {
+            if params.tapered {
+                (mg * t.phase + eg * (eval::MAX_PHASE - t.phase)) / eval::MAX_PHASE
+            } else {
+                mg
+            }
         };
-        let mut out = String::from("Evaluation, from White's side, in pawns:\n");
-        out.push_str(&format!("  {:<16}{:>10}{:>10}\n", "", "Middle", "End"));
-        out.push_str(&row("Material", t.material));
-        out.push_str(&row("Piece-squares", t.pst));
-        out.push_str(&row(
-            "Sum",
-            (t.material.0 + t.pst.0, t.material.1 + t.pst.1),
+        let mut out = String::from("Evaluation in pawns, each side from its own point of view:\n");
+        out.push_str(&format!(
+            "  {:<16}{:>16}{:>16}{:>9}\n",
+            "", "White", "Black", "Net"
         ));
+        out.push_str(&format!(
+            "  {:<16}{:>8}{:>8}{:>8}{:>8}{:>9}\n",
+            "", "Middle", "End", "Middle", "End", "(W-B)"
+        ));
+        for (name, [white, black]) in t.terms() {
+            let net = blend((white.0 - black.0, white.1 - black.1));
+            out.push_str(&format!(
+                "  {name:<16}{:>8}{:>8}{:>8}{:>8}{:>9}\n",
+                pawns(white.0),
+                pawns(white.1),
+                pawns(black.0),
+                pawns(black.1),
+                pawns(net),
+            ));
+        }
         out.push_str(&format!(
             "Phase {}/{}: {}% middlegame, {}% endgame{}\n",
             t.phase,
@@ -687,6 +707,21 @@ impl Shell {
             (Some("tapered"), value) if on_off(value).is_some() => {
                 self.engine.params.tapered = on_off(value).unwrap_or(true);
             }
+            (Some("mobility"), value) if on_off(value).is_some() => {
+                self.engine.params.terms.use_mobility = on_off(value).unwrap_or(true);
+            }
+            (Some("pawns"), value) if on_off(value).is_some() => {
+                self.engine.params.terms.use_pawns = on_off(value).unwrap_or(true);
+            }
+            (Some("pieces"), value) if on_off(value).is_some() => {
+                self.engine.params.terms.use_pieces = on_off(value).unwrap_or(true);
+            }
+            (Some("kingsafety"), value) if on_off(value).is_some() => {
+                self.engine.params.terms.use_king_safety = on_off(value).unwrap_or(true);
+            }
+            (Some("tempo"), value) if on_off(value).is_some() => {
+                self.engine.params.terms.use_tempo = on_off(value).unwrap_or(true);
+            }
             (Some("killers"), value) if on_off(value).is_some() => {
                 self.engine.techniques.killers = on_off(value).unwrap_or(true);
             }
@@ -740,7 +775,7 @@ impl Shell {
             _ => return Response::text(SET_USAGE),
         }
         Response::text(format!(
-            "Sliding attacks: {}\nEngine moves: {}\nAlpha-beta pruning: {}\nQuiescence search: {}\nMVV-LVA ordering: {}\nTransposition table: {} ({} MB)\nPiece-square tables: {}\nTapered evaluation: {}\nKillers, countermoves, history: {}, {}, {}\nPVS, aspiration windows: {}, {}\nNull-move pruning: {}\nLate move reductions, pruning: {}, {}\nReverse futility, razoring, futility: {}, {}, {}\nSEE pruning, delta pruning, SEE ordering: {}, {}, {}",
+            "Sliding attacks: {}\nEngine moves: {}\nAlpha-beta pruning: {}\nQuiescence search: {}\nMVV-LVA ordering: {}\nTransposition table: {} ({} MB)\nPiece-square tables: {}\nTapered evaluation: {}\nMobility, pawns, pieces, king safety, tempo: {}, {}, {}, {}, {}\nKillers, countermoves, history: {}, {}, {}\nPVS, aspiration windows: {}, {}\nNull-move pruning: {}\nLate move reductions, pruning: {}, {}\nReverse futility, razoring, futility: {}, {}, {}\nSEE pruning, delta pruning, SEE ordering: {}, {}, {}",
             match slider_method() {
                 SliderMethod::Rays => "walking rays",
                 SliderMethod::Magics => "magic bitboards",
@@ -760,6 +795,11 @@ impl Shell {
             self.engine.tt.megabytes(),
             on_off_text(self.engine.params.use_pst),
             on_off_text(self.engine.params.tapered),
+            on_off_text(self.engine.params.terms.use_mobility),
+            on_off_text(self.engine.params.terms.use_pawns),
+            on_off_text(self.engine.params.terms.use_pieces),
+            on_off_text(self.engine.params.terms.use_king_safety),
+            on_off_text(self.engine.params.terms.use_tempo),
             on_off_text(self.engine.techniques.killers),
             on_off_text(self.engine.techniques.countermoves),
             on_off_text(self.engine.techniques.history),
@@ -833,7 +873,7 @@ fn parse_move(pos: &Position, text: &str) -> Option<Move> {
 }
 
 /// Usage for the `set` command.
-const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set alphabeta|quiescence|mvvlva|tt|killers|countermoves|history|pvs|aspiration|nullmove|lmr|lmp|rfp|razoring|futility|seeprune|delta|seeorder|pst|tapered on|off";
+const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set alphabeta|quiescence|mvvlva|tt|killers|countermoves|history|pvs|aspiration|nullmove|lmr|lmp|rfp|razoring|futility|seeprune|delta|seeorder|pst|tapered|mobility|pawns|pieces|kingsafety|tempo on|off";
 
 /// How long the engine thinks per move by default in the shell.
 const DEFAULT_MOVETIME_MS: u64 = 1000;
@@ -1149,16 +1189,27 @@ mod tests {
         let mut shell = ascii_shell();
         let out = shell.execute("eval").output;
         assert!(out.contains("Material"), "{out}");
+        assert!(out.contains("King safety"), "{out}");
         assert!(out.contains("Phase 24/24: 100% middlegame"), "{out}");
+        // Only the tempo bonus separates the sides at the start.
         assert!(
-            out.ends_with("Total: +0.00 for White, so +0.00 for White to move"),
+            out.ends_with("Total: +0.10 for White, so +0.10 for White to move"),
             "{out}"
         );
         shell.execute("fen 4k3/8/8/4N3/8/8/8/4K3 b - - 0 1");
         let out = shell.execute("eval").output;
         assert!(out.contains("Phase 1/24"), "{out}");
-        shell.execute("set pst off");
-        shell.execute("set tapered off");
+        for term in [
+            "pst",
+            "tapered",
+            "mobility",
+            "pawns",
+            "pieces",
+            "kingsafety",
+            "tempo",
+        ] {
+            shell.execute(&format!("set {term} off"));
+        }
         let out = shell.execute("eval").output;
         assert!(
             out.ends_with("Total: +3.20 for White, so -3.20 for Black to move"),

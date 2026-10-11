@@ -25,7 +25,7 @@
 
 # Part III: Evaluation
 
-- [A full hand-crafted evaluation]()
+- [A full hand-crafted evaluation](ch15-hce.md)
 - [Texel tuning on self-play games]()
 
 # Part IV: A complete engine
