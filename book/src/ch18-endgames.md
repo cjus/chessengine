@@ -5,8 +5,8 @@
 
 The search and evaluation of the previous chapters are cb2026's own judgement. This chapter
 adds knowledge from outside: perfect endgame play from tablebases. It also adds the last part
-of Chess960 support: the 960 starting positions themselves. Opening books are the third
-topic of this stage and come in its second part.
+of Chess960 support: the 960 starting positions themselves. And it adds opening books, for
+playing well-known opening moves without searching.
 
 ## Endgame tablebases
 
@@ -104,8 +104,59 @@ opposite colours and the king between the rooks.
 
 ## Opening books
 
-The second part of this stage adds a Polyglot opening book reader: the `OwnBook` and
-`BookFile` options, off by default so testing isn't affected.
+At the start of a game the search spends its time rediscovering well-known opening theory,
+and it plays the same move every time from the same position. An **opening book** maps
+positions to good moves, each with a weight. With `OwnBook` on, the engine looks the position
+up before searching and plays a book move at once, chosen at random in proportion to the
+weights:
+
+```rust,ignore
+{{#include ../../crates/engine/src/lib.rs:book}}
+```
+
+cb2026 reads the **Polyglot** format (`.bin` files), which nearly every engine and GUI
+supports. A book is a sorted list of 16-byte entries: position key, move, weight and some
+learning data the format reserves, all big-endian. Looking a position up is a binary search
+for its key:
+
+```rust,ignore
+{{#include ../../crates/engine/src/book.rs:moves}}
+```
+
+The key is a Zobrist hash (chapter 4), with one difference that matters: the random numbers
+are fixed by the format. Any program can then compute the same key for the same position and
+read any book. The 781 numbers (768 for pieces on squares, 4 for castling rights, 8 for en
+passant files, 1 for the side to move) were published with Fabien Letouzey's PolyGlot program.
+cb2026 copies them from python-chess and checks them against the format's published test
+hashes:
+
+```rust,ignore
+{{#include ../../crates/engine/src/book.rs:key}}
+```
+
+One detail is easy to get wrong: the en passant file only counts when a pawn of the side to
+move can actually make the capture. cb2026's positions already record en passant squares
+that way (chapter 4), for the same reason: equal positions must hash equally.
+
+Polyglot encodes castling as "king takes rook" (`e1h1`), the same convention cb2026 uses
+internally, so castling moves need no special treatment.
+
+The book is **off by default**. Tests need to see the engine's own moves, a book would make
+every test game start alike, and GUIs and tournament managers usually supply their own books.
+In the shell:
+
+```text
+> set book /path/to/book.bin
+Opening book with 6 entries.
+> book
+Book moves:
+  e4       weight    50  (50%)
+  d4       weight    30  (30%)
+  Nf3      weight    20  (20%)
+The engine ignores the book (set ownbook on to use it).
+```
+
+cb2026 ships no book. Any Polyglot book works with it.
 
 ## Pitfalls
 
@@ -122,12 +173,14 @@ The second part of this stage adds a Polyglot opening book reader: the `OwnBook`
 
 | Test | Result |
 | --- | --- |
-| Without tables loaded | No functional change (bench unchanged) |
+| Without tables or book loaded | No functional change (bench unchanged) |
 | With the 3-4-5 piece tables | Measured on the test Mac (`SyzygyPath` set for one engine) |
 
 ## Further reading
 
 - Chess Programming Wiki: [Syzygy Bases](https://www.chessprogramming.org/Syzygy_Bases),
   [Endgame Tablebases](https://www.chessprogramming.org/Endgame_Tablebases),
-  [Chess960](https://www.chessprogramming.org/Chess960).
+  [Chess960](https://www.chessprogramming.org/Chess960),
+  [Opening Book](https://www.chessprogramming.org/Opening_Book),
+  [PolyGlot](https://www.chessprogramming.org/PolyGlot).
 - [syzygy-tables.info](https://syzygy-tables.info/), to look up any tablebase position.

@@ -43,6 +43,7 @@
 //! - [`tuned`]: the parameter values found by Texel tuning (stage 16, generated), available as
 //!   `EvalParams::tuned()`.
 //! - [`tablebase`]: endgame tablebase probing through a trait (stage 18).
+//! - [`book`]: Polyglot opening books (stage 18).
 //! - [`time`]: time management: soft and hard limits per move (stage 6).
 //! - [`bench`](mod@bench): the fixed benchmark behind `cb2026 bench` and every commit's `Bench:` line.
 //!
@@ -67,6 +68,8 @@
 #![deny(unsafe_code)]
 
 pub mod bench;
+pub mod book;
+mod book_keys;
 pub mod eval;
 pub mod hce;
 pub mod ordering;
@@ -86,6 +89,7 @@ use std::time::{Duration, Instant};
 
 use cb2026_chess::{Move, Position};
 
+use book::OpeningBook;
 use eval::EvalParams;
 use ordering::OrderingTables;
 use search::{
@@ -222,6 +226,10 @@ pub struct Engine {
     pub tablebase_params: TablebaseParams,
     /// How to open tablebase files, if the program embedding the engine supports it.
     pub tablebase_loader: Option<TablebaseLoader>,
+    /// An opening book, if one is loaded (stage 18).
+    pub book: Option<Arc<OpeningBook>>,
+    /// Play from the book when it has a move (the UCI `OwnBook` option; off by default).
+    pub own_book: bool,
 }
 
 impl Default for Engine {
@@ -237,6 +245,8 @@ impl Default for Engine {
             tablebase: None,
             tablebase_params: TablebaseParams::default(),
             tablebase_loader: None,
+            book: None,
+            own_book: false,
         }
     }
 }
@@ -302,6 +312,29 @@ impl Engine {
         if root_moves.is_empty() {
             return SearchResult::default();
         }
+
+        // ANCHOR: book
+        // The opening book: play its move at once (unless asked to analyse).
+        if self.own_book
+            && !limits.infinite
+            && limits.search_moves.is_empty()
+            && let Some(book) = &self.book
+        {
+            // The dice: the clock's nanoseconds, mixed with the position.
+            let nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.subsec_nanos());
+            let random = u64::from(nanos) ^ position.hash();
+            if let Some(mv) = book.pick(position, random)
+                && root_moves.contains(&mv)
+            {
+                return SearchResult {
+                    best_move: Some(mv),
+                    ponder_move: None,
+                };
+            }
+        }
+        // ANCHOR_END: book
         if self.techniques.mvv_lva {
             ordering::order_moves(position, &mut root_moves);
         }
@@ -683,6 +716,36 @@ mod tests {
         assert!(engine.tablebase.is_some());
         engine.load_tablebases("<empty>").unwrap();
         assert!(engine.tablebase.is_none());
+    }
+
+    #[test]
+    fn plays_from_the_book_only_when_asked() {
+        // A one-entry book: 1. d4 from the start.
+        let start = Position::startpos();
+        let mut bytes = book::polyglot_key(&start).to_be_bytes().to_vec();
+        let d4 = (cb2026_chess::Square::D2.index() << 6 | cb2026_chess::Square::D4.index()) as u16;
+        bytes.extend(d4.to_be_bytes());
+        bytes.extend(1u16.to_be_bytes());
+        bytes.extend([0; 4]);
+        let book = OpeningBook::from_bytes(&bytes).unwrap();
+        let mut engine = Engine::new();
+        engine.book = Some(Arc::new(book));
+        let stop = AtomicBool::new(false);
+        let mut reports = 0;
+        // OwnBook off: a normal search.
+        engine.search(&start, &[], &Limits::depth(2), &stop, &mut |_| reports += 1);
+        assert!(reports > 0);
+        engine.own_book = true;
+        let mut reports = 0;
+        let result = engine.search(&start, &[], &Limits::depth(2), &stop, &mut |_| reports += 1);
+        assert_eq!(result.best_move.unwrap().to_string(), "d2d4");
+        assert_eq!(reports, 0);
+        // Out of book: searches as usual.
+        let after =
+            Position::from_fen("rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq - 0 1")
+                .unwrap();
+        let result = engine.search(&after, &[], &Limits::depth(2), &stop, &mut |_| {});
+        assert!(result.best_move.is_some());
     }
 
     #[test]

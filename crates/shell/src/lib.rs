@@ -37,6 +37,7 @@
 //! | `set threads <N>` | Search threads (Lazy SMP) |
 //! | `new960 [n]` | Chess960 starting position `n` (0–959; random if left out) |
 //! | `set syzygy <path>`, `tb` | Load Syzygy tablebases; show the tablebase result for the position |
+//! | `set book <path>`, `set ownbook on\|off`, `book` | Load a Polyglot opening book; play from it; show its moves here |
 //! | `set killers\|countermoves\|history on\|off` | Switch a quiet-move ordering heuristic off |
 //! | `set pvs on\|off`, `set aspiration on\|off` | Principal variation search; aspiration windows |
 //! | `set nullmove on\|off` | Null-move pruning |
@@ -79,6 +80,7 @@ use std::sync::atomic::AtomicBool;
 use cb2026_chess::{Bitboard, Color, Move, Piece, PieceType, Position, Square};
 use std::time::Duration;
 
+use cb2026_engine::book::OpeningBook;
 use cb2026_engine::tablebase::{self, TbWdl};
 use cb2026_engine::tt::MAX_HASH_MB;
 use cb2026_engine::{Engine, Limits, MAX_THREADS, NAME, Score, SearchInfo, bench, eval, search};
@@ -123,6 +125,9 @@ Commands:
                        random without n)
   set syzygy <path>    Load Syzygy endgame tablebases from a directory (none: unload)
   tb                   The tablebase result and best move for this position
+  set book <path>      Load a Polyglot opening book (.bin; none: unload)
+  set ownbook on|off   Play book moves when the book has any (default off)
+  book                 The book's moves for this position, with their weights
   set killers|countermoves|history on|off
                        Quiet-move ordering heuristics
   set pvs on|off       Principal variation search (null windows after the first move)
@@ -327,6 +332,7 @@ impl Shell {
             "zobrist" => self.zobrist(),
             "eval" => self.eval(),
             "tb" => self.tablebase(),
+            "book" => self.book_moves(),
             // Anything else that is a legal move is played.
             other if parse_move(&self.position, other).is_some() => self.play(line),
             other => Response::text(format!(
@@ -609,6 +615,33 @@ impl Shell {
     }
 
     /// Lists every part of the position's Zobrist key, then their XOR.
+    /// `book`: the opening book's moves for the position.
+    fn book_moves(&self) -> Response {
+        let Some(book) = &self.engine.book else {
+            return Response::text("No opening book loaded (set book <path>).");
+        };
+        let moves = book.moves(&self.position);
+        if moves.is_empty() {
+            return Response::text("The book has no moves for this position.");
+        }
+        let total: u32 = moves.iter().map(|m| u32::from(m.weight)).sum();
+        let mut out = String::from("Book moves:\n");
+        for m in moves {
+            let share = u32::from(m.weight) * 100 / total.max(1);
+            out.push_str(&format!(
+                "  {:<8} weight {:>5}  ({share}%)\n",
+                self.position.to_san(m.mv),
+                m.weight
+            ));
+        }
+        out.push_str(if self.engine.own_book {
+            "The engine plays from the book (ownbook on)."
+        } else {
+            "The engine ignores the book (set ownbook on to use it)."
+        });
+        Response::text(out)
+    }
+
     /// `tb`: what the endgame tablebases say about the position.
     fn tablebase(&self) -> Response {
         let Some(tb) = &self.engine.tablebase else {
@@ -844,6 +877,29 @@ impl Shell {
             }
             (Some("tt"), value) if on_off(value).is_some() => {
                 self.engine.techniques.tt = on_off(value).unwrap_or(true);
+            }
+            (Some("book"), path) => {
+                let path = path.unwrap_or("");
+                if path.is_empty() {
+                    self.engine.book = None;
+                    return Response::text("No opening book.");
+                }
+                return Response::text(
+                    match std::fs::read(path)
+                        .map_err(|e| format!("{path}: {e}"))
+                        .and_then(|bytes| OpeningBook::from_bytes(&bytes))
+                    {
+                        Ok(book) => {
+                            let message = format!("Opening book with {} entries.", book.len());
+                            self.engine.book = Some(std::sync::Arc::new(book));
+                            message
+                        }
+                        Err(e) => format!("Opening book not loaded: {e}"),
+                    },
+                );
+            }
+            (Some("ownbook"), value) if on_off(value).is_some() => {
+                self.engine.own_book = on_off(value).unwrap_or(false);
             }
             (Some("syzygy"), path) => {
                 let path = path.unwrap_or("");
@@ -1291,6 +1347,16 @@ mod tests {
         assert!(shell.execute("fen").output.starts_with("bbqnnrkr/"));
         assert!(shell.execute("new960 960").output.starts_with("Usage"));
         shell.execute("new");
+        assert_eq!(
+            shell.execute("book").output,
+            "No opening book loaded (set book <path>)."
+        );
+        assert!(
+            shell
+                .execute("set book /no/book.bin")
+                .output
+                .starts_with("Opening book not loaded")
+        );
         assert_eq!(
             shell.execute("tb").output,
             "No tablebases loaded (set syzygy <path>)."
