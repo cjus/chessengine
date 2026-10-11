@@ -452,7 +452,8 @@ mod tests {
 
     fn search(fen: &str, depth: u32, techniques: Techniques) -> RootResult {
         let pos = Position::from_fen(fen).unwrap();
-        let params = EvalParams::default();
+        // Material only, so the expected scores can be worked out by hand.
+        let params = EvalParams::material_only();
         let stop = AtomicBool::new(false);
         let limits = Limits::depth(depth);
         let mut tt = TranspositionTable::new(1);

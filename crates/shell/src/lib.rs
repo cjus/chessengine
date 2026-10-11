@@ -34,6 +34,8 @@
 //! | `set alphabeta on\|off` | Switch alpha-beta off to compare with plain minimax |
 //! | `set quiescence on\|off`, `set mvvlva on\|off`, `set tt on\|off` | Switch the quiescence search, MVV-LVA move ordering or the transposition table off |
 //! | `set hash <MB>` | Transposition table size |
+//! | `eval` | The static evaluation, term by term |
+//! | `set pst on\|off`, `set tapered on\|off` | Switch the piece-square tables or the middlegame/endgame blend off |
 //! | `bench` | The fixed benchmark |
 //! | `bb <set>` | Show a bitboard: `occupied`, `empty`, `white`, `black`, `checkers`, `pinned`, or a piece letter (`P`, `n`, ...) |
 //! | `help` | List commands |
@@ -41,8 +43,8 @@
 //!
 //! ## Coming in later stages
 //!
-//! - **Stages 5–6:** a real search, clocks, levels and a live display of the engine's thinking.
-//! - **Stage 9 on:** the explain commands: `eval`, `explain`, `tree` and `stats`.
+//! - **Stage 10 on:** the other explain commands: `explain`, `tree` and `stats`.
+//! - **Stage 19:** strength levels.
 //! - **M4:** `match`, a short match against another UCI engine.
 //!
 //! The full plan is in `docs/PRD.md`, "The interactive shell".
@@ -68,7 +70,7 @@ use cb2026_chess::{Bitboard, Color, Move, Piece, PieceType, Position, Square};
 use std::time::Duration;
 
 use cb2026_engine::tt::MAX_HASH_MB;
-use cb2026_engine::{Engine, Limits, NAME, Score, SearchInfo, bench, search};
+use cb2026_engine::{Engine, Limits, NAME, Score, SearchInfo, bench, eval, search};
 pub use render::Style;
 
 /// The help text for the `help` command.
@@ -105,6 +107,9 @@ Commands:
   set mvvlva on|off    Search captures first, biggest victim first
   set tt on|off        The transposition table: reuse results for positions seen before
   set hash <MB>        Transposition table size in megabytes (default 16)
+  set pst on|off       Piece-square tables (off: material only)
+  set tapered on|off   Blend middlegame and endgame values by phase (off: middlegame only)
+  eval                 The static evaluation of the position, term by term
   bench                The fixed benchmark: total nodes and speed
   bb <set>             Show a bitboard: occupied, empty, white, black, checkers,
                        pinned, or a piece letter (P N B R Q K for White, p n b r q k)
@@ -270,6 +275,7 @@ impl Shell {
                 _ => Response::text("Usage: think on|off"),
             },
             "zobrist" => self.zobrist(),
+            "eval" => self.eval(),
             // Anything else that is a legal move is played.
             other if parse_move(&self.position, other).is_some() => self.play(line),
             other => Response::text(format!(
@@ -552,6 +558,42 @@ impl Shell {
     }
 
     /// Lists every part of the position's Zobrist key, then their XOR.
+    /// `eval`: the static evaluation, term by term.
+    fn eval(&self) -> Response {
+        let params = &self.engine.params;
+        let t = eval::trace(&self.position, params);
+        let row = |name: &str, (mg, eg): (i32, i32)| {
+            format!("  {name:<16}{:>10}{:>10}\n", pawns(mg), pawns(eg))
+        };
+        let mut out = String::from("Evaluation, from White's side, in pawns:\n");
+        out.push_str(&format!("  {:<16}{:>10}{:>10}\n", "", "Middle", "End"));
+        out.push_str(&row("Material", t.material));
+        out.push_str(&row("Piece-squares", t.pst));
+        out.push_str(&row(
+            "Sum",
+            (t.material.0 + t.pst.0, t.material.1 + t.pst.1),
+        ));
+        out.push_str(&format!(
+            "Phase {}/{}: {}% middlegame, {}% endgame{}\n",
+            t.phase,
+            eval::MAX_PHASE,
+            t.phase * 100 / eval::MAX_PHASE,
+            100 - t.phase * 100 / eval::MAX_PHASE,
+            if params.tapered {
+                ""
+            } else {
+                " (tapering off: middlegame values only)"
+            },
+        ));
+        let side = self.position.side_to_move();
+        out.push_str(&format!(
+            "Total: {} for White, so {} for {side} to move",
+            pawns(t.total),
+            pawns(eval::evaluate(&self.position, params)),
+        ));
+        Response::text(out)
+    }
+
     fn zobrist(&self) -> Response {
         let pos = &self.position;
         let mut out = String::from("The key is the XOR of one random number per feature:\n");
@@ -621,6 +663,12 @@ impl Shell {
             (Some("mvvlva"), value) if on_off(value).is_some() => {
                 self.engine.techniques.mvv_lva = on_off(value).unwrap_or(true);
             }
+            (Some("pst"), value) if on_off(value).is_some() => {
+                self.engine.params.use_pst = on_off(value).unwrap_or(true);
+            }
+            (Some("tapered"), value) if on_off(value).is_some() => {
+                self.engine.params.tapered = on_off(value).unwrap_or(true);
+            }
             (Some("tt"), value) if on_off(value).is_some() => {
                 self.engine.techniques.tt = on_off(value).unwrap_or(true);
             }
@@ -632,7 +680,7 @@ impl Shell {
             _ => return Response::text(SET_USAGE),
         }
         Response::text(format!(
-            "Sliding attacks: {}\nEngine moves: {}\nAlpha-beta pruning: {}\nQuiescence search: {}\nMVV-LVA ordering: {}\nTransposition table: {} ({} MB)",
+            "Sliding attacks: {}\nEngine moves: {}\nAlpha-beta pruning: {}\nQuiescence search: {}\nMVV-LVA ordering: {}\nTransposition table: {} ({} MB)\nPiece-square tables: {}\nTapered evaluation: {}",
             match slider_method() {
                 SliderMethod::Rays => "walking rays",
                 SliderMethod::Magics => "magic bitboards",
@@ -650,6 +698,8 @@ impl Shell {
             on_off_text(self.engine.techniques.mvv_lva),
             on_off_text(self.engine.techniques.tt),
             self.engine.tt.megabytes(),
+            on_off_text(self.engine.params.use_pst),
+            on_off_text(self.engine.params.tapered),
         ))
     }
 
@@ -709,7 +759,7 @@ fn parse_move(pos: &Position, text: &str) -> Option<Move> {
 }
 
 /// Usage for the `set` command.
-const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set alphabeta|quiescence|mvvlva|tt on|off";
+const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set alphabeta|quiescence|mvvlva|tt|pst|tapered on|off";
 
 /// How long the engine thinks per move by default in the shell.
 const DEFAULT_MOVETIME_MS: u64 = 1000;
@@ -729,6 +779,11 @@ fn score_text(score: Score) -> String {
         Score::Centipawns(cp) => format!("{:+.2}", cp as f64 / 100.0),
         Score::Mate(moves) => format!("#{moves}"),
     }
+}
+
+/// A centipawn value as pawns, like `+0.35`.
+fn pawns(cp: i32) -> String {
+    format!("{:+.2}", cp as f64 / 100.0)
 }
 
 /// A principal variation in algebraic notation.
@@ -1013,6 +1068,28 @@ mod tests {
         assert!(shell.execute("set hash 0").output.starts_with("Usage"));
         assert!(shell.execute("set depth 0").output.starts_with("Usage"));
         assert!(shell.execute("set colour blue").output.starts_with("Usage"));
+    }
+
+    #[test]
+    fn eval_shows_the_terms() {
+        let mut shell = ascii_shell();
+        let out = shell.execute("eval").output;
+        assert!(out.contains("Material"), "{out}");
+        assert!(out.contains("Phase 24/24: 100% middlegame"), "{out}");
+        assert!(
+            out.ends_with("Total: +0.00 for White, so +0.00 for White to move"),
+            "{out}"
+        );
+        shell.execute("fen 4k3/8/8/4N3/8/8/8/4K3 b - - 0 1");
+        let out = shell.execute("eval").output;
+        assert!(out.contains("Phase 1/24"), "{out}");
+        shell.execute("set pst off");
+        shell.execute("set tapered off");
+        let out = shell.execute("eval").output;
+        assert!(
+            out.ends_with("Total: +3.20 for White, so -3.20 for Black to move"),
+            "{out}"
+        );
     }
 
     #[test]
