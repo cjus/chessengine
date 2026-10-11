@@ -15,12 +15,17 @@
 //! - [`sprt`]: Elo estimates and the sequential probability ratio test.
 //! - [`gauntlet`]: a rating on an outside scale (like CCRL Blitz) from matches against
 //!   reference engines, used by the `gauntlet` tool.
-//! - The `perft-suite`, `find-magics`, `match` and `gauntlet` command-line tools (`src/bin/`).
+//! - [`selfplay`]: self-play data generation for tuning (the `datagen` tool).
+//! - [`texel`]: the Texel tuner's error, gradient and optimiser (the `tune` tool).
+//! - The `perft-suite`, `find-magics`, `match`, `gauntlet`, `datagen` and `tune` command-line
+//!   tools (`src/bin/`).
 
 #![forbid(unsafe_code)]
 
 pub mod game;
 pub mod gauntlet;
 pub mod match_runner;
+pub mod selfplay;
 pub mod sprt;
+pub mod texel;
 pub mod uci_client;

@@ -39,6 +39,9 @@
 //! - [`tt`]: the transposition table (stage 8).
 //! - [`see`]: static exchange evaluation (stage 14).
 //! - [`hce`]: the full hand-crafted evaluation's positional terms (stage 15).
+//! - [`tuning`]: the evaluation as features times parameters, for tuning (stage 16).
+//! - [`tuned`]: the parameter values found by Texel tuning (stage 16, generated), available as
+//!   `EvalParams::tuned()`.
 //! - [`time`]: time management: soft and hard limits per move (stage 6).
 //! - [`bench`](mod@bench): the fixed benchmark behind `cb2026 bench` and every commit's `Bench:` line.
 //!
@@ -48,8 +51,9 @@
 //!   transposition table, move ordering, principal variation search, and the pruning and
 //!   reduction techniques modern engines use. Each technique can be switched off at runtime so
 //!   its value can be measured.
-//! - **Evaluation (stages 9, 15–16):** a tapered, hand-crafted evaluation whose weights are tuned
-//!   on self-play games, with a per-term trace for the shell's `eval` command.
+//! - **Evaluation (stages 9, 15–16):** a tapered, hand-crafted evaluation with a per-term trace
+//!   for the shell's `eval` command, and a Texel tuner that fits its weights to self-play games
+//!   (the tuned values are available, but haven't yet measured stronger than the hand-set ones).
 //! - **Everything else a real engine needs (stages 6, 17–19):** time management, Lazy SMP,
 //!   Syzygy tablebases, a Polyglot opening book, and strength limiting.
 //!
@@ -69,6 +73,8 @@ pub mod search;
 pub mod see;
 pub mod time;
 pub mod tt;
+pub mod tuned;
+pub mod tuning;
 
 use std::fmt;
 use std::sync::atomic::AtomicBool;

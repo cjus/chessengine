@@ -79,7 +79,32 @@ pub struct EvalParams {
 // ANCHOR_END: params
 
 impl Default for EvalParams {
+    /// The hand-set values. The tuned ones ([`EvalParams::tuned`]) didn't measure stronger
+    /// (see book chapter 16), so they aren't the default.
     fn default() -> EvalParams {
+        EvalParams::hand_set()
+    }
+}
+
+impl EvalParams {
+    /// Copies every tunable value from `other`, keeping this one's switches.
+    pub fn copy_values(&mut self, other: &EvalParams) {
+        for param in Param::all() {
+            self.set_value(param, other.value(param));
+        }
+    }
+
+    /// The values found by Texel tuning (stage 16, see [`crate::tuned`]).
+    pub fn tuned() -> EvalParams {
+        let mut params = EvalParams::hand_set();
+        for param in Param::all() {
+            params.set_value(param, crate::tuned::TUNED[param.index()]);
+        }
+        params
+    }
+
+    /// The hand-written starting values from stages 9 and 15, before tuning.
+    pub fn hand_set() -> EvalParams {
         EvalParams {
             mg_values: [90, 320, 330, 480, 960, 0],
             eg_values: [120, 300, 320, 530, 940, 0],
@@ -91,9 +116,7 @@ impl Default for EvalParams {
             terms: TermParams::default(),
         }
     }
-}
 
-impl EvalParams {
     /// The stage 5 evaluation: material only, the same in every phase (P 100, N 320, B 330,
     /// R 500, Q 900). Scores are easy to work out by hand, which makes it useful in tests.
     pub fn material_only() -> EvalParams {
@@ -173,29 +196,195 @@ impl EvalTrace {
     }
 }
 
+// ANCHOR: param
+/// One evaluation parameter: a `(middlegame, endgame)` pair in [`EvalParams`]. Every term
+/// of the evaluation is "this parameter, this many times, for this side".
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Param {
+    /// A piece's value.
+    Material(PieceType),
+    /// A piece-square table entry (table index, see [`pst_index`]).
+    Pst(PieceType, usize),
+    /// Mobility per safe square.
+    Mobility(PieceType),
+    /// A doubled pawn.
+    Doubled,
+    /// An isolated pawn.
+    Isolated,
+    /// A passed pawn on this relative rank.
+    Passed(usize),
+    /// The bishop pair.
+    BishopPair,
+    /// A rook on an open file.
+    RookOpenFile,
+    /// A rook on a semi-open file.
+    RookSemiOpenFile,
+    /// A pawn in the king's shield.
+    PawnShield,
+    /// The side to move.
+    Tempo,
+}
+
+impl Param {
+    /// How many parameters there are.
+    pub const COUNT: usize = 411;
+
+    /// The parameter's position in a flat list of all parameters, `0..COUNT`.
+    pub fn index(self) -> usize {
+        match self {
+            Param::Material(pt) => pt.index(),
+            Param::Pst(pt, square) => 6 + pt.index() * 64 + square,
+            Param::Mobility(pt) => 390 + pt.index(),
+            Param::Doubled => 396,
+            Param::Isolated => 397,
+            Param::Passed(rank) => 398 + rank,
+            Param::BishopPair => 406,
+            Param::RookOpenFile => 407,
+            Param::RookSemiOpenFile => 408,
+            Param::PawnShield => 409,
+            Param::Tempo => 410,
+        }
+    }
+
+    /// Every parameter, in [`Param::index`] order.
+    pub fn all() -> Vec<Param> {
+        let mut all = Vec::with_capacity(Param::COUNT);
+        all.extend(PieceType::ALL.map(Param::Material));
+        for pt in PieceType::ALL {
+            all.extend((0..64).map(|square| Param::Pst(pt, square)));
+        }
+        all.extend(PieceType::ALL.map(Param::Mobility));
+        all.extend([Param::Doubled, Param::Isolated]);
+        all.extend((0..8).map(Param::Passed));
+        all.extend([
+            Param::BishopPair,
+            Param::RookOpenFile,
+            Param::RookSemiOpenFile,
+            Param::PawnShield,
+            Param::Tempo,
+        ]);
+        all
+    }
+}
+
+impl EvalParams {
+    /// The current value of `param`.
+    pub fn value(&self, param: Param) -> MgEg {
+        let t = &self.terms;
+        match param {
+            Param::Material(pt) => (self.mg_values[pt.index()], self.eg_values[pt.index()]),
+            Param::Pst(pt, sq) => (self.mg_pst[pt.index()][sq], self.eg_pst[pt.index()][sq]),
+            Param::Mobility(pt) => t.mobility[pt.index()],
+            Param::Doubled => t.doubled,
+            Param::Isolated => t.isolated,
+            Param::Passed(rank) => t.passed[rank],
+            Param::BishopPair => t.bishop_pair,
+            Param::RookOpenFile => t.rook_open_file,
+            Param::RookSemiOpenFile => t.rook_semi_open_file,
+            Param::PawnShield => t.pawn_shield,
+            Param::Tempo => t.tempo,
+        }
+    }
+
+    /// Sets `param` to `value`.
+    pub fn set_value(&mut self, param: Param, value: MgEg) {
+        let t = &mut self.terms;
+        match param {
+            Param::Material(pt) => {
+                self.mg_values[pt.index()] = value.0;
+                self.eg_values[pt.index()] = value.1;
+            }
+            Param::Pst(pt, sq) => {
+                self.mg_pst[pt.index()][sq] = value.0;
+                self.eg_pst[pt.index()][sq] = value.1;
+            }
+            Param::Mobility(pt) => t.mobility[pt.index()] = value,
+            Param::Doubled => t.doubled = value,
+            Param::Isolated => t.isolated = value,
+            Param::Passed(rank) => t.passed[rank] = value,
+            Param::BishopPair => t.bishop_pair = value,
+            Param::RookOpenFile => t.rook_open_file = value,
+            Param::RookSemiOpenFile => t.rook_semi_open_file = value,
+            Param::PawnShield => t.pawn_shield = value,
+            Param::Tempo => t.tempo = value,
+        }
+    }
+}
+
+/// Receives the evaluation's terms as [`collect`] finds them. The evaluation itself adds up
+/// their values ([`trace`]); the tuner records how often each parameter applies.
+pub trait TermSink {
+    /// `side` gets parameter `param`, `count` times (`count` may be negative).
+    fn term(&mut self, side: Color, param: Param, count: i32);
+    /// `side`'s king is in danger: a middlegame penalty that isn't a parameter times a count
+    /// (it's quadratic in the attacks), so it is passed on as a value.
+    fn king_danger(&mut self, side: Color, penalty: i32);
+}
+// ANCHOR_END: param
+
 // ANCHOR: evaluate
-/// Works out the evaluation's parts; the total is from White's point of view.
-pub fn trace(pos: &Position, params: &EvalParams) -> EvalTrace {
-    let mut t = EvalTrace::default();
-    let mut phase = 0;
+/// Reports every term of the evaluation, for both sides, to `sink`.
+pub fn collect<S: TermSink>(pos: &Position, params: &EvalParams, sink: &mut S) {
     for color in Color::ALL {
-        let side = color.index();
         for piece_type in PieceType::ALL {
-            let i = piece_type.index();
             for square in pos.pieces(color, piece_type) {
-                t.material[side].0 += params.mg_values[i];
-                t.material[side].1 += params.eg_values[i];
+                sink.term(color, Param::Material(piece_type), 1);
                 if params.use_pst {
-                    let at = pst_index(color, square);
-                    t.pst[side].0 += params.mg_pst[i][at];
-                    t.pst[side].1 += params.eg_pst[i][at];
+                    sink.term(color, Param::Pst(piece_type, pst_index(color, square)), 1);
                 }
-                phase += params.phase_weights[i];
             }
         }
     }
-    hce::add_terms(pos, &params.terms, &mut t);
-    t.phase = phase.min(MAX_PHASE);
+    hce::collect(pos, &params.terms, sink);
+}
+
+/// The game phase: from 0 (bare kings and pawns) to [`MAX_PHASE`] (all the pieces).
+pub fn phase(pos: &Position, params: &EvalParams) -> i32 {
+    let phase: i32 = PieceType::ALL
+        .iter()
+        .map(|&pt| params.phase_weights[pt.index()] * pos.pieces_of_type(pt).count() as i32)
+        .sum();
+    phase.min(MAX_PHASE)
+}
+
+/// Adds up the terms' values into an [`EvalTrace`].
+struct TraceSink<'a> {
+    params: &'a EvalParams,
+    trace: EvalTrace,
+}
+
+impl TermSink for TraceSink<'_> {
+    fn term(&mut self, side: Color, param: Param, count: i32) {
+        let t = &mut self.trace;
+        let slot = match param {
+            Param::Material(_) => &mut t.material,
+            Param::Pst(..) => &mut t.pst,
+            Param::Mobility(_) => &mut t.mobility,
+            Param::Doubled | Param::Isolated => &mut t.pawns,
+            Param::Passed(_) => &mut t.passed,
+            Param::BishopPair | Param::RookOpenFile | Param::RookSemiOpenFile => &mut t.pieces,
+            Param::PawnShield => &mut t.king_safety,
+            Param::Tempo => &mut t.tempo,
+        };
+        let (mg, eg) = self.params.value(param);
+        slot[side.index()].0 += mg * count;
+        slot[side.index()].1 += eg * count;
+    }
+
+    fn king_danger(&mut self, side: Color, penalty: i32) {
+        self.trace.king_safety[side.index()].0 -= penalty;
+    }
+}
+
+/// Works out the evaluation's parts; the total is from White's point of view.
+pub fn trace(pos: &Position, params: &EvalParams) -> EvalTrace {
+    let mut sink = TraceSink {
+        params,
+        trace: EvalTrace::default(),
+    };
+    collect(pos, params, &mut sink);
+    let mut t = sink.trace;
+    t.phase = phase(pos, params);
     let (mg, eg) = t.net();
     t.total = if params.tapered {
         (mg * t.phase + eg * (MAX_PHASE - t.phase)) / MAX_PHASE
@@ -341,6 +530,22 @@ const KING_EG: Pst = [
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn hand_set_values_are_the_default_and_tuned_ones_are_available() {
+        assert_eq!(EvalParams::default(), EvalParams::hand_set());
+        let tuned = EvalParams::tuned();
+        assert_ne!(tuned, EvalParams::hand_set());
+        // Copying values keeps the switches.
+        let mut params = EvalParams::hand_set();
+        params.use_pst = false;
+        params.copy_values(&tuned);
+        assert!(!params.use_pst);
+        for param in Param::all() {
+            assert_eq!(params.value(param), tuned.value(param));
+        }
+    }
+
     use super::*;
 
     fn eval(fen: &str) -> i32 {
@@ -386,7 +591,7 @@ mod tests {
 
     #[test]
     fn start_position_is_balanced_apart_from_the_tempo() {
-        let tempo = TermParams::default().tempo.0;
+        let tempo = EvalParams::default().value(Param::Tempo).0;
         assert_eq!(eval(cb2026_chess::STARTING_FEN), tempo);
     }
 
@@ -412,7 +617,11 @@ mod tests {
     fn knights_prefer_the_centre() {
         let centre = eval("4k3/8/8/4N3/8/8/8/4K3 w - - 0 1");
         let corner = eval("4k3/8/8/8/8/8/8/N3K3 w - - 0 1");
-        assert!(centre > corner + 50, "{centre} vs {corner}");
+        assert!(centre > corner, "{centre} vs {corner}");
+        // The hand-set tables are explicit about it.
+        let hand = EvalParams::hand_set();
+        let at = |fen: &str| evaluate(&Position::from_fen(fen).unwrap(), &hand);
+        assert!(at("4k3/8/8/4N3/8/8/8/4K3 w - - 0 1") > at("4k3/8/8/8/8/8/8/N3K3 w - - 0 1") + 50);
     }
 
     #[test]
@@ -452,7 +661,7 @@ mod tests {
             use_pst: false,
             tapered: false,
             terms: TermParams::none(),
-            ..EvalParams::default()
+            ..EvalParams::hand_set()
         };
         // Material only, middlegame value.
         assert_eq!(evaluate(&pos, &params), 320);

@@ -127,6 +127,7 @@ Commands:
                        delta pruning
   set seeorder on|off  Search captures that lose material (by SEE) after quiet moves
   set pst on|off       Piece-square tables (off: material only)
+  set eval hand|tuned  Hand-set evaluation values (default) or stage 16's tuned ones
   set tapered on|off   Blend middlegame and endgame values by phase (off: middlegame only)
   set mobility|pawns|pieces|kingsafety|tempo on|off
                        Evaluation term groups: mobility, pawn structure and passed pawns,
@@ -701,6 +702,22 @@ impl Shell {
             (Some("mvvlva"), value) if on_off(value).is_some() => {
                 self.engine.techniques.mvv_lva = on_off(value).unwrap_or(true);
             }
+            (Some("eval"), Some(which @ ("hand" | "tuned"))) => {
+                let values = if which == "tuned" {
+                    eval::EvalParams::tuned()
+                } else {
+                    eval::EvalParams::hand_set()
+                };
+                self.engine.params.copy_values(&values);
+                return Response::text(format!(
+                    "Evaluation values: {}",
+                    if which == "tuned" {
+                        "tuned (stage 16's Texel tuning)"
+                    } else {
+                        "hand-set (the default)"
+                    }
+                ));
+            }
             (Some("pst"), value) if on_off(value).is_some() => {
                 self.engine.params.use_pst = on_off(value).unwrap_or(true);
             }
@@ -873,7 +890,7 @@ fn parse_move(pos: &Position, text: &str) -> Option<Move> {
 }
 
 /// Usage for the `set` command.
-const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set alphabeta|quiescence|mvvlva|tt|killers|countermoves|history|pvs|aspiration|nullmove|lmr|lmp|rfp|razoring|futility|seeprune|delta|seeorder|pst|tapered|mobility|pawns|pieces|kingsafety|tempo on|off";
+const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set eval hand|tuned | set alphabeta|quiescence|mvvlva|tt|killers|countermoves|history|pvs|aspiration|nullmove|lmr|lmp|rfp|razoring|futility|seeprune|delta|seeorder|pst|tapered|mobility|pawns|pieces|kingsafety|tempo on|off";
 
 /// How long the engine thinks per move by default in the shell.
 const DEFAULT_MOVETIME_MS: u64 = 1000;
@@ -1128,6 +1145,16 @@ mod tests {
     }
 
     #[test]
+    fn eval_values_can_be_switched() {
+        let mut shell = ascii_shell();
+        let hand = shell.execute("eval").output;
+        assert!(shell.execute("set eval tuned").output.contains("tuned"));
+        assert_ne!(shell.execute("eval").output, hand);
+        shell.execute("set eval hand");
+        assert_eq!(shell.execute("eval").output, hand);
+    }
+
+    #[test]
     fn search_settings() {
         let mut shell = ascii_shell();
         assert!(
@@ -1192,8 +1219,11 @@ mod tests {
         assert!(out.contains("King safety"), "{out}");
         assert!(out.contains("Phase 24/24: 100% middlegame"), "{out}");
         // Only the tempo bonus separates the sides at the start.
+        let tempo = pawns(shell.engine.params.value(eval::Param::Tempo).0);
         assert!(
-            out.ends_with("Total: +0.10 for White, so +0.10 for White to move"),
+            out.ends_with(&format!(
+                "Total: {tempo} for White, so {tempo} for White to move"
+            )),
             "{out}"
         );
         shell.execute("fen 4k3/8/8/4N3/8/8/8/4K3 b - - 0 1");
@@ -1211,8 +1241,17 @@ mod tests {
             shell.execute(&format!("set {term} off"));
         }
         let out = shell.execute("eval").output;
+        let knight = shell
+            .engine
+            .params
+            .value(eval::Param::Material(PieceType::Knight))
+            .0;
         assert!(
-            out.ends_with("Total: +3.20 for White, so -3.20 for Black to move"),
+            out.ends_with(&format!(
+                "Total: {} for White, so {} for Black to move",
+                pawns(knight),
+                pawns(-knight)
+            )),
             "{out}"
         );
     }
