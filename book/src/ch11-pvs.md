@@ -92,10 +92,11 @@ multiplies down a deep tree.
 | Test | Result |
 | --- | --- |
 | Stage 11 vs stage 10, 8+0.08, SPRT [0, 5], cloud | +340 −297 =213 over 850 games, about +18 ± 20 Elo: no verdict (LLR 0.71) when the run hit the session's time limit |
-| Stage 11 vs stage 10, 8+0.08, SPRT [0, 5], test Mac | Pending |
+| Stage 11 vs stage 10, 8+0.08, SPRT [0, 5], test Mac (M1 Max, 7 games at a time) | +818 −654 =529 over 2001 games, **+28.5 ± 13.1 Elo**: passed (LLR 2.95) |
 
-PVS and aspiration windows are worth much less than the early stages, so proving the gain takes
-thousands of games. That makes this the first stage whose test runs on the faster test Mac.
+PVS and aspiration windows are worth much less than the early stages, so proving the gain took
+two thousand games: the first stage whose test ran on the faster test Mac. The cloud run's
+estimate (+18 ± 20) and the Mac's (+28.5 ± 13.1) agree within their margins.
 
 ## Further reading
 
