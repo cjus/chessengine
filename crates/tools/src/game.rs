@@ -22,6 +22,14 @@ pub enum TimeControl {
         /// Time added after each move.
         increment: Duration,
     },
+    /// A repeating time control, like `40/60`: `moves` moves in `base`, then the same again
+    /// added to the clock, and so on (the engines get `movestogo`).
+    Repeating {
+        /// Moves per period.
+        moves: u32,
+        /// Time for each period.
+        base: Duration,
+    },
     /// A fixed number of nodes per move: no clocks, results don't depend on machine load.
     Nodes(u64),
     /// A fixed depth per move.
@@ -29,13 +37,22 @@ pub enum TimeControl {
 }
 
 impl TimeControl {
-    /// Parses `8+0.08` (seconds), `nodes=10000` or `depth=4`.
+    /// Parses `8+0.08` (seconds), `40/60` (moves/seconds, repeating), `nodes=10000` or
+    /// `depth=4`.
     pub fn parse(text: &str) -> Option<TimeControl> {
         if let Some(n) = text.strip_prefix("nodes=") {
             return n.parse().ok().map(TimeControl::Nodes);
         }
         if let Some(d) = text.strip_prefix("depth=") {
             return d.parse().ok().map(TimeControl::Depth);
+        }
+        if let Some((moves, seconds)) = text.split_once('/') {
+            let moves = moves.parse::<u32>().ok().filter(|&m| m > 0)?;
+            let seconds = seconds.parse::<f64>().ok().filter(|&s| s > 0.0)?;
+            return Some(TimeControl::Repeating {
+                moves,
+                base: Duration::from_secs_f64(seconds),
+            });
         }
         let (base, increment) = text.split_once('+').unwrap_or((text, "0"));
         let seconds = |s: &str| s.parse::<f64>().ok().filter(|v| *v >= 0.0);
@@ -75,6 +92,19 @@ impl Outcome {
     }
 }
 
+/// How a game ended, for spotting engine problems in long test runs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Termination {
+    /// By the rules: mate, a draw rule, or adjudication.
+    Normal,
+    /// An engine ran out of time.
+    TimeLoss,
+    /// An engine sent an illegal move.
+    IllegalMove,
+    /// An engine crashed, hung or couldn't start the game.
+    Failure,
+}
+
 /// A finished game.
 #[derive(Clone, Debug)]
 pub struct Game {
@@ -88,6 +118,8 @@ pub struct Game {
     pub outcome: Outcome,
     /// Why the game ended, like "checkmate" or "Black lost on time".
     pub reason: String,
+    /// What kind of ending it was.
+    pub termination: Termination,
 }
 
 impl fmt::Display for Game {
@@ -148,21 +180,30 @@ pub fn play_game(engines: [&mut UciEngine; 2], start_fen: &str, tc: TimeControl)
     let mut san_moves: Vec<String> = Vec::new();
     let mut hashes = vec![position.hash()];
     let mut clocks = match tc {
-        TimeControl::Clock { base, .. } => [base, base],
+        TimeControl::Clock { base, .. } | TimeControl::Repeating { base, .. } => [base, base],
         _ => [Duration::ZERO; 2],
     };
+    // Moves each side has made, for repeating time controls.
+    let mut moves_made = [0u32; 2];
 
-    let finish = |outcome: Outcome, reason: String, moves: Vec<String>| Game {
-        start_fen: start_fen.to_string(),
-        players: players.clone(),
-        moves,
-        outcome,
-        reason,
-    };
+    let finish =
+        |termination: Termination, outcome: Outcome, reason: String, moves: Vec<String>| Game {
+            start_fen: start_fen.to_string(),
+            players: players.clone(),
+            moves,
+            outcome,
+            reason,
+            termination,
+        };
 
     for engine in engines.iter_mut() {
         if let Err(e) = engine.new_game() {
-            return finish(Outcome::Draw, format!("aborted: {e}"), san_moves);
+            return finish(
+                Termination::Failure,
+                Outcome::Draw,
+                format!("aborted: {e}"),
+                san_moves,
+            );
         }
     }
 
@@ -171,22 +212,48 @@ pub fn play_game(engines: [&mut UciEngine; 2], start_fen: &str, tc: TimeControl)
         let side = position.side_to_move();
         if position.legal_moves().is_empty() {
             return if position.in_check() {
-                finish(Outcome::win_for(!side), "checkmate".into(), san_moves)
+                finish(
+                    Termination::Normal,
+                    Outcome::win_for(!side),
+                    "checkmate".into(),
+                    san_moves,
+                )
             } else {
-                finish(Outcome::Draw, "stalemate".into(), san_moves)
+                finish(
+                    Termination::Normal,
+                    Outcome::Draw,
+                    "stalemate".into(),
+                    san_moves,
+                )
             };
         }
         if position.halfmove_clock() >= 100 {
-            return finish(Outcome::Draw, "fifty-move rule".into(), san_moves);
+            return finish(
+                Termination::Normal,
+                Outcome::Draw,
+                "fifty-move rule".into(),
+                san_moves,
+            );
         }
         if position.is_insufficient_material() {
-            return finish(Outcome::Draw, "insufficient material".into(), san_moves);
+            return finish(
+                Termination::Normal,
+                Outcome::Draw,
+                "insufficient material".into(),
+                san_moves,
+            );
         }
         if hashes.iter().filter(|&&h| h == position.hash()).count() >= 3 {
-            return finish(Outcome::Draw, "threefold repetition".into(), san_moves);
+            return finish(
+                Termination::Normal,
+                Outcome::Draw,
+                "threefold repetition".into(),
+                san_moves,
+            );
         }
         if san_moves.len() >= MAX_PLIES {
             return finish(
+                Termination::Normal,
                 Outcome::Draw,
                 "adjudicated: game too long".into(),
                 san_moves,
@@ -214,6 +281,18 @@ pub fn play_game(engines: [&mut UciEngine; 2], start_fen: &str, tc: TimeControl)
                     clocks[mover] + TIME_MARGIN + Duration::from_secs(1),
                 )
             }
+            TimeControl::Repeating { moves, .. } => {
+                let ms = |d: Duration| d.as_millis();
+                (
+                    format!(
+                        "go wtime {} btime {} movestogo {}",
+                        ms(clocks[0]),
+                        ms(clocks[1]),
+                        moves - moves_made[mover] % moves
+                    ),
+                    clocks[mover] + TIME_MARGIN + Duration::from_secs(1),
+                )
+            }
             TimeControl::Nodes(n) => (format!("go nodes {n}"), Duration::from_secs(60)),
             TimeControl::Depth(d) => (format!("go depth {d}"), Duration::from_secs(300)),
         };
@@ -222,24 +301,40 @@ pub fn play_game(engines: [&mut UciEngine; 2], start_fen: &str, tc: TimeControl)
             Ok(reply) => reply,
             Err(e) => {
                 return finish(
+                    Termination::Failure,
                     Outcome::win_for(!side),
                     format!("{side} ({name}) failed: {e}"),
                     san_moves,
                 );
             }
         };
-        if let TimeControl::Clock { increment, .. } = tc {
+        let added = match tc {
+            TimeControl::Clock { increment, .. } => Some(increment),
+            TimeControl::Repeating { moves, base } => {
+                moves_made[mover] += 1;
+                // A new period starts after every `moves` moves.
+                Some(if moves_made[mover] % moves == 0 {
+                    base
+                } else {
+                    Duration::ZERO
+                })
+            }
+            _ => None,
+        };
+        if let Some(added) = added {
             if reply.elapsed > clocks[mover] + TIME_MARGIN {
                 return finish(
+                    Termination::TimeLoss,
                     Outcome::win_for(!side),
                     format!("{side} ({name}) lost on time"),
                     san_moves,
                 );
             }
-            clocks[mover] = clocks[mover].saturating_sub(reply.elapsed) + increment;
+            clocks[mover] = clocks[mover].saturating_sub(reply.elapsed) + added;
         }
         let Some(mv) = position.parse_uci_move(&reply.uci) else {
             return finish(
+                Termination::IllegalMove,
                 Outcome::win_for(!side),
                 format!("{side} ({name}) played an illegal move: {}", reply.uci),
                 san_moves,
@@ -277,6 +372,14 @@ mod tests {
             Some(TimeControl::Nodes(5000))
         );
         assert_eq!(TimeControl::parse("depth=3"), Some(TimeControl::Depth(3)));
+        assert_eq!(
+            TimeControl::parse("40/60"),
+            Some(TimeControl::Repeating {
+                moves: 40,
+                base: Duration::from_secs(60)
+            })
+        );
+        assert_eq!(TimeControl::parse("0/60"), None);
         assert_eq!(TimeControl::parse("fast"), None);
     }
 
@@ -288,6 +391,7 @@ mod tests {
             moves: ["f3", "e5", "g4", "Qh4#"].map(String::from).to_vec(),
             outcome: Outcome::BlackWins,
             reason: "checkmate".into(),
+            termination: Termination::Normal,
         };
         let pgn = game.to_string();
         assert!(pgn.contains("[Result \"0-1\"]"));

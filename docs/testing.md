@@ -30,7 +30,8 @@ cargo run --release -p cb2026-tools --bin match -- \
 ```
 
 - **`--tc`**: `8+0.08` (seconds + increment, the short time control), `40+0.4` (long),
-  `nodes=20000` or `depth=4` (machine-independent, good for quick checks).
+  `40/60` (40 moves in 60 seconds, repeating: tests `movestogo`), `nodes=20000` or `depth=4`
+  (machine-independent, good for quick checks).
 - **`--sprt elo0 elo1`**: `0 5` for a change meant to gain strength, `-5 0` for a
   simplification that must not lose any. The match stops when the test passes or fails.
 - **`--concurrency`**: games at a time. Use the number of cores minus one; in a 4-core cloud
@@ -38,6 +39,20 @@ cargo run --release -p cb2026-tools --bin match -- \
 - **`--openings`**: defaults to `tests/data/openings.epd` (50 positions, each played with both
   colours).
 - **Exit status**: 0 if the SPRT passed, 1 if it failed or was inconclusive.
+
+## Robustness runs
+
+The PRD asks for zero illegal moves and crashes over 10,000+ games per milestone, and zero time
+losses at 1+0.01, 10+0.1 and 40/60 repeating, with the default `Move Overhead`. The `match`
+tool's last lines count the games that ended badly, per engine:
+
+```text
+Problems for target/release/cb2026: 0 time losses, 0 illegal moves, 0 failures
+```
+
+followed by the reasons for the first few. A robustness run is a long match at each of those
+time controls (`--tc 1+0.01`, `--tc 10+0.1`, `--tc 40/60`), for example against the previous
+release.
 
 ## Long tests on the test Mac
 
