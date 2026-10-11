@@ -73,7 +73,10 @@ use std::time::{Duration, Instant};
 use cb2026_chess::{Move, Position};
 
 use eval::EvalParams;
-use search::{DEFAULT_DEPTH, INFINITY, MATE, MAX_PLY, RootResult, Searcher, Techniques, to_score};
+use search::{
+    DEFAULT_DEPTH, INFINITY, MATE, MAX_PLY, RootResult, Searcher, StopConditions, Techniques,
+    to_score,
+};
 use time::TimeParams;
 use tt::TranspositionTable;
 
@@ -186,6 +189,8 @@ pub struct Engine {
     pub time: TimeParams,
     /// The transposition table, kept from one search to the next.
     pub tt: TranspositionTable,
+    /// Killer moves, countermoves and history, for ordering quiet moves.
+    pub ordering: ordering::OrderingTables,
 }
 
 impl Engine {
@@ -197,6 +202,7 @@ impl Engine {
     /// Forgets everything learned in the previous game.
     pub fn new_game(&mut self) {
         self.tt.clear();
+        self.ordering.clear();
     }
 
     /// Replaces the transposition table with an empty one of about `megabytes` MB.
@@ -237,6 +243,7 @@ impl Engine {
         }
         // The previous search often left a best move for this position.
         self.tt.new_search();
+        self.ordering.new_search();
         if self.techniques.tt
             && let Some(mv) = self.tt.probe(position.hash()).and_then(|e| e.best_move)
             && let Some(at) = root_moves.iter().position(|&m| m == mv)
@@ -262,11 +269,14 @@ impl Engine {
         let mut searcher = Searcher::new(
             &self.params,
             &mut self.tt,
+            &mut self.ordering,
             self.techniques,
-            stop,
-            limits,
+            StopConditions {
+                stop,
+                deadline: budget.hard.map(|hard| start + hard),
+                max_nodes: limits.nodes,
+            },
             history,
-            budget.hard.map(|hard| start + hard),
         );
         let mut best: Option<RootResult> = None;
         for depth in 1..=max_depth {

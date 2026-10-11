@@ -34,6 +34,7 @@
 //! | `set alphabeta on\|off` | Switch alpha-beta off to compare with plain minimax |
 //! | `set quiescence on\|off`, `set mvvlva on\|off`, `set tt on\|off` | Switch the quiescence search, MVV-LVA move ordering or the transposition table off |
 //! | `set hash <MB>` | Transposition table size |
+//! | `set killers\|countermoves\|history on\|off` | Switch a quiet-move ordering heuristic off |
 //! | `eval` | The static evaluation, term by term |
 //! | `set pst on\|off`, `set tapered on\|off` | Switch the piece-square tables or the middlegame/endgame blend off |
 //! | `bench` | The fixed benchmark |
@@ -43,7 +44,8 @@
 //!
 //! ## Coming in later stages
 //!
-//! - **Stage 10 on:** the other explain commands: `explain`, `tree` and `stats`.
+//! - **By milestone M3 (stages 15–16):** the other explain commands: `eval diff`, `explain`,
+//!   `tree` and `stats`.
 //! - **Stage 19:** strength levels.
 //! - **M4:** `match`, a short match against another UCI engine.
 //!
@@ -107,6 +109,8 @@ Commands:
   set mvvlva on|off    Search captures first, biggest victim first
   set tt on|off        The transposition table: reuse results for positions seen before
   set hash <MB>        Transposition table size in megabytes (default 16)
+  set killers|countermoves|history on|off
+                       Quiet-move ordering heuristics
   set pst on|off       Piece-square tables (off: material only)
   set tapered on|off   Blend middlegame and endgame values by phase (off: middlegame only)
   eval                 The static evaluation of the position, term by term
@@ -669,6 +673,15 @@ impl Shell {
             (Some("tapered"), value) if on_off(value).is_some() => {
                 self.engine.params.tapered = on_off(value).unwrap_or(true);
             }
+            (Some("killers"), value) if on_off(value).is_some() => {
+                self.engine.techniques.killers = on_off(value).unwrap_or(true);
+            }
+            (Some("countermoves"), value) if on_off(value).is_some() => {
+                self.engine.techniques.countermoves = on_off(value).unwrap_or(true);
+            }
+            (Some("history"), value) if on_off(value).is_some() => {
+                self.engine.techniques.history = on_off(value).unwrap_or(true);
+            }
             (Some("tt"), value) if on_off(value).is_some() => {
                 self.engine.techniques.tt = on_off(value).unwrap_or(true);
             }
@@ -680,7 +693,7 @@ impl Shell {
             _ => return Response::text(SET_USAGE),
         }
         Response::text(format!(
-            "Sliding attacks: {}\nEngine moves: {}\nAlpha-beta pruning: {}\nQuiescence search: {}\nMVV-LVA ordering: {}\nTransposition table: {} ({} MB)\nPiece-square tables: {}\nTapered evaluation: {}",
+            "Sliding attacks: {}\nEngine moves: {}\nAlpha-beta pruning: {}\nQuiescence search: {}\nMVV-LVA ordering: {}\nTransposition table: {} ({} MB)\nPiece-square tables: {}\nTapered evaluation: {}\nKillers, countermoves, history: {}, {}, {}",
             match slider_method() {
                 SliderMethod::Rays => "walking rays",
                 SliderMethod::Magics => "magic bitboards",
@@ -700,6 +713,9 @@ impl Shell {
             self.engine.tt.megabytes(),
             on_off_text(self.engine.params.use_pst),
             on_off_text(self.engine.params.tapered),
+            on_off_text(self.engine.techniques.killers),
+            on_off_text(self.engine.techniques.countermoves),
+            on_off_text(self.engine.techniques.history),
         ))
     }
 
@@ -759,7 +775,7 @@ fn parse_move(pos: &Position, text: &str) -> Option<Move> {
 }
 
 /// Usage for the `set` command.
-const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set alphabeta|quiescence|mvvlva|tt|pst|tapered on|off";
+const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set alphabeta|quiescence|mvvlva|tt|killers|countermoves|history|pst|tapered on|off";
 
 /// How long the engine thinks per move by default in the shell.
 const DEFAULT_MOVETIME_MS: u64 = 1000;
