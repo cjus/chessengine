@@ -53,6 +53,7 @@ use cb2026_chess::{Move, Position};
 
 use crate::eval::{EvalParams, evaluate};
 use crate::ordering::{is_noisy, order_moves};
+use crate::tt::{Bound, TranspositionTable, score_from_tt, score_to_tt};
 use crate::{Limits, Score};
 
 /// The score of being checkmated right now (higher than any evaluation).
@@ -78,6 +79,9 @@ pub struct Techniques {
     /// MVV-LVA move ordering: captures first, biggest victim first. Off, moves are searched
     /// in generation order.
     pub mvv_lva: bool,
+    /// The transposition table: reuse results for positions already searched, and search
+    /// their best move first. Off, the table is neither read nor written.
+    pub tt: bool,
 }
 
 impl Default for Techniques {
@@ -86,6 +90,7 @@ impl Default for Techniques {
             alpha_beta: true,
             quiescence: true,
             mvv_lva: true,
+            tt: true,
         }
     }
 }
@@ -117,6 +122,7 @@ pub(crate) struct RootResult {
 /// The state of one search.
 pub(crate) struct Searcher<'a> {
     params: &'a EvalParams,
+    tt: &'a mut TranspositionTable,
     techniques: Techniques,
     stop: &'a AtomicBool,
     deadline: Option<Instant>,
@@ -132,6 +138,7 @@ pub(crate) struct Searcher<'a> {
 impl<'a> Searcher<'a> {
     pub(crate) fn new(
         params: &'a EvalParams,
+        tt: &'a mut TranspositionTable,
         techniques: Techniques,
         stop: &'a AtomicBool,
         limits: &Limits,
@@ -140,6 +147,7 @@ impl<'a> Searcher<'a> {
     ) -> Searcher<'a> {
         Searcher {
             params,
+            tt,
             techniques,
             stop,
             deadline,
@@ -220,11 +228,40 @@ impl<'a> Searcher<'a> {
             };
         }
 
+        // ANCHOR: tt_probe
+        // Transposition table: a deep enough result may settle this position at once, and in
+        // any case its best move is searched first.
+        let mut tt_move = None;
+        if self.techniques.tt
+            && let Some(entry) = self.tt.probe(pos.hash())
+        {
+            tt_move = entry.best_move.filter(|mv| moves.contains(mv));
+            if u32::from(entry.depth) >= depth {
+                let score = score_from_tt(entry.score, ply);
+                let usable = match entry.bound {
+                    Bound::Exact => true,
+                    Bound::Lower => score >= beta,
+                    Bound::Upper => score <= alpha,
+                };
+                if usable {
+                    pv.extend(tt_move);
+                    return score;
+                }
+            }
+        }
+        // ANCHOR_END: tt_probe
+
         let mut moves: Vec<Move> = moves.iter().copied().collect();
         if self.techniques.mvv_lva {
             order_moves(pos, &mut moves);
         }
+        if let Some(first) = tt_move {
+            moves.retain(|&mv| mv != first);
+            moves.insert(0, first);
+        }
+        let original_alpha = alpha;
         let mut best = -INFINITY;
+        let mut best_move = None;
         let mut child_pv = Vec::new();
         self.keys.push(pos.hash());
         for &mv in &moves {
@@ -236,6 +273,7 @@ impl<'a> Searcher<'a> {
             }
             if score > best {
                 best = score;
+                best_move = Some(mv);
                 if score > alpha {
                     alpha = score;
                     pv.clear();
@@ -249,6 +287,27 @@ impl<'a> Searcher<'a> {
             }
         }
         self.keys.pop();
+
+        // ANCHOR: tt_store
+        if self.techniques.tt && !self.aborted {
+            let bound = if best >= beta {
+                Bound::Lower
+            } else if best > original_alpha {
+                Bound::Exact
+            } else {
+                Bound::Upper
+            };
+            // After a fail low every move was refuted, so none of them is known to be best.
+            let move_to_store = if bound == Bound::Upper {
+                None
+            } else {
+                best_move
+            };
+            let score = score_to_tt(best, ply);
+            self.tt
+                .store(pos.hash(), move_to_store, score, depth, bound);
+        }
+        // ANCHOR_END: tt_store
         best
     }
     // ANCHOR_END: negamax
@@ -380,6 +439,11 @@ impl<'a> Searcher<'a> {
     pub(crate) fn aborted(&self) -> bool {
         self.aborted
     }
+
+    /// How full the transposition table is, in permille.
+    pub(crate) fn hashfull(&self) -> u32 {
+        self.tt.hashfull()
+    }
 }
 
 #[cfg(test)]
@@ -391,7 +455,8 @@ mod tests {
         let params = EvalParams::default();
         let stop = AtomicBool::new(false);
         let limits = Limits::depth(depth);
-        let mut searcher = Searcher::new(&params, techniques, &stop, &limits, &[], None);
+        let mut tt = TranspositionTable::new(1);
+        let mut searcher = Searcher::new(&params, &mut tt, techniques, &stop, &limits, &[], None);
         let moves: Vec<Move> = pos.legal_moves().iter().copied().collect();
         searcher.search_root(&pos, &moves, depth)
     }
@@ -432,9 +497,11 @@ mod tests {
     #[test]
     fn alpha_beta_gives_the_minimax_score_with_fewer_nodes() {
         let fen = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
-        // Without quiescence: a minimax quiescence search would take minutes.
+        // Without quiescence (a minimax quiescence search would take minutes) or the
+        // transposition table (its bounds and cutoffs come from alpha-beta).
         let plain = Techniques {
             quiescence: false,
+            tt: false,
             ..Techniques::default()
         };
         let with = search(fen, 3, plain);

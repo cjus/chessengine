@@ -6,6 +6,8 @@
 //! > uci
 //! < id name cb2026 0.1.0
 //! < id author the cb2026 authors
+//! < option name Hash type spin default 16 min 1 max 65536
+//! < option name Clear Hash type button
 //! < option name Move Overhead type spin default 30 min 0 max 5000
 //! < option name UCI_Chess960 type check default false
 //! < uciok
@@ -13,7 +15,7 @@
 //! < readyok
 //! > position startpos moves e2e4 e7e5
 //! > go wtime 60000 btime 60000 winc 1000 binc 1000
-//! < info depth 1 seldepth 1 score cp 0 nodes 29 time 0 pv g1f3
+//! < info depth 1 seldepth 1 score cp 0 nodes 29 nps 29000 time 1 hashfull 0 pv g1f3
 //! < bestmove g1f3
 //! > quit
 //! ```
@@ -33,6 +35,7 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use cb2026_chess::{Move, Position};
+use cb2026_engine::tt::{DEFAULT_HASH_MB, MAX_HASH_MB};
 use cb2026_engine::{AUTHOR, Engine, Limits, SearchInfo, id_name};
 
 /// Where the engine's replies go. Shared between the command loop and the search thread.
@@ -124,6 +127,13 @@ impl Session {
                 send(&self.output, &format!("id author {AUTHOR}"));
                 send(
                     &self.output,
+                    &format!(
+                        "option name Hash type spin default {DEFAULT_HASH_MB} min 1 max {MAX_HASH_MB}"
+                    ),
+                );
+                send(&self.output, "option name Clear Hash type button");
+                send(
+                    &self.output,
                     "option name Move Overhead type spin default 30 min 0 max 5000",
                 );
                 send(
@@ -178,6 +188,22 @@ impl Session {
         // Option names are case-insensitive in UCI.
         match name.to_ascii_lowercase().as_str() {
             "uci_chess960" => self.options.chess960 = value.eq_ignore_ascii_case("true"),
+            "hash" => match value.parse::<usize>() {
+                Ok(mb) if (1..=MAX_HASH_MB).contains(&mb) => {
+                    if let Some(engine) = self.engine.as_mut() {
+                        engine.set_hash_size(mb);
+                    }
+                }
+                _ => send(
+                    &self.output,
+                    &format!("info string Hash must be 1-{MAX_HASH_MB} (MB), not '{value}'"),
+                ),
+            },
+            "clear hash" => {
+                if let Some(engine) = self.engine.as_mut() {
+                    engine.tt.clear();
+                }
+            }
             "move overhead" => match value.parse::<u64>() {
                 Ok(ms) if ms <= 5000 => {
                     if let Some(engine) = self.engine.as_mut() {
@@ -317,13 +343,15 @@ fn info_line(info: &SearchInfo, chess960: bool) -> String {
         .iter()
         .map(|mv: &Move| mv.to_uci(chess960))
         .collect();
+    let ms = info.time.as_millis();
+    let nps = info.nodes as u128 * 1000 / ms.max(1);
     format!(
-        "info depth {} seldepth {} score {} nodes {} time {} pv {}",
+        "info depth {} seldepth {} score {} nodes {} nps {nps} time {ms} hashfull {} pv {}",
         info.depth,
         info.seldepth,
         info.score,
         info.nodes,
-        info.time.as_millis(),
+        info.hashfull,
         pv.join(" ")
     )
 }
@@ -439,7 +467,7 @@ mod tests {
     #[test]
     fn bad_input_is_reported_not_fatal() {
         let lines = session(
-            "position fen not a fen\nposition startpos moves e2e5\nfrobnicate\nsetoption name Hash value 64\nisready\n",
+            "position fen not a fen\nposition startpos moves e2e5\nfrobnicate\nsetoption name Frobnicity value 64\nisready\n",
         );
         assert!(
             lines
@@ -452,7 +480,11 @@ mod tests {
                 .iter()
                 .any(|l| l.contains("unknown command 'frobnicate'"))
         );
-        assert!(lines.iter().any(|l| l.contains("unknown option 'Hash'")));
+        assert!(
+            lines
+                .iter()
+                .any(|l| l.contains("unknown option 'Frobnicity'"))
+        );
         assert_eq!(lines.last().unwrap(), "readyok");
     }
 
@@ -469,6 +501,27 @@ mod tests {
             bad.iter()
                 .any(|l| l.contains("Move Overhead must be 0-5000"))
         );
+    }
+
+    #[test]
+    fn hash_options() {
+        let lines = session(
+            "uci\nsetoption name Hash value 1\nsetoption name Clear Hash\nposition startpos\ngo depth 3\nisready\n",
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|l| l.starts_with("option name Hash type spin default 16"))
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|l| l == "option name Clear Hash type button")
+        );
+        assert!(lines.iter().any(|l| l.contains(" hashfull ")));
+        assert!(!lines.iter().any(|l| l.starts_with("info string")));
+        let bad = session("setoption name Hash value 0\nisready\n");
+        assert!(bad.iter().any(|l| l.contains("Hash must be 1-65536")));
     }
 
     #[test]

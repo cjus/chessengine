@@ -32,7 +32,8 @@
 //! | `set depth <N>`, `set movetime <MS>` | How long the engine thinks about its own moves |
 //! | `think on\|off` | Show the engine's thinking depth by depth |
 //! | `set alphabeta on\|off` | Switch alpha-beta off to compare with plain minimax |
-//! | `set quiescence on\|off`, `set mvvlva on\|off` | Switch the quiescence search or MVV-LVA move ordering off |
+//! | `set quiescence on\|off`, `set mvvlva on\|off`, `set tt on\|off` | Switch the quiescence search, MVV-LVA move ordering or the transposition table off |
+//! | `set hash <MB>` | Transposition table size |
 //! | `bench` | The fixed benchmark |
 //! | `bb <set>` | Show a bitboard: `occupied`, `empty`, `white`, `black`, `checkers`, `pinned`, or a piece letter (`P`, `n`, ...) |
 //! | `help` | List commands |
@@ -66,6 +67,7 @@ use std::sync::atomic::AtomicBool;
 use cb2026_chess::{Bitboard, Color, Move, Piece, PieceType, Position, Square};
 use std::time::Duration;
 
+use cb2026_engine::tt::MAX_HASH_MB;
 use cb2026_engine::{Engine, Limits, NAME, Score, SearchInfo, bench, search};
 pub use render::Style;
 
@@ -101,6 +103,8 @@ Commands:
   set quiescence on|off
                        Search captures past the horizon (off: evaluate mid-exchange)
   set mvvlva on|off    Search captures first, biggest victim first
+  set tt on|off        The transposition table: reuse results for positions seen before
+  set hash <MB>        Transposition table size in megabytes (default 16)
   bench                The fixed benchmark: total nodes and speed
   bb <set>             Show a bitboard: occupied, empty, white, black, checkers,
                        pinned, or a piece letter (P N B R Q K for White, p n b r q k)
@@ -617,11 +621,18 @@ impl Shell {
             (Some("mvvlva"), value) if on_off(value).is_some() => {
                 self.engine.techniques.mvv_lva = on_off(value).unwrap_or(true);
             }
+            (Some("tt"), value) if on_off(value).is_some() => {
+                self.engine.techniques.tt = on_off(value).unwrap_or(true);
+            }
+            (Some("hash"), Some(mb)) => match mb.parse::<usize>() {
+                Ok(mb) if (1..=MAX_HASH_MB).contains(&mb) => self.engine.set_hash_size(mb),
+                _ => return Response::text(format!("Usage: set hash <1-{MAX_HASH_MB}>")),
+            },
             (None, _) => {}
             _ => return Response::text(SET_USAGE),
         }
         Response::text(format!(
-            "Sliding attacks: {}\nEngine moves: {}\nAlpha-beta pruning: {}\nQuiescence search: {}\nMVV-LVA ordering: {}",
+            "Sliding attacks: {}\nEngine moves: {}\nAlpha-beta pruning: {}\nQuiescence search: {}\nMVV-LVA ordering: {}\nTransposition table: {} ({} MB)",
             match slider_method() {
                 SliderMethod::Rays => "walking rays",
                 SliderMethod::Magics => "magic bitboards",
@@ -637,6 +648,8 @@ impl Shell {
             },
             on_off_text(self.engine.techniques.quiescence),
             on_off_text(self.engine.techniques.mvv_lva),
+            on_off_text(self.engine.techniques.tt),
+            self.engine.tt.megabytes(),
         ))
     }
 
@@ -696,7 +709,7 @@ fn parse_move(pos: &Position, text: &str) -> Option<Move> {
 }
 
 /// Usage for the `set` command.
-const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set alphabeta|quiescence|mvvlva on|off";
+const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set alphabeta|quiescence|mvvlva|tt on|off";
 
 /// How long the engine thinks per move by default in the shell.
 const DEFAULT_MOVETIME_MS: u64 = 1000;
@@ -985,6 +998,19 @@ mod tests {
                 .output
                 .contains("MVV-LVA ordering: off")
         );
+        assert!(
+            shell
+                .execute("set hash 2")
+                .output
+                .contains("Transposition table: on (2 MB)")
+        );
+        assert!(
+            shell
+                .execute("set tt off")
+                .output
+                .contains("Transposition table: off")
+        );
+        assert!(shell.execute("set hash 0").output.starts_with("Usage"));
         assert!(shell.execute("set depth 0").output.starts_with("Usage"));
         assert!(shell.execute("set colour blue").output.starts_with("Usage"));
     }
