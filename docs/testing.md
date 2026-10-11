@@ -72,6 +72,13 @@ followed by the reasons for the first few. A robustness run is a long match at e
 time controls (`--tc 1+0.01`, `--tc 10+0.1`, `--tc 40/60`), for example against the previous
 release.
 
+```sh
+## Quick matches from the shell
+
+`match <engine> <games> [tc]` and `selfplay <games> [tc]` in the shell play a few games with
+the shell's own engine settings (see the book's "How to use this book"). They're for
+quick looks, not decisions: they have no SPRT.
+
 ## Long tests on the test Mac
 
 ```sh

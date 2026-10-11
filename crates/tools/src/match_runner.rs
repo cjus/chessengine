@@ -14,6 +14,10 @@ use crate::game::{Game, Outcome, TimeControl, play_game};
 use crate::sprt::{Score, Sprt, Verdict};
 use crate::uci_client::UciEngine;
 
+/// The opening positions shipped with cb2026 (`tests/data/openings.epd`): 50 balanced
+/// positions a few moves into common openings.
+pub const DEFAULT_OPENINGS: &str = include_str!("../../../tests/data/openings.epd");
+
 /// Reads opening positions: one per line, the FEN before any `;`; `#` lines are comments.
 pub fn parse_openings(text: &str) -> Vec<String> {
     text.lines()
@@ -171,7 +175,7 @@ mod tests {
 
     #[test]
     fn the_shipped_openings_are_valid() {
-        let openings = parse_openings(include_str!("../../../tests/data/openings.epd"));
+        let openings = parse_openings(DEFAULT_OPENINGS);
         assert_eq!(openings.len(), 50);
         for fen in openings {
             let pos = cb2026_chess::Position::from_fen(&fen).unwrap();

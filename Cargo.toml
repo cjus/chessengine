@@ -21,6 +21,7 @@ cb2026-engine = { path = "crates/engine" }
 cb2026-protocol = { path = "crates/protocol" }
 cb2026-shell = { path = "crates/shell" }
 cb2026-syzygy = { path = "crates/syzygy" }
+cb2026-tools = { path = "crates/tools" }
 
 # Lints shared by every crate (each crate opts in with `[lints] workspace = true`).
 [workspace.lints.rust]

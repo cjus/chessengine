@@ -56,12 +56,10 @@
 //! | `set mobility\|pawns\|pieces\|kingsafety\|tempo on\|off` | Switch a group of evaluation terms off |
 //! | `bench` | The fixed benchmark |
 //! | `bb <set>` | Show a bitboard: `occupied`, `empty`, `white`, `black`, `checkers`, `pinned`, or a piece letter (`P`, `n`, ...) |
+//! | `match <engine> <games> [tc]`, `selfplay <games> [tc]` | A short match against another UCI engine, or against a copy of cb2026 |
+//! | `uci`, `xboard` | Switch the session to a protocol |
 //! | `help` | List commands |
 //! | `quit`, `exit` | Leave |
-//!
-//! ## Coming in later stages
-//!
-//! - **M4:** `match`, a short match against another UCI engine.
 //!
 //! The full plan is in `docs/PRD.md`, "The interactive shell".
 
@@ -70,6 +68,7 @@
 mod explain;
 mod game;
 pub mod render;
+mod versus;
 
 use std::io::{self, BufRead, Write};
 
@@ -93,6 +92,7 @@ use cb2026_engine::stats::SearchStats;
 use cb2026_engine::tablebase::{self, TbWdl};
 use cb2026_engine::tt::MAX_HASH_MB;
 use cb2026_engine::{Engine, Limits, MAX_THREADS, NAME, Score, SearchInfo, bench, eval, search};
+pub use cb2026_protocol::Protocol;
 use game::{Clock, Outcome, Played};
 pub use render::Style;
 
@@ -176,6 +176,12 @@ Commands:
   bench                The fixed benchmark: total nodes and speed
   bb <set>             Show a bitboard: occupied, empty, white, black, checkers,
                        pinned, or a piece letter (P N B R Q K for White, p n b r q k)
+  match <engine> <games> [tc] [chess960] [openings <file>] [pgn <file>]
+                       A short match against another UCI engine (default 10+0.1 per
+                       game; also nodes=N or depth=N), saved as PGN, with an Elo estimate
+  selfplay <games> [tc] ...
+                       The same against a copy of cb2026 at default settings
+  uci, xboard          Switch this session to the UCI or XBoard protocol
   help                 This list
   quit, exit           Leave the shell
 
@@ -188,13 +194,16 @@ pub struct Response {
     pub output: String,
     /// Whether the shell should stop after this command.
     pub quit: bool,
+    /// A protocol to switch the session to (`uci` or `xboard`): the shell stops, and the
+    /// program carries on in that protocol with the rest of the input.
+    pub switch_to: Option<Protocol>,
 }
 
 impl Response {
     fn text(output: impl Into<String>) -> Response {
         Response {
             output: output.into(),
-            quit: false,
+            ..Response::default()
         }
     }
 }
@@ -221,6 +230,8 @@ pub struct Shell {
     think: bool,
     /// What the last search did, for `stats`.
     last_stats: Option<SearchStats>,
+    /// Whether a person is typing at a terminal (long commands then redraw a live board).
+    interactive: bool,
 }
 
 impl Shell {
@@ -243,6 +254,7 @@ impl Shell {
             engine_limit: EngineLimit::Movetime(DEFAULT_MOVETIME_MS),
             think: true,
             last_stats: None,
+            interactive: false,
         }
     }
 
@@ -251,8 +263,19 @@ impl Shell {
         &self.position
     }
 
+    /// The engine, with the settings made in the shell.
+    pub fn into_engine(self) -> Engine {
+        self.engine
+    }
+
     /// Runs one command line.
     pub fn execute(&mut self, line: &str) -> Response {
+        self.execute_with(line, &mut |_| {})
+    }
+
+    /// Runs one command line, passing progress reports from long commands (`match`) to
+    /// `progress` as they happen.
+    pub fn execute_with(&mut self, line: &str, progress: &mut dyn FnMut(&str)) -> Response {
         let line = line.trim();
         let (command, args) = match line.split_once(char::is_whitespace) {
             Some((command, args)) => (command, args.trim()),
@@ -262,9 +285,19 @@ impl Shell {
             "" => Response::default(),
             "help" | "?" => Response::text(HELP),
             "quit" | "exit" => Response {
-                output: String::new(),
                 quit: true,
+                ..Response::default()
             },
+            "uci" | "xboard" => Response {
+                switch_to: Some(if command == "uci" {
+                    Protocol::Uci
+                } else {
+                    Protocol::Xboard
+                }),
+                ..Response::default()
+            },
+            "match" => self.play_match(args, false, progress),
+            "selfplay" => self.play_match(args, true, progress),
             "new" | "startpos" => {
                 self.set_position(Position::startpos());
                 self.show()
@@ -1134,7 +1167,8 @@ fn plural(n: usize) -> &'static str {
     if n == 1 { "" } else { "s" }
 }
 
-/// Runs the shell until `quit` or the end of the input.
+/// Runs the shell until `quit`, the end of the input, or `uci`/`xboard`, which returns the
+/// protocol to switch to (the caller then carries on with the rest of `input`).
 ///
 /// When `interactive` is true (a person at a terminal) it prints a welcome line, the starting
 /// board and a prompt before each command; when reading a script it prints only command
@@ -1144,7 +1178,8 @@ pub fn run<R: BufRead, W: Write>(
     input: R,
     mut output: W,
     interactive: bool,
-) -> io::Result<()> {
+) -> io::Result<Option<Protocol>> {
+    shell.interactive = interactive;
     if interactive {
         writeln!(
             output,
@@ -1162,7 +1197,12 @@ pub fn run<R: BufRead, W: Write>(
         let Some(line) = lines.next() else {
             break;
         };
-        let response = shell.execute(&line?);
+        let line = line?;
+        let response = shell.execute_with(&line, &mut |text| {
+            // Progress is best effort: a failed write shows up on the next real one.
+            let _ = write!(output, "{text}");
+            let _ = output.flush();
+        });
         if !response.output.is_empty() {
             write!(output, "{}", response.output)?;
             if !response.output.ends_with('\n') {
@@ -1172,11 +1212,14 @@ pub fn run<R: BufRead, W: Write>(
         if response.quit {
             break;
         }
+        if response.switch_to.is_some() {
+            return Ok(response.switch_to);
+        }
     }
     if interactive {
         writeln!(output)?;
     }
-    Ok(())
+    Ok(None)
 }
 
 #[cfg(test)]
@@ -1184,6 +1227,10 @@ mod tests {
     use super::*;
 
     const KIWIPETE: &str = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
+
+    pub(crate) fn ascii_shell_for_tests() -> Shell {
+        ascii_shell()
+    }
 
     fn ascii_shell() -> Shell {
         Shell::with_engine(

@@ -173,6 +173,21 @@ pub const TIME_MARGIN: Duration = Duration::from_millis(50);
 
 /// Plays one game from `start_fen`; `engines[0]` plays White.
 pub fn play_game(engines: [&mut UciEngine; 2], start_fen: &str, tc: TimeControl) -> Game {
+    play_game_watched(engines, start_fen, tc, &mut |_, _, _| {})
+}
+
+/// Called after each move: the position, the moves so far in SAN, and the clocks (White's,
+/// Black's) when the game has them.
+pub type OnMove<'a> = dyn FnMut(&Position, &[String], Option<[Duration; 2]>) + 'a;
+
+/// [`play_game`], calling `on_move` after each move with the position, the moves so far (in
+/// SAN) and the clocks (White's, Black's) when the game has them.
+pub fn play_game_watched(
+    engines: [&mut UciEngine; 2],
+    start_fen: &str,
+    tc: TimeControl,
+    on_move: &mut OnMove<'_>,
+) -> Game {
     let players = [engines[0].name.clone(), engines[1].name.clone()];
     let mut engines = engines;
     let mut position = Position::from_fen(start_fen).expect("opening FENs are valid");
@@ -344,6 +359,8 @@ pub fn play_game(engines: [&mut UciEngine; 2], start_fen: &str, tc: TimeControl)
         uci_moves.push(reply.uci);
         position.make_move(mv);
         hashes.push(position.hash());
+        let clocks = matches!(tc, TimeControl::Clock { .. }).then_some(clocks);
+        on_move(&position, &san_moves, clocks);
     }
 }
 

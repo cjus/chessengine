@@ -70,6 +70,8 @@ version = "0.1.0"
 dependencies = [
  "cb2026-chess",
  "cb2026-engine",
+ "cb2026-protocol",
+ "cb2026-tools",
 ]
 
 [[package]]
