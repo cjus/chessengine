@@ -37,6 +37,7 @@
 //! | `set killers\|countermoves\|history on\|off` | Switch a quiet-move ordering heuristic off |
 //! | `set pvs on\|off`, `set aspiration on\|off` | Principal variation search; aspiration windows |
 //! | `set nullmove on\|off` | Null-move pruning |
+//! | `set lmr on\|off`, `set lmp on\|off` | Late move reductions; late move pruning |
 //! | `eval` | The static evaluation, term by term |
 //! | `set pst on\|off`, `set tapered on\|off` | Switch the piece-square tables or the middlegame/endgame blend off |
 //! | `bench` | The fixed benchmark |
@@ -117,6 +118,8 @@ Commands:
   set aspiration on|off
                        Start each depth with a narrow window around the last score
   set nullmove on|off  Null-move pruning
+  set lmr on|off       Late move reductions: search late quiet moves less deeply
+  set lmp on|off       Late move pruning: skip late quiet moves near the leaves
   set pst on|off       Piece-square tables (off: material only)
   set tapered on|off   Blend middlegame and endgame values by phase (off: middlegame only)
   eval                 The static evaluation of the position, term by term
@@ -697,6 +700,12 @@ impl Shell {
             (Some("nullmove"), value) if on_off(value).is_some() => {
                 self.engine.techniques.null_move = on_off(value).unwrap_or(true);
             }
+            (Some("lmr"), value) if on_off(value).is_some() => {
+                self.engine.techniques.lmr = on_off(value).unwrap_or(true);
+            }
+            (Some("lmp"), value) if on_off(value).is_some() => {
+                self.engine.techniques.late_move_pruning = on_off(value).unwrap_or(true);
+            }
             (Some("tt"), value) if on_off(value).is_some() => {
                 self.engine.techniques.tt = on_off(value).unwrap_or(true);
             }
@@ -708,7 +717,7 @@ impl Shell {
             _ => return Response::text(SET_USAGE),
         }
         Response::text(format!(
-            "Sliding attacks: {}\nEngine moves: {}\nAlpha-beta pruning: {}\nQuiescence search: {}\nMVV-LVA ordering: {}\nTransposition table: {} ({} MB)\nPiece-square tables: {}\nTapered evaluation: {}\nKillers, countermoves, history: {}, {}, {}\nPVS, aspiration windows: {}, {}\nNull-move pruning: {}",
+            "Sliding attacks: {}\nEngine moves: {}\nAlpha-beta pruning: {}\nQuiescence search: {}\nMVV-LVA ordering: {}\nTransposition table: {} ({} MB)\nPiece-square tables: {}\nTapered evaluation: {}\nKillers, countermoves, history: {}, {}, {}\nPVS, aspiration windows: {}, {}\nNull-move pruning: {}\nLate move reductions, pruning: {}, {}",
             match slider_method() {
                 SliderMethod::Rays => "walking rays",
                 SliderMethod::Magics => "magic bitboards",
@@ -734,6 +743,8 @@ impl Shell {
             on_off_text(self.engine.techniques.pvs),
             on_off_text(self.engine.techniques.aspiration),
             on_off_text(self.engine.techniques.null_move),
+            on_off_text(self.engine.techniques.lmr),
+            on_off_text(self.engine.techniques.late_move_pruning),
         ))
     }
 
@@ -793,7 +804,7 @@ fn parse_move(pos: &Position, text: &str) -> Option<Move> {
 }
 
 /// Usage for the `set` command.
-const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set alphabeta|quiescence|mvvlva|tt|killers|countermoves|history|pvs|aspiration|nullmove|pst|tapered on|off";
+const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set alphabeta|quiescence|mvvlva|tt|killers|countermoves|history|pvs|aspiration|nullmove|lmr|lmp|pst|tapered on|off";
 
 /// How long the engine thinks per move by default in the shell.
 const DEFAULT_MOVETIME_MS: u64 = 1000;

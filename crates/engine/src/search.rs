@@ -47,6 +47,19 @@
 //! endgames), so null moves are not tried without pieces other than pawns. They are also not
 //! tried in check (passing would be illegal), twice in a row, or on the principal variation.
 //!
+//! ## Late move reductions and late move pruning (stage 13)
+//!
+//! With good ordering, a cutoff almost always comes from one of the first few moves. Moves
+//! late in the list are rarely best, so **late move reductions** (LMR) search them less
+//! deeply: the reduction grows with the depth and with the move's position in the list
+//! (`0.75 + ln(depth) × ln(move number) / 2.25` plies). If a reduced move surprises by
+//! beating alpha, it is searched again at full depth. Captures, checks, moves while in check
+//! and the first moves are never reduced.
+//!
+//! **Late move pruning** (LMP) goes further near the leaves: at depth 3 or less, outside the
+//! principal variation, once enough quiet moves have been tried (`3 + depth²`), the remaining
+//! quiet moves are not searched at all.
+//!
 //! ## Quiescence search
 //!
 //! Stopping the search at a fixed depth and evaluating there is dangerous: the last move
@@ -113,6 +126,18 @@ pub struct SearchParams {
     pub null_reduction: u32,
     /// ...plus one more per this many plies of depth.
     pub null_depth_divisor: u32,
+    /// Late move reductions start at this depth...
+    pub lmr_min_depth: u32,
+    /// ...for moves after this many have been searched.
+    pub lmr_min_moves: u32,
+    /// The reduction's constant part, in hundredths of a ply.
+    pub lmr_base: u32,
+    /// The divisor of `ln(depth) × ln(move number)`, in hundredths.
+    pub lmr_divisor: u32,
+    /// Late move pruning applies up to this depth...
+    pub lmp_max_depth: u32,
+    /// ...once `lmp_base + depth²` quiet moves have been tried.
+    pub lmp_base: u32,
 }
 
 impl Default for SearchParams {
@@ -124,6 +149,12 @@ impl Default for SearchParams {
             null_min_depth: 3,
             null_reduction: 3,
             null_depth_divisor: 6,
+            lmr_min_depth: 3,
+            lmr_min_moves: 3,
+            lmr_base: 75,
+            lmr_divisor: 225,
+            lmp_max_depth: 3,
+            lmp_base: 3,
         }
     }
 }
@@ -158,6 +189,10 @@ pub struct Techniques {
     /// Null-move pruning: cut off when passing still keeps the score above beta. Only at
     /// null-window nodes, so it needs PVS.
     pub null_move: bool,
+    /// Late move reductions: search late quiet moves less deeply (needs PVS).
+    pub lmr: bool,
+    /// Late move pruning: skip late quiet moves near the leaves.
+    pub late_move_pruning: bool,
 }
 
 impl Default for Techniques {
@@ -173,6 +208,8 @@ impl Default for Techniques {
             pvs: true,
             aspiration: true,
             null_move: true,
+            lmr: true,
+            late_move_pruning: true,
         }
     }
 }
@@ -231,6 +268,44 @@ pub(crate) struct Searcher<'a> {
     /// The moves from the root to the current position (for the countermove heuristic), with
     /// `None` for a null move.
     path: Vec<Option<Move>>,
+    /// Late move reductions by depth and move number (see [`lmr_table`]).
+    lmr: Vec<[u8; LMR_TABLE_SIZE]>,
+}
+
+/// The late move reduction table covers depths and move numbers below this.
+const LMR_TABLE_SIZE: usize = 64;
+
+// ANCHOR: lmr_table
+/// The late move reduction for each depth and move number:
+/// `base + ln(depth) × ln(move number) / divisor`, rounded down.
+fn lmr_table(p: &SearchParams) -> Vec<[u8; LMR_TABLE_SIZE]> {
+    let base = f64::from(p.lmr_base) / 100.0;
+    let divisor = f64::from(p.lmr_divisor) / 100.0;
+    (0..LMR_TABLE_SIZE)
+        .map(|depth| {
+            let mut row = [0; LMR_TABLE_SIZE];
+            for (index, r) in row.iter_mut().enumerate().skip(1) {
+                if depth > 0 {
+                    let value = base + (depth as f64).ln() * (index as f64).ln() / divisor;
+                    *r = value.max(0.0) as u8;
+                }
+            }
+            row
+        })
+        .collect()
+}
+// ANCHOR_END: lmr_table
+
+/// How [`Searcher::search_move`] searches a move.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MoveSearch {
+    /// The first move: full window, full depth.
+    First,
+    /// A later move: null window (PVS), reduced by this many plies first (LMR).
+    Later {
+        /// The late move reduction, in plies.
+        reduction: u32,
+    },
 }
 
 impl<'a> Searcher<'a> {
@@ -257,6 +332,7 @@ impl<'a> Searcher<'a> {
             aborted: false,
             keys: history.to_vec(),
             path: Vec::new(),
+            lmr: lmr_table(&search_params),
         }
     }
 
@@ -411,11 +487,54 @@ impl<'a> Searcher<'a> {
         // Quiet moves searched so far that didn't cause a cutoff (for the history penalty).
         let mut quiets_tried = Vec::new();
         self.keys.push(pos.hash());
+        let in_check = pos.in_check();
+        let pv_node = beta - alpha > 1;
         for (index, mv) in picker.enumerate() {
+            let quiet = !is_noisy(mv);
             let mut child = pos.clone();
             child.make_move(mv);
+            let gives_check = child.in_check();
+            let ordinary = quiet && !in_check && !gives_check;
+
+            // ANCHOR: lmp
+            // Late move pruning: near the leaves, after enough quiet moves, skip the rest
+            // (once a move has shown we aren't simply getting mated).
+            if self.techniques.late_move_pruning
+                && ordinary
+                && !pv_node
+                && depth <= p.lmp_max_depth
+                && best > -MATE + MAX_PLY as i32
+                && quiets_tried.len() as u32 >= p.lmp_base + depth * depth
+            {
+                continue;
+            }
+            // ANCHOR_END: lmp
+
+            // ANCHOR: lmr
+            let how = if index == 0 {
+                MoveSearch::First
+            } else if self.techniques.lmr
+                && ordinary
+                && depth >= p.lmr_min_depth
+                && index as u32 >= p.lmr_min_moves
+            {
+                let row = &self.lmr[(depth as usize).min(LMR_TABLE_SIZE - 1)];
+                let mut reduction = u32::from(row[index.min(LMR_TABLE_SIZE - 1)]);
+                // Reduce the principal variation less: its exact score matters.
+                if pv_node {
+                    reduction = reduction.saturating_sub(1);
+                }
+                MoveSearch::Later {
+                    // Never reduce into the quiescence search.
+                    reduction: reduction.min(depth - 2),
+                }
+            } else {
+                MoveSearch::Later { reduction: 0 }
+            };
+            // ANCHOR_END: lmr
+
             self.path.push(Some(mv));
-            let score = self.search_move(&child, depth - 1, alpha, beta, index == 0, &mut child_pv);
+            let score = self.search_move(&child, depth - 1, alpha, beta, how, &mut child_pv);
             self.path.pop();
             if self.aborted {
                 break;
@@ -470,29 +589,34 @@ impl<'a> Searcher<'a> {
 
     // ANCHOR: pvs
     /// The score of the move that led to `child` (the last move on the path), from the
-    /// mover's side: searched with the full window if it is the `first` move, otherwise (with
-    /// PVS on) with a null window first, and again with the full window only if it beats
-    /// `alpha`.
+    /// mover's side, searched to `depth`.
+    ///
+    /// The first move gets the full window. With PVS on, a later move gets a null window
+    /// first, at a reduced depth if LMR chose a reduction; if it beats `alpha` it is searched
+    /// again at full depth, and then with the full window if it is inside it.
     fn search_move(
         &mut self,
         child: &Position,
         depth: u32,
         alpha: i32,
         beta: i32,
-        first: bool,
+        how: MoveSearch,
         pv: &mut Vec<Move>,
     ) -> i32 {
         let ply = self.path.len() as u32;
         let pvs = self.techniques.pvs && self.techniques.alpha_beta;
-        if first || !pvs {
-            return -self.negamax(child, depth, ply, -beta, -alpha, pv);
+        let reduction = match how {
+            MoveSearch::Later { reduction } if pvs => reduction,
+            _ => return -self.negamax(child, depth, ply, -beta, -alpha, pv),
+        };
+        let mut score = -self.negamax(child, depth - reduction, ply, -alpha - 1, -alpha, pv);
+        if score > alpha && reduction > 0 && !self.aborted {
+            score = -self.negamax(child, depth, ply, -alpha - 1, -alpha, pv);
         }
-        let score = -self.negamax(child, depth, ply, -alpha - 1, -alpha, pv);
         if score > alpha && score < beta && !self.aborted {
-            -self.negamax(child, depth, ply, -beta, -alpha, pv)
-        } else {
-            score
+            score = -self.negamax(child, depth, ply, -beta, -alpha, pv);
         }
+        score
     }
     // ANCHOR_END: pvs
 
@@ -615,7 +739,11 @@ impl<'a> Searcher<'a> {
                 depth.saturating_sub(1),
                 alpha,
                 beta,
-                index == 0,
+                if index == 0 {
+                    MoveSearch::First
+                } else {
+                    MoveSearch::Later { reduction: 0 }
+                },
                 &mut child_pv,
             );
             self.path.pop();
@@ -730,6 +858,18 @@ fn has_pieces(pos: &Position) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The techniques that never change the score (alpha-beta, ordering, TT, PVS), without
+    /// the selective ones (null move, LMR, LMP), for tests that compare node counts at equal
+    /// scores.
+    fn sound() -> Techniques {
+        Techniques {
+            null_move: false,
+            lmr: false,
+            late_move_pruning: false,
+            ..Techniques::default()
+        }
+    }
 
     fn search(fen: &str, depth: u32, techniques: Techniques) -> RootResult {
         search_with_window(fen, depth, techniques, None)
@@ -880,7 +1020,7 @@ mod tests {
             killers: false,
             countermoves: false,
             history: false,
-            ..Techniques::default()
+            ..sound()
         };
         let ordered = search(fen, 4, plain);
         let unordered = search(
@@ -912,11 +1052,11 @@ mod tests {
             killers: false,
             countermoves: false,
             history: false,
-            ..Techniques::default()
+            ..sound()
         };
         let (mut with_nodes, mut without_nodes) = (0, 0);
         for fen in fens {
-            let with = search(fen, 4, Techniques::default());
+            let with = search(fen, 4, sound());
             let without = search(fen, 4, off);
             assert_eq!(with.score, without.score, "{fen}");
             with_nodes += with.nodes;
@@ -931,13 +1071,13 @@ mod tests {
     #[test]
     fn pvs_gives_the_same_score_with_fewer_nodes() {
         let fen = "r1bq1rk1/pppp1ppp/2n2n2/2b1p3/2B1P3/2N2N2/PPPP1PPP/R1BQ1RK1 w - - 0 1";
-        let with = search(fen, 5, Techniques::default());
+        let with = search(fen, 5, sound());
         let without = search(
             fen,
             5,
             Techniques {
                 pvs: false,
-                ..Techniques::default()
+                ..sound()
             },
         );
         assert_eq!(with.score, without.score);
@@ -1004,6 +1144,49 @@ mod tests {
         );
         assert_eq!(with.nodes, without.nodes);
         assert_eq!(with.score, without.score);
+    }
+
+    #[test]
+    fn lmr_table_grows_with_depth_and_move_number() {
+        let table = lmr_table(&SearchParams::default());
+        // 0.75 + ln(10) × ln(20) / 2.25 = 3.82: three plies.
+        assert_eq!(table[10][20], 3);
+        assert_eq!(table[3][3], 1);
+        assert_eq!(table[1][40], 0);
+        for depth in 1..LMR_TABLE_SIZE {
+            for index in 2..LMR_TABLE_SIZE {
+                assert!(table[depth][index] >= table[depth][index - 1]);
+                assert!(table[depth][index] >= table[depth - 1][index]);
+            }
+        }
+    }
+
+    #[test]
+    fn late_move_reductions_and_pruning_save_nodes_and_still_find_mates() {
+        let fen = "r2q1rk1/pp2bppp/2n1pn2/3p4/3P4/2NBPN2/PP3PPP/R2Q1RK1 w - - 0 10";
+        let both = search(fen, 6, Techniques::default());
+        let neither = search(
+            fen,
+            6,
+            Techniques {
+                lmr: false,
+                late_move_pruning: false,
+                ..Techniques::default()
+            },
+        );
+        assert!(
+            both.nodes * 2 < neither.nodes,
+            "{} vs {}",
+            both.nodes,
+            neither.nodes
+        );
+        // Pruning must not lose forced mates.
+        let mate = search(
+            "2r3k1/5ppp/8/8/8/8/3R1PPP/3R2K1 w - - 0 1",
+            6,
+            Techniques::default(),
+        );
+        assert_eq!(to_score(mate.score), Score::Mate(2));
     }
 
     #[test]
