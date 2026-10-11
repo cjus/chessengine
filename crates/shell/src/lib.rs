@@ -1192,8 +1192,11 @@ mod tests {
         assert!(out.contains("King safety"), "{out}");
         assert!(out.contains("Phase 24/24: 100% middlegame"), "{out}");
         // Only the tempo bonus separates the sides at the start.
+        let tempo = pawns(shell.engine.params.value(eval::Param::Tempo).0);
         assert!(
-            out.ends_with("Total: +0.10 for White, so +0.10 for White to move"),
+            out.ends_with(&format!(
+                "Total: {tempo} for White, so {tempo} for White to move"
+            )),
             "{out}"
         );
         shell.execute("fen 4k3/8/8/4N3/8/8/8/4K3 b - - 0 1");
@@ -1211,8 +1214,17 @@ mod tests {
             shell.execute(&format!("set {term} off"));
         }
         let out = shell.execute("eval").output;
+        let knight = shell
+            .engine
+            .params
+            .value(eval::Param::Material(PieceType::Knight))
+            .0;
         assert!(
-            out.ends_with("Total: +3.20 for White, so -3.20 for Black to move"),
+            out.ends_with(&format!(
+                "Total: {} for White, so {} for Black to move",
+                pawns(knight),
+                pawns(-knight)
+            )),
             "{out}"
         );
     }

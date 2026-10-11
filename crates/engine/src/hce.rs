@@ -35,7 +35,7 @@ use cb2026_chess::attacks::{
 };
 use cb2026_chess::{Bitboard, Color, File, PieceType, Position, Rank, Square};
 
-use crate::eval::{EvalTrace, MgEg};
+use crate::eval::{MgEg, Param, TermSink};
 
 // ANCHOR: params
 /// The positional terms' numbers (each `(middlegame, endgame)` in centipawns) and switches.
@@ -80,6 +80,7 @@ pub struct TermParams {
 }
 
 impl Default for TermParams {
+    /// The hand-set values (stage 15). The engine uses the tuned ones (see [`crate::tuned`]).
     fn default() -> TermParams {
         TermParams {
             mobility: [(0, 0), (4, 4), (5, 5), (2, 4), (1, 2), (0, 0)],
@@ -127,17 +128,6 @@ impl TermParams {
     }
 }
 // ANCHOR_END: params
-
-/// Adds `value` to a side's term.
-fn add(term: &mut MgEg, value: MgEg) {
-    term.0 += value.0;
-    term.1 += value.1;
-}
-
-/// Multiplies a term value by `n`.
-fn times(value: MgEg, n: i32) -> MgEg {
-    (value.0 * n, value.1 * n)
-}
 
 /// The files next to `file` (not `file` itself).
 fn adjacent_files(file: File) -> Bitboard {
@@ -197,12 +187,12 @@ const PIECES: [PieceType; 4] = [
 ];
 
 // ANCHOR: terms
-/// Adds every switched-on positional term, for both sides, to `trace`.
-pub fn add_terms(pos: &Position, p: &TermParams, trace: &mut EvalTrace) {
+/// Reports every switched-on positional term, for both sides, to `sink`: which parameter
+/// applies and how many times (see [`TermSink`]).
+pub fn collect<S: TermSink>(pos: &Position, p: &TermParams, sink: &mut S) {
     let occupied = pos.occupied();
     for us in Color::ALL {
         let them = !us;
-        let side = us.index();
         let our_pawns = pos.pieces(us, PieceType::Pawn);
         let their_pawns = pos.pieces(them, PieceType::Pawn);
 
@@ -212,10 +202,10 @@ pub fn add_terms(pos: &Position, p: &TermParams, trace: &mut EvalTrace) {
             for pt in PIECES {
                 for square in pos.pieces(us, pt) {
                     let count = (piece_attacks(pt, square, occupied) & area).count() as i32;
-                    let extra = count - p.mobility_typical[pt.index()];
-                    add(
-                        &mut trace.mobility[side],
-                        times(p.mobility[pt.index()], extra),
+                    sink.term(
+                        us,
+                        Param::Mobility(pt),
+                        count - p.mobility_typical[pt.index()],
                     );
                 }
             }
@@ -227,29 +217,29 @@ pub fn add_terms(pos: &Position, p: &TermParams, trace: &mut EvalTrace) {
                 let neighbours = adjacent_files(square.file());
                 // Doubled: another of our pawns further up the same file.
                 if !(our_pawns & file & ranks_ahead(us, square.rank())).is_empty() {
-                    add(&mut trace.pawns[side], p.doubled);
+                    sink.term(us, Param::Doubled, 1);
                 }
                 if (our_pawns & neighbours).is_empty() {
-                    add(&mut trace.pawns[side], p.isolated);
+                    sink.term(us, Param::Isolated, 1);
                 }
                 // Passed: no enemy pawn ahead on this file or a neighbouring one.
                 let ahead = (file | neighbours) & ranks_ahead(us, square.rank());
                 if (their_pawns & ahead).is_empty() {
-                    add(&mut trace.passed[side], p.passed[relative_rank(us, square)]);
+                    sink.term(us, Param::Passed(relative_rank(us, square)), 1);
                 }
             }
         }
 
         if p.use_pieces {
             if pos.pieces(us, PieceType::Bishop).count() >= 2 {
-                add(&mut trace.pieces[side], p.bishop_pair);
+                sink.term(us, Param::BishopPair, 1);
             }
             for square in pos.pieces(us, PieceType::Rook) {
                 let file = Bitboard::file(square.file());
                 if (file & (our_pawns | their_pawns)).is_empty() {
-                    add(&mut trace.pieces[side], p.rook_open_file);
+                    sink.term(us, Param::RookOpenFile, 1);
                 } else if (file & our_pawns).is_empty() {
-                    add(&mut trace.pieces[side], p.rook_semi_open_file);
+                    sink.term(us, Param::RookSemiOpenFile, 1);
                 }
             }
         }
@@ -261,10 +251,7 @@ pub fn add_terms(pos: &Position, p: &TermParams, trace: &mut EvalTrace) {
             let in_front = ranks_ahead(us, king.rank()) & !ranks_ahead(us, two_ahead(us, king));
             let shield = our_pawns & (Bitboard::file(king.file()) | adjacent_files(king.file()));
             let shield_count = (shield & in_front).count().min(3) as i32;
-            add(
-                &mut trace.king_safety[side],
-                times(p.pawn_shield, shield_count),
-            );
+            sink.term(us, Param::PawnShield, shield_count);
 
             // Attacks on the king zone, weighted by attacker; the penalty grows quadratically.
             let zone = king_attacks(king).with(king);
@@ -276,12 +263,12 @@ pub fn add_terms(pos: &Position, p: &TermParams, trace: &mut EvalTrace) {
                 }
             }
             let danger = (units * units * p.king_danger_scale / 100).min(p.king_danger_max);
-            add(&mut trace.king_safety[side], (-danger, 0));
+            sink.king_danger(us, danger);
         }
     }
 
     if p.use_tempo {
-        trace.tempo[pos.side_to_move().index()] = p.tempo;
+        sink.term(pos.side_to_move(), Param::Tempo, 1);
     }
 }
 // ANCHOR_END: terms
@@ -299,14 +286,12 @@ fn two_ahead(color: Color, king: Square) -> Rank {
 mod tests {
     use super::*;
 
-    fn terms(fen: &str) -> EvalTrace {
-        let mut trace = EvalTrace::default();
-        add_terms(
+    fn terms(fen: &str) -> crate::eval::EvalTrace {
+        crate::eval::trace(
             &Position::from_fen(fen).unwrap(),
-            &TermParams::default(),
-            &mut trace,
-        );
-        trace
+            // The hand-set values, which the expectations below are written in terms of.
+            &crate::eval::EvalParams::hand_set(),
+        )
     }
 
     #[test]
