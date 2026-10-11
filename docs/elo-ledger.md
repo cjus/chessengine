@@ -15,3 +15,4 @@ self-play unless noted, so it overstates gains against other engines.
 | 2026-10-11 | Stage 8: transposition table (vs stage 7) | cjus/chessengine#30 | SPRT | 8+0.08, cloud, 3 games at a time | 287 | +48 −9 =230, about +48 ± 17 | passed (2.95 ≥ 2.94), [0, 5] |
 | 2026-10-11 | Stage 9: piece-square tables + tapered evaluation (vs stage 8) | cjus/chessengine#31 | SPRT | 8+0.08, cloud, 3 games at a time | 14 | +14 −0 =0 (no meaningful Elo) | passed (3.21 ≥ 2.94), [0, 5] |
 | 2026-10-11 | Stage 10: killers, countermoves, history, staged move picking (vs stage 9) | cjus/chessengine#32 | SPRT | 8+0.08, cloud, 3 games at a time | 477 | +251 −110 =116, about +106 ± 28 | passed (2.96 ≥ 2.94), [0, 5] |
+| 2026-10-11 | Stage 11: principal variation search + aspiration windows (vs stage 10) | cjus/chessengine#33 | SPRT | 8+0.08, test Mac (M1 Max), 7 games at a time | 2001 | +818 −654 =529, about +28.5 ± 13.1 | passed (2.95 ≥ 2.94), [0, 5] |
