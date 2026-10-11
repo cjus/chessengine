@@ -125,7 +125,7 @@ test catch most of them:
 
 | Test | Result |
 | --- | --- |
-| Stage 15 vs stage 14, 8+0.08, SPRT [0, 5] | SPRT_RESULT |
+| Stage 15 vs stage 14, 8+0.08, SPRT [0, 5] | +163 −41 =39 over 243 games: passed (about +192 ± 45 Elo) |
 
 ## Further reading
 
