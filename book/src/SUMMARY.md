@@ -19,7 +19,7 @@
 - [Piece-square tables and tapered evaluation](ch09-pst.md)
 - [Move ordering](ch10-ordering.md)
 - [Principal variation search and aspiration windows](ch11-pvs.md)
-- [Null-move pruning]()
+- [Null-move pruning](ch12-nullmove.md)
 - [Late move reductions and pruning]()
 - [Futility, razoring and SEE pruning]()
 
