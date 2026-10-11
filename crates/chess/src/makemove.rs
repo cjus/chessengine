@@ -90,6 +90,24 @@ impl Position {
     }
     // ANCHOR_END: make_move
 
+    /// Passes the turn without moving: a **null move**. It's illegal in chess, but the search
+    /// uses it to ask "what if I could skip this move?" (null-move pruning). It must not be
+    /// played while in check.
+    ///
+    /// The en passant square goes away, as after any move. The halfmove clock is reset, so the
+    /// search's repetition check doesn't reach back across a move that wasn't really played.
+    pub fn make_null_move(&mut self) {
+        debug_assert!(
+            !self.in_check(),
+            "a null move in check would leave the king attacked"
+        );
+        let us = self.side_to_move();
+        let fullmove_number = self.fullmove_number() + u32::from(us == Color::Black);
+        self.set_clocks(0, fullmove_number);
+        self.set_en_passant(None);
+        self.set_side_to_move(!us);
+    }
+
     /// Removes both of `color`'s castling rights.
     fn remove_castling_color(&mut self, color: Color) {
         let mut rights = self.castling();
@@ -124,6 +142,27 @@ fn middle_rank(a: Rank, b: Rank) -> Rank {
 #[cfg(test)]
 mod tests {
     use crate::{Color, Piece, PieceType, Position, Square};
+
+    #[test]
+    fn null_move_passes_the_turn_and_keeps_the_hash_right() {
+        let mut pos =
+            Position::from_fen("rnbqkbnr/ppp1pppp/8/8/3pP3/5N2/PPPP1PPP/RNBQKB1R b KQkq e3 0 3")
+                .unwrap();
+        let before = pos.clone();
+        pos.make_null_move();
+        assert_eq!(pos.side_to_move(), Color::White);
+        assert_eq!(pos.en_passant(), None);
+        assert_eq!(pos.halfmove_clock(), 0);
+        assert_eq!(pos.fullmove_number(), 4);
+        assert_eq!(pos.hash(), pos.compute_hash());
+        assert!(pos.is_consistent());
+        pos.make_null_move();
+        // Same pieces, rights and side as before; only the clocks and en passant differ.
+        assert_eq!(pos.occupied(), before.occupied());
+        assert_eq!(pos.castling(), before.castling());
+        assert_eq!(pos.side_to_move(), before.side_to_move());
+        assert_eq!(pos.hash(), pos.compute_hash());
+    }
 
     fn play(fen: &str, moves: &[&str]) -> Position {
         let mut pos = Position::from_fen(fen).unwrap();

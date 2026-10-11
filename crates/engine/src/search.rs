@@ -35,6 +35,18 @@
 //! that side and the depth searched again, doubling the margin each time until it gives up and
 //! uses the full window.
 //!
+//! ## Null-move pruning (stage 12)
+//!
+//! In almost every chess position, moving is better than passing. So if a side could *pass*
+//! and still be doing so well that the opponent can't bring the score below beta, then with a
+//! real move it would surely do even better: the node can be cut off without searching any
+//! move. The pass (a **null move**) is searched with a reduced depth and a null window around
+//! beta, which makes the test cheap.
+//!
+//! The assumption fails in **zugzwang**, where any move makes things worse (common in pawn
+//! endgames), so null moves are not tried without pieces other than pawns. They are also not
+//! tried in check (passing would be illegal), twice in a row, or on the principal variation.
+//!
 //! ## Quiescence search
 //!
 //! Stopping the search at a fixed depth and evaluating there is dangerous: the last move
@@ -67,7 +79,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
-use cb2026_chess::{Move, Position};
+use cb2026_chess::{Move, PieceType, Position};
 
 use crate::Score;
 use crate::eval::{EvalParams, evaluate};
@@ -95,6 +107,12 @@ pub struct SearchParams {
     pub aspiration_min_depth: u32,
     /// Once the margin grows past this, the full window is used.
     pub aspiration_max_delta: i32,
+    /// Null moves are tried with at least this much depth left.
+    pub null_min_depth: u32,
+    /// The null move's search is reduced by this many plies...
+    pub null_reduction: u32,
+    /// ...plus one more per this many plies of depth.
+    pub null_depth_divisor: u32,
 }
 
 impl Default for SearchParams {
@@ -103,6 +121,9 @@ impl Default for SearchParams {
             aspiration_delta: 25,
             aspiration_min_depth: 5,
             aspiration_max_delta: 800,
+            null_min_depth: 3,
+            null_reduction: 3,
+            null_depth_divisor: 6,
         }
     }
 }
@@ -134,6 +155,9 @@ pub struct Techniques {
     pub pvs: bool,
     /// Aspiration windows: each iteration starts with a narrow window around the last score.
     pub aspiration: bool,
+    /// Null-move pruning: cut off when passing still keeps the score above beta. Only at
+    /// null-window nodes, so it needs PVS.
+    pub null_move: bool,
 }
 
 impl Default for Techniques {
@@ -148,6 +172,7 @@ impl Default for Techniques {
             history: true,
             pvs: true,
             aspiration: true,
+            null_move: true,
         }
     }
 }
@@ -203,8 +228,9 @@ pub(crate) struct Searcher<'a> {
     /// Hash keys of the positions before the current one: the game so far, then the search
     /// path. Used to detect repetitions.
     keys: Vec<u64>,
-    /// The moves from the root to the current position (for the countermove heuristic).
-    path: Vec<Move>,
+    /// The moves from the root to the current position (for the countermove heuristic), with
+    /// `None` for a null move.
+    path: Vec<Option<Move>>,
 }
 
 impl<'a> Searcher<'a> {
@@ -326,7 +352,49 @@ impl<'a> Searcher<'a> {
         }
         // ANCHOR_END: tt_probe
 
-        let previous = self.path.last().copied();
+        // ANCHOR: null_move
+        // Null-move pruning: if passing still keeps us at or above beta, a real move would too.
+        let p = self.search_params;
+        if self.techniques.null_move
+            && self.techniques.alpha_beta
+            && beta - alpha == 1
+            && depth >= p.null_min_depth
+            && self.path.last() != Some(&None)
+            && !pos.in_check()
+            && has_pieces(pos)
+            && evaluate(pos, self.params) >= beta
+        {
+            let reduction = p.null_reduction + depth / p.null_depth_divisor;
+            let mut child = pos.clone();
+            child.make_null_move();
+            self.path.push(None);
+            self.keys.push(pos.hash());
+            let mut null_pv = Vec::new();
+            let score = -self.negamax(
+                &child,
+                depth.saturating_sub(1 + reduction),
+                ply + 1,
+                -beta,
+                -beta + 1,
+                &mut null_pv,
+            );
+            self.keys.pop();
+            self.path.pop();
+            if self.aborted {
+                return 0;
+            }
+            if score >= beta {
+                // A mate found after passing isn't a real mate: claim no more than beta.
+                return if score >= MATE - MAX_PLY as i32 {
+                    beta
+                } else {
+                    score
+                };
+            }
+        }
+        // ANCHOR_END: null_move
+
+        let previous = self.path.last().copied().flatten();
         let picker = MovePicker::new(
             pos,
             &moves,
@@ -346,7 +414,7 @@ impl<'a> Searcher<'a> {
         for (index, mv) in picker.enumerate() {
             let mut child = pos.clone();
             child.make_move(mv);
-            self.path.push(mv);
+            self.path.push(Some(mv));
             let score = self.search_move(&child, depth - 1, alpha, beta, index == 0, &mut child_pv);
             self.path.pop();
             if self.aborted {
@@ -541,7 +609,7 @@ impl<'a> Searcher<'a> {
         for (index, &mv) in root_moves.iter().enumerate() {
             let mut child = pos.clone();
             child.make_move(mv);
-            self.path.push(mv);
+            self.path.push(Some(mv));
             let score = self.search_move(
                 &child,
                 depth.saturating_sub(1),
@@ -643,6 +711,20 @@ impl<'a> Searcher<'a> {
     pub(crate) fn hashfull(&self) -> u32 {
         self.tt.hashfull()
     }
+}
+
+/// Whether the side to move has a piece other than pawns and its king: without one,
+/// zugzwang is likely and null moves can't be trusted.
+fn has_pieces(pos: &Position) -> bool {
+    let us = pos.side_to_move();
+    [
+        PieceType::Knight,
+        PieceType::Bishop,
+        PieceType::Rook,
+        PieceType::Queen,
+    ]
+    .iter()
+    .any(|&pt| !pos.pieces(us, pt).is_empty())
 }
 
 #[cfg(test)]
@@ -882,6 +964,46 @@ mod tests {
             assert_eq!(windowed.score, full.score, "guess {guess}");
             assert_eq!(windowed.best_move, full.best_move, "guess {guess}");
         }
+    }
+
+    #[test]
+    fn null_move_pruning_saves_nodes() {
+        let fens = [
+            "r1bq1rk1/pppp1ppp/2n2n2/2b1p3/2B1P3/2N2N2/PPPP1PPP/R1BQ1RK1 w - - 0 1",
+            "r2q1rk1/pp2bppp/2n1pn2/3p4/3P4/2NBPN2/PP3PPP/R2Q1RK1 w - - 0 10",
+        ];
+        let off = Techniques {
+            null_move: false,
+            ..Techniques::default()
+        };
+        for fen in fens {
+            let with = search(fen, 6, Techniques::default());
+            let without = search(fen, 6, off);
+            assert!(
+                with.nodes < without.nodes,
+                "{fen}: {} vs {}",
+                with.nodes,
+                without.nodes
+            );
+        }
+    }
+
+    #[test]
+    fn no_null_moves_in_pawn_endgames() {
+        // Zugzwang territory: with only pawns, the null move must not be tried, so switching
+        // it off changes nothing.
+        let fen = "8/8/1p6/1P1k4/3P4/3K4/8/8 w - - 0 1";
+        let with = search(fen, 8, Techniques::default());
+        let without = search(
+            fen,
+            8,
+            Techniques {
+                null_move: false,
+                ..Techniques::default()
+            },
+        );
+        assert_eq!(with.nodes, without.nodes);
+        assert_eq!(with.score, without.score);
     }
 
     #[test]
