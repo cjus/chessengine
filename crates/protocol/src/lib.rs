@@ -9,7 +9,8 @@
 //!   other GUIs. Here the engine keeps track of the game itself.
 //!
 //! This crate turns those text commands into calls on the Engine API and turns search results
-//! back into protocol output. [`uci`] is here now; XBoard arrives in stage 20.
+//! back into protocol output. [`uci`] speaks UCI and [`xboard`] speaks
+//! XBoard.
 //!
 //! ## Further reading
 //!
@@ -19,6 +20,7 @@
 #![forbid(unsafe_code)]
 
 pub mod uci;
+pub mod xboard;
 
 /// A text protocol a GUI can use to talk to the engine.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

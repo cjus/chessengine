@@ -8,6 +8,7 @@
 //! < id author the cb2026 authors
 //! < option name Hash type spin default 16 min 1 max 65536
 //! < option name Clear Hash type button
+//! < option name Ponder type check default false
 //! < option name Threads type spin default 1 min 1 max 256
 //! < option name SyzygyPath type string default <empty>
 //! < option name SyzygyProbeDepth type spin default 1 min 1 max 100
@@ -48,6 +49,7 @@ use cb2026_chess::{Move, Position};
 use cb2026_engine::book::OpeningBook;
 use cb2026_engine::levels::{ELO_RANGE, FULL_STRENGTH};
 use cb2026_engine::tablebase::TablebaseLoader;
+use cb2026_engine::time::{self, TimeParams};
 use cb2026_engine::tt::{DEFAULT_HASH_MB, MAX_HASH_MB};
 use cb2026_engine::{AUTHOR, Engine, Limits, MAX_THREADS, SearchInfo, id_name};
 
@@ -75,6 +77,9 @@ struct Options {
 struct RunningSearch {
     stop: Arc<AtomicBool>,
     handle: JoinHandle<Engine>,
+    /// While pondering, the clock to switch to on `ponderhit` (with the engine's time
+    /// settings), and the flag that keeps the search from reporting its move too early.
+    ponder: Option<(Limits, TimeParams, Arc<AtomicBool>)>,
 }
 
 /// The state of one UCI session.
@@ -148,6 +153,7 @@ impl Session {
                     ),
                 );
                 send(&self.output, "option name Clear Hash type button");
+                send(&self.output, "option name Ponder type check default false");
                 send(
                     &self.output,
                     &format!("option name Threads type spin default 1 min 1 max {MAX_THREADS}"),
@@ -224,8 +230,7 @@ impl Session {
                 self.go(&args);
             }
             "stop" => self.stop_search(),
-            // Pondering arrives with stage 17; until then a ponder search is a normal one.
-            "ponderhit" => {}
+            "ponderhit" => self.ponderhit(),
             "quit" => return false,
             other => send(
                 &self.output,
@@ -362,6 +367,8 @@ impl Session {
                     &format!("info string SyzygyProbeLimit must be 0-7, not '{value}'"),
                 ),
             },
+            // The GUI decides when to ponder; the option only tells it that we can.
+            "ponder" => {}
             "clear hash" => {
                 if let Some(engine) = self.engine.as_mut() {
                     engine.tt.clear();
@@ -425,13 +432,37 @@ impl Session {
         let position = self.position.clone();
         let history = self.history.clone();
         let chess960 = self.options.chess960;
-        // A ponder or infinite search must not report its move until told to stop.
-        let wait_for_stop = limits.infinite || args.contains(&"ponder");
+        // ANCHOR: ponder
+        // Pondering: think on the opponent's time, with no limit, until the GUI says
+        // `ponderhit` (the opponent played the expected move: switch to the real clock) or
+        // `stop` (it didn't). The move must not be reported before either.
+        let pondering = args.contains(&"ponder");
+        let ponder_flag = Arc::new(AtomicBool::new(pondering));
+        let ponder = pondering.then(|| {
+            (
+                limits.clone(),
+                engine.time.clone(),
+                Arc::clone(&ponder_flag),
+            )
+        });
+        let limits = if pondering {
+            Limits {
+                infinite: true,
+                ..limits
+            }
+        } else {
+            limits
+        };
+        let infinite = limits.infinite && !pondering;
+        // ANCHOR_END: ponder
 
         let handle = thread::spawn(move || {
             let mut on_info = |info: &SearchInfo| send(&output, &info_line(info, chess960));
             let result = engine.search(&position, &history, &limits, &thread_stop, &mut on_info);
-            while wait_for_stop && !thread_stop.load(Ordering::Relaxed) {
+            // An infinite search waits for `stop`; a ponder search for `stop` or `ponderhit`.
+            while (infinite || ponder_flag.load(Ordering::Relaxed))
+                && !thread_stop.load(Ordering::Relaxed)
+            {
                 thread::sleep(Duration::from_millis(1));
             }
             let mut line = match result.best_move {
@@ -445,7 +476,35 @@ impl Session {
             send(&output, &line);
             engine
         });
-        self.search = Some(RunningSearch { stop, handle });
+        self.search = Some(RunningSearch {
+            stop,
+            handle,
+            ponder,
+        });
+    }
+
+    /// `ponderhit`: the opponent played the move we were pondering on. The search carries on,
+    /// now against the clock: it stops once the time it would have been given has passed
+    /// (counting from now, so the pondering time is a bonus).
+    fn ponderhit(&mut self) {
+        let Some(search) = self.search.as_mut() else {
+            return;
+        };
+        let Some((limits, time_params, ponder_flag)) = search.ponder.take() else {
+            return;
+        };
+        ponder_flag.store(false, Ordering::Relaxed);
+        let side = self.position.side_to_move();
+        if let Some(think) = time::budget(&limits, side, &time_params).soft {
+            let stop = Arc::clone(&search.stop);
+            thread::spawn(move || {
+                thread::sleep(think);
+                stop.store(true, Ordering::Relaxed);
+            });
+        } else if limits.depth.is_none() && limits.nodes.is_none() && !limits.infinite {
+            // No clock and no other limit: stop now.
+            search.stop.store(true, Ordering::Relaxed);
+        }
     }
 
     /// Stops the running search, if any, and waits for it to report its move.
@@ -555,6 +614,56 @@ mod tests {
         let captured = Captured::default();
         run_with_engine(
             script.as_bytes(),
+            Box::new(captured.clone()),
+            None,
+            Engine::new(),
+        )
+        .unwrap();
+        let bytes = captured.0.lock().unwrap().clone();
+        String::from_utf8(bytes)
+            .unwrap()
+            .lines()
+            .map(str::to_string)
+            .collect()
+    }
+
+    /// Input that arrives in parts, pausing after each part for the given milliseconds (to
+    /// test commands that depend on timing, like `ponderhit`).
+    struct Paced {
+        parts: std::collections::VecDeque<(Vec<u8>, u64)>,
+        current: io::Cursor<Vec<u8>>,
+        pause: u64,
+    }
+
+    impl io::Read for Paced {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            loop {
+                let n = self.current.read(buf)?;
+                if n > 0 {
+                    return Ok(n);
+                }
+                let Some((bytes, pause)) = self.parts.pop_front() else {
+                    return Ok(0);
+                };
+                thread::sleep(Duration::from_millis(self.pause));
+                self.pause = pause;
+                self.current = io::Cursor::new(bytes);
+            }
+        }
+    }
+
+    fn session_with_pauses(parts: &[(&str, u64)]) -> Vec<String> {
+        let captured = Captured::default();
+        let input = Paced {
+            parts: parts
+                .iter()
+                .map(|&(text, pause)| (text.as_bytes().to_vec(), pause))
+                .collect(),
+            current: io::Cursor::new(Vec::new()),
+            pause: 0,
+        };
+        run_with_engine(
+            io::BufReader::new(input),
             Box::new(captured.clone()),
             None,
             Engine::new(),
@@ -778,6 +887,39 @@ mod tests {
         );
         assert!(bad.iter().any(|l| l.contains("UCI_Elo must be 1000-2400")));
         assert!(bad.iter().any(|l| l.contains("Skill Level must be 0-20")));
+    }
+
+    #[test]
+    fn ponder_waits_for_ponderhit_or_stop() {
+        // A ponder search with a clock: it must not answer until `ponderhit`, then finish
+        // within the clock's budget.
+        let lines = session_with_pauses(&[
+            (
+                "position startpos moves e2e4\ngo ponder wtime 2000 btime 2000\n",
+                300,
+            ),
+            ("ponderhit\n", 1500),
+            ("isready\n", 0),
+        ]);
+        let ponderhit_at = lines.iter().position(|l| l == "readyok").unwrap();
+        let best = lines
+            .iter()
+            .position(|l| l.starts_with("bestmove "))
+            .unwrap();
+        assert!(best < ponderhit_at, "{lines:?}");
+        // `stop` while pondering answers at once.
+        let lines = session_with_pauses(&[
+            (
+                "position startpos\ngo ponder wtime 60000 btime 60000\n",
+                200,
+            ),
+            ("stop\n", 100),
+            ("isready\n", 0),
+        ]);
+        assert!(
+            lines.iter().any(|l| l.starts_with("bestmove ")),
+            "{lines:?}"
+        );
     }
 
     #[test]
