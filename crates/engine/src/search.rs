@@ -60,6 +60,22 @@
 //! principal variation, once enough quiet moves have been tried (`3 + depth²`), the remaining
 //! quiet moves are not searched at all.
 //!
+//! ## Futility, razoring and SEE pruning (stage 14)
+//!
+//! More selective pruning near the leaves, all based on how far the static evaluation is from
+//! the window, and none of it on the principal variation or in check:
+//!
+//! - **Reverse futility pruning** (static null move): if the static evaluation beats beta by
+//!   a margin that grows with depth, assume the search would too and return at once.
+//! - **Razoring**: if the static evaluation is far below alpha at depth 1 or 2, ask the
+//!   quiescence search; if even the captures can't lift it to alpha, give up on the node.
+//! - **Futility pruning**: at low depth, a quiet move can't raise a static evaluation that is
+//!   hopelessly below alpha, so quiet moves are skipped.
+//! - **SEE pruning**: moves that lose material in the static exchange (see [`crate::see`])
+//!   are skipped at low depth, and bad captures are skipped in the quiescence search.
+//! - **Delta pruning** in the quiescence search: a capture that can't bring the score near
+//!   alpha even if it wins the captured piece outright is skipped.
+//!
 //! ## Quiescence search
 //!
 //! Stopping the search at a fixed depth and evaluating there is dangerous: the last move
@@ -97,6 +113,7 @@ use cb2026_chess::{Move, PieceType, Position};
 use crate::Score;
 use crate::eval::{EvalParams, evaluate};
 use crate::ordering::{MovePicker, OrderingTables, is_noisy};
+use crate::see::{SEE_VALUES, see};
 use crate::tt::{Bound, TranspositionTable, score_from_tt, score_to_tt};
 
 /// The score of being checkmated right now (higher than any evaluation).
@@ -138,6 +155,29 @@ pub struct SearchParams {
     pub lmp_max_depth: u32,
     /// ...once `lmp_base + depth²` quiet moves have been tried.
     pub lmp_base: u32,
+    /// Reverse futility pruning applies up to this depth...
+    pub rfp_max_depth: u32,
+    /// ...when the static evaluation beats beta by this much per ply of depth.
+    pub rfp_margin: i32,
+    /// Razoring applies up to this depth...
+    pub razor_max_depth: u32,
+    /// ...when the static evaluation is below alpha by this much per ply of depth.
+    pub razor_margin: i32,
+    /// Futility pruning applies up to this depth...
+    pub futility_max_depth: u32,
+    /// ...when the static evaluation plus this...
+    pub futility_base: i32,
+    /// ...plus this much per ply of depth is still at or below alpha.
+    pub futility_per_depth: i32,
+    /// SEE pruning applies up to this depth...
+    pub see_max_depth: u32,
+    /// ...to quiet moves losing more than this much per ply of depth...
+    pub see_quiet_margin: i32,
+    /// ...and to captures losing more than this much per ply of depth.
+    pub see_capture_margin: i32,
+    /// Delta pruning: a capture is skipped if winning the piece plus this margin still
+    /// leaves the score at or below alpha.
+    pub delta_margin: i32,
 }
 
 impl Default for SearchParams {
@@ -155,6 +195,17 @@ impl Default for SearchParams {
             lmr_divisor: 225,
             lmp_max_depth: 3,
             lmp_base: 3,
+            rfp_max_depth: 7,
+            rfp_margin: 80,
+            razor_max_depth: 2,
+            razor_margin: 300,
+            futility_max_depth: 6,
+            futility_base: 100,
+            futility_per_depth: 100,
+            see_max_depth: 6,
+            see_quiet_margin: 60,
+            see_capture_margin: 100,
+            delta_margin: 200,
         }
     }
 }
@@ -193,6 +244,18 @@ pub struct Techniques {
     pub lmr: bool,
     /// Late move pruning: skip late quiet moves near the leaves.
     pub late_move_pruning: bool,
+    /// Reverse futility pruning (static null move).
+    pub reverse_futility: bool,
+    /// Razoring: drop into the quiescence search when far below alpha.
+    pub razoring: bool,
+    /// Futility pruning of quiet moves near the leaves.
+    pub futility: bool,
+    /// SEE pruning: skip moves that lose material, in the main and quiescence searches.
+    pub see_pruning: bool,
+    /// Delta pruning in the quiescence search.
+    pub delta_pruning: bool,
+    /// Order captures that lose material (by SEE) after the quiet moves.
+    pub see_ordering: bool,
 }
 
 impl Default for Techniques {
@@ -210,6 +273,33 @@ impl Default for Techniques {
             null_move: true,
             lmr: true,
             late_move_pruning: true,
+            reverse_futility: true,
+            razoring: true,
+            futility: true,
+            see_pruning: true,
+            delta_pruning: true,
+            see_ordering: true,
+        }
+    }
+}
+
+impl Techniques {
+    /// Only the techniques that don't change the search's result, just its speed (alpha-beta,
+    /// quiescence, move ordering, the transposition table and PVS), with the selective ones
+    /// (null move, reductions and every kind of pruning) off. Useful for comparing node counts
+    /// at equal scores. (The transposition table can still change a result now and then, when
+    /// it supplies a deeper result than the search asked for.)
+    pub fn sound() -> Techniques {
+        Techniques {
+            null_move: false,
+            lmr: false,
+            late_move_pruning: false,
+            reverse_futility: false,
+            razoring: false,
+            futility: false,
+            see_pruning: false,
+            delta_pruning: false,
+            ..Techniques::default()
         }
     }
 }
@@ -428,17 +518,53 @@ impl<'a> Searcher<'a> {
         }
         // ANCHOR_END: tt_probe
 
+        let p = self.search_params;
+        let in_check = pos.in_check();
+        let pv_node = beta - alpha > 1;
+        // The static evaluation, for the pruning decisions (meaningless in check).
+        let static_eval = if in_check {
+            -INFINITY
+        } else {
+            evaluate(pos, self.params)
+        };
+        // Selective pruning happens only off the principal variation and out of check.
+        let selective = self.techniques.alpha_beta && !pv_node && !in_check;
+
+        // ANCHOR: reverse_futility
+        // Reverse futility pruning: far enough above beta, assume a search would stay there.
+        if self.techniques.reverse_futility
+            && selective
+            && depth <= p.rfp_max_depth
+            && static_eval - p.rfp_margin * depth as i32 >= beta
+        {
+            return static_eval;
+        }
+        // ANCHOR_END: reverse_futility
+
+        // ANCHOR: razoring
+        // Razoring: far below alpha near the leaves, only captures could save the node.
+        if self.techniques.razoring
+            && self.techniques.quiescence
+            && selective
+            && depth <= p.razor_max_depth
+            && static_eval + p.razor_margin * (depth as i32) < alpha
+        {
+            let score = self.quiescence(pos, ply, alpha, alpha + 1, pv);
+            if score <= alpha {
+                return score;
+            }
+            pv.clear();
+        }
+        // ANCHOR_END: razoring
+
         // ANCHOR: null_move
         // Null-move pruning: if passing still keeps us at or above beta, a real move would too.
-        let p = self.search_params;
         if self.techniques.null_move
-            && self.techniques.alpha_beta
-            && beta - alpha == 1
+            && selective
             && depth >= p.null_min_depth
             && self.path.last() != Some(&None)
-            && !pos.in_check()
             && has_pieces(pos)
-            && evaluate(pos, self.params) >= beta
+            && static_eval >= beta
         {
             let reduction = p.null_reduction + depth / p.null_depth_divisor;
             let mut child = pos.clone();
@@ -487,8 +613,6 @@ impl<'a> Searcher<'a> {
         // Quiet moves searched so far that didn't cause a cutoff (for the history penalty).
         let mut quiets_tried = Vec::new();
         self.keys.push(pos.hash());
-        let in_check = pos.in_check();
-        let pv_node = beta - alpha > 1;
         for (index, mv) in picker.enumerate() {
             let quiet = !is_noisy(mv);
             let mut child = pos.clone();
@@ -509,6 +633,39 @@ impl<'a> Searcher<'a> {
                 continue;
             }
             // ANCHOR_END: lmp
+
+            // ANCHOR: futility
+            // Futility pruning: a quiet move can't lift a hopeless static evaluation to alpha.
+            if self.techniques.futility
+                && ordinary
+                && !pv_node
+                && depth <= p.futility_max_depth
+                && best > -MATE + MAX_PLY as i32
+                && static_eval + p.futility_base + p.futility_per_depth * depth as i32 <= alpha
+            {
+                continue;
+            }
+            // ANCHOR_END: futility
+
+            // ANCHOR: see_pruning
+            // SEE pruning: near the leaves, skip moves that lose material outright.
+            if self.techniques.see_pruning
+                && selective
+                && index > 0
+                && !gives_check
+                && depth <= p.see_max_depth
+                && best > -MATE + MAX_PLY as i32
+            {
+                let margin = if quiet {
+                    p.see_quiet_margin
+                } else {
+                    p.see_capture_margin
+                };
+                if see(pos, mv) < -margin * (depth as i32) {
+                    continue;
+                }
+            }
+            // ANCHOR_END: see_pruning
 
             // ANCHOR: lmr
             let how = if index == 0 {
@@ -681,8 +838,24 @@ impl<'a> Searcher<'a> {
             self.ordering,
             &self.techniques,
         );
+        let stand_pat = best;
         let mut child_pv = Vec::new();
         for mv in picker {
+            if !in_check {
+                // Delta pruning: even winning the piece outright wouldn't reach alpha.
+                if self.techniques.delta_pruning && mv.promotion().is_none() {
+                    let gain = pos
+                        .piece_at(mv.to())
+                        .map_or(SEE_VALUES[0], |p| SEE_VALUES[p.piece_type.index()]);
+                    if stand_pat + gain + self.search_params.delta_margin <= alpha {
+                        continue;
+                    }
+                }
+                // SEE pruning: a capture that loses material can't help.
+                if self.techniques.see_pruning && see(pos, mv) < 0 {
+                    continue;
+                }
+            }
             let mut child = pos.clone();
             child.make_move(mv);
             let score = -self.quiescence(&child, ply + 1, -beta, -alpha, &mut child_pv);
@@ -859,18 +1032,6 @@ fn has_pieces(pos: &Position) -> bool {
 mod tests {
     use super::*;
 
-    /// The techniques that never change the score (alpha-beta, ordering, TT, PVS), without
-    /// the selective ones (null move, LMR, LMP), for tests that compare node counts at equal
-    /// scores.
-    fn sound() -> Techniques {
-        Techniques {
-            null_move: false,
-            lmr: false,
-            late_move_pruning: false,
-            ..Techniques::default()
-        }
-    }
-
     fn search(fen: &str, depth: u32, techniques: Techniques) -> RootResult {
         search_with_window(fen, depth, techniques, None)
     }
@@ -946,7 +1107,7 @@ mod tests {
         let plain = Techniques {
             quiescence: false,
             tt: false,
-            ..Techniques::default()
+            ..Techniques::sound()
         };
         let with = search(fen, 3, plain);
         let without = search(
@@ -1020,7 +1181,7 @@ mod tests {
             killers: false,
             countermoves: false,
             history: false,
-            ..sound()
+            ..Techniques::sound()
         };
         let ordered = search(fen, 4, plain);
         let unordered = search(
@@ -1052,11 +1213,11 @@ mod tests {
             killers: false,
             countermoves: false,
             history: false,
-            ..sound()
+            ..Techniques::sound()
         };
         let (mut with_nodes, mut without_nodes) = (0, 0);
         for fen in fens {
-            let with = search(fen, 4, sound());
+            let with = search(fen, 4, Techniques::sound());
             let without = search(fen, 4, off);
             assert_eq!(with.score, without.score, "{fen}");
             with_nodes += with.nodes;
@@ -1071,13 +1232,13 @@ mod tests {
     #[test]
     fn pvs_gives_the_same_score_with_fewer_nodes() {
         let fen = "r1bq1rk1/pppp1ppp/2n2n2/2b1p3/2B1P3/2N2N2/PPPP1PPP/R1BQ1RK1 w - - 0 1";
-        let with = search(fen, 5, sound());
+        let with = search(fen, 5, Techniques::sound());
         let without = search(
             fen,
             5,
             Techniques {
                 pvs: false,
-                ..sound()
+                ..Techniques::sound()
             },
         );
         assert_eq!(with.score, without.score);
@@ -1187,6 +1348,38 @@ mod tests {
             Techniques::default(),
         );
         assert_eq!(to_score(mate.score), Score::Mate(2));
+    }
+
+    #[test]
+    fn stage_14_pruning_saves_nodes_and_still_finds_mates() {
+        let fen = "r2q1rk1/pp2bppp/2n1pn2/3p4/3P4/2NBPN2/PP3PPP/R2Q1RK1 w - - 0 10";
+        let on = search(fen, 6, Techniques::default());
+        let off = search(
+            fen,
+            6,
+            Techniques {
+                reverse_futility: false,
+                razoring: false,
+                futility: false,
+                see_pruning: false,
+                delta_pruning: false,
+                ..Techniques::default()
+            },
+        );
+        assert!(on.nodes < off.nodes, "{} vs {}", on.nodes, off.nodes);
+        let mate = search(
+            "2r3k1/5ppp/8/8/8/8/3R1PPP/3R2K1 w - - 0 1",
+            6,
+            Techniques::default(),
+        );
+        assert_eq!(to_score(mate.score), Score::Mate(2));
+        // The queen sacrifice is still seen past the horizon: Qxd5 loses the queen.
+        let result = search(
+            "4k3/8/4p3/3p4/8/8/8/3QK3 w - - 0 1",
+            3,
+            Techniques::default(),
+        );
+        assert_ne!(result.best_move.unwrap().to_string(), "d1d5");
     }
 
     #[test]

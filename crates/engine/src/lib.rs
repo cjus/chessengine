@@ -37,6 +37,7 @@
 //!   horizon (stage 7).
 //! - [`ordering`]: move ordering by MVV-LVA (stage 7).
 //! - [`tt`]: the transposition table (stage 8).
+//! - [`see`]: static exchange evaluation (stage 14).
 //! - [`time`]: time management: soft and hard limits per move (stage 6).
 //! - [`bench`](mod@bench): the fixed benchmark behind `cb2026 bench` and every commit's `Bench:` line.
 //!
@@ -63,6 +64,7 @@ pub mod bench;
 pub mod eval;
 pub mod ordering;
 pub mod search;
+pub mod see;
 pub mod time;
 pub mod tt;
 
@@ -361,8 +363,11 @@ mod tests {
 
     #[test]
     fn transposition_table_saves_nodes_without_changing_the_result() {
-        let with = search_with(&mut Engine::new(), KIWIPETE, 4);
         let mut engine = Engine::new();
+        engine.techniques = Techniques::sound();
+        let with = search_with(&mut engine, KIWIPETE, 4);
+        let mut engine = Engine::new();
+        engine.techniques = Techniques::sound();
         engine.techniques.tt = false;
         let without = search_with(&mut engine, KIWIPETE, 4);
         assert_eq!(with.score, without.score);

@@ -18,8 +18,9 @@ use cb2026_chess::Position;
 
 use crate::{Engine, Limits};
 
-/// The depth every bench position is searched to.
-pub const BENCH_DEPTH: u32 = 4;
+/// The depth every bench position is searched to. It was 4 until stage 14, when the pruning
+/// made a depth-4 search too small to exercise the search.
+pub const BENCH_DEPTH: u32 = 10;
 
 /// The bench positions: openings, middlegames and endgames from the test suites.
 pub const BENCH_POSITIONS: &[&str] = &[
