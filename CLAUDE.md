@@ -3,6 +3,10 @@
 cb2026 (ChessBrain 2026; repo `cjus/chessengine`) is a modern UCI/XBoard chess engine in Rust
 that is also a learning tool. Product requirements: `docs/PRD.md`. Owner: Carlos.
 
+**Start here:** `docs/status.md` says what is merged, what is built and waiting on which
+branch, what is blocked on Carlos, and how to carry on. Keep it up to date in every PR that
+changes the picture.
+
 ## Architecture rules
 
 1. **Chess logic lives in library crates with no I/O** (`crates/chess`, `crates/engine`).
