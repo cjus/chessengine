@@ -77,6 +77,7 @@ pub mod levels;
 pub mod ordering;
 pub mod search;
 pub mod see;
+pub mod stats;
 pub mod tablebase;
 pub mod time;
 pub mod tt;
@@ -98,6 +99,7 @@ use search::{
     DEFAULT_DEPTH, INFINITY, MATE, MAX_PLY, RootResult, SearchParams, Searcher, StopConditions,
     Techniques, to_score,
 };
+use stats::{SearchStats, SearchTree};
 use tablebase::{Tablebase, TablebaseLoader, TablebaseParams};
 use time::TimeParams;
 use tt::TranspositionTable;
@@ -202,6 +204,8 @@ pub struct SearchResult {
     pub best_move: Option<Move>,
     /// The expected reply, for pondering.
     pub ponder_move: Option<Move>,
+    /// What the search did, all threads together (see [`stats`]).
+    pub stats: SearchStats,
 }
 
 /// The most search threads the engine accepts (the UCI `Threads` option's maximum).
@@ -357,7 +361,7 @@ impl Engine {
             {
                 return SearchResult {
                     best_move: Some(mv),
-                    ponder_move: None,
+                    ..SearchResult::default()
                 };
             }
         }
@@ -437,10 +441,11 @@ impl Engine {
         let tablebase_params = *tablebase_params;
         let (params, techniques, search_params, tt) = (&*params, *techniques, *search_params, &*tt);
         thread::scope(|scope| {
+            let mut helper_threads = Vec::new();
             for helper in 1..*threads {
                 let root_moves = root_moves.clone();
                 let (helpers_stop, helper_nodes) = (&helpers_stop, &helper_nodes);
-                scope.spawn(move || {
+                helper_threads.push(scope.spawn(move || {
                     let mut ordering = OrderingTables::default();
                     let mut searcher = Searcher::new(
                         params,
@@ -460,7 +465,8 @@ impl Engine {
                         searcher.use_tablebase(tb, tablebase_params);
                     }
                     run_helper(&mut searcher, position, root_moves, max_depth, helper);
-                });
+                    searcher.stats()
+                }));
             }
             let mut searcher = Searcher::new(
                 params,
@@ -479,7 +485,7 @@ impl Engine {
                 searcher.use_tablebase(tb, tablebase_params);
             }
             let result = main_search(
-                searcher,
+                &mut searcher,
                 MainSearch {
                     position,
                     root_moves,
@@ -493,11 +499,18 @@ impl Engine {
                 on_info,
             );
             helpers_stop.store(true, Ordering::Relaxed);
+            let mut stats = searcher.stats();
+            for helper in helper_threads {
+                if let Ok(helper_stats) = helper.join() {
+                    stats.add(&helper_stats);
+                }
+            }
             // ANCHOR: level_choice
             let Some(best) = result.first() else {
                 return SearchResult {
                     best_move: root_fallback,
                     ponder_move: None,
+                    stats,
                 };
             };
             // At full strength, the best line; at a lower level, one of the candidates.
@@ -528,11 +541,74 @@ impl Engine {
             SearchResult {
                 best_move,
                 ponder_move,
+                stats,
             }
             // ANCHOR_END: level_choice
         })
     }
     // ANCHOR_END: search
+
+    /// Searches `position` to `depth` on one thread and records the search tree of the last
+    /// iteration, for nodes up to `max_ply` plies from the root (at most `max_events`
+    /// decisions; see [`stats`]). The earlier iterations run first, unrecorded, so the move
+    /// ordering is what a real search would have. Returns the tree and the iteration's result.
+    pub fn search_tree(
+        &mut self,
+        position: &Position,
+        history: &[u64],
+        depth: u32,
+        max_ply: usize,
+        max_events: usize,
+    ) -> (SearchTree, SearchInfo) {
+        let start = Instant::now();
+        let stop = AtomicBool::new(false);
+        let mut root_moves: Vec<Move> = position.legal_moves().iter().copied().collect();
+        if self.techniques.mvv_lva {
+            ordering::order_moves(position, &mut root_moves);
+        }
+        self.tt.new_search();
+        self.ordering.new_search();
+        let mut searcher = Searcher::new(
+            &self.params,
+            self.search_params,
+            &self.tt,
+            &mut self.ordering,
+            self.techniques,
+            StopConditions {
+                stop: &stop,
+                deadline: None,
+                max_nodes: None,
+            },
+            history,
+        );
+        if let Some(tb) = self.tablebase.as_deref() {
+            searcher.use_tablebase(tb, self.tablebase_params);
+        }
+        let depth = depth.clamp(1, MAX_PLY);
+        let mut previous = None;
+        for d in 1..depth {
+            let result = searcher.search_depth(position, &mut root_moves, d, previous);
+            previous = Some(result.score);
+            if let Some(mv) = result.best_move {
+                root_moves.retain(|&m| m != mv);
+                root_moves.insert(0, mv);
+            }
+        }
+        searcher.record_tree(SearchTree::new(max_ply, max_events));
+        let result = searcher.search_depth(position, &mut root_moves, depth, previous);
+        let info = SearchInfo {
+            depth,
+            seldepth: result.seldepth,
+            score: to_score(result.score),
+            nodes: result.nodes,
+            time: start.elapsed(),
+            pv: result.pv,
+            hashfull: searcher.hashfull(),
+            tbhits: searcher.tb_hits(),
+            multipv: 1,
+        };
+        (searcher.take_tree().unwrap_or_default(), info)
+    }
 }
 
 /// What the main search thread needs besides its [`Searcher`].
@@ -556,7 +632,7 @@ struct MainSearch<'a> {
 /// With several lines (MultiPV), each depth searches the root once per line, leaving out the
 /// moves already chosen as better lines at that depth.
 fn main_search(
-    mut searcher: Searcher<'_>,
+    searcher: &mut Searcher<'_>,
     job: MainSearch<'_>,
     on_info: &mut dyn FnMut(&SearchInfo),
 ) -> Vec<RootResult> {
@@ -695,6 +771,42 @@ mod tests {
     }
 
     const KIWIPETE: &str = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
+
+    #[test]
+    fn statistics_add_up_to_the_nodes_searched() {
+        let pos = Position::from_fen(KIWIPETE).unwrap();
+        let (result, reports) = search(&pos, &Limits::depth(6));
+        let stats = result.stats;
+        assert_eq!(
+            stats.nodes + stats.qnodes,
+            reports.last().unwrap().nodes,
+            "{stats:?}"
+        );
+        assert!(stats.cutoffs > 0 && stats.first_move_cutoffs <= stats.cutoffs);
+        assert!(stats.tt_cutoffs <= stats.tt_hits);
+        assert!(stats.null_move_cutoffs <= stats.null_moves);
+        assert!(stats.reduction_researches <= stats.reduced);
+    }
+
+    #[test]
+    fn search_trees_record_the_last_iteration() {
+        let pos = Position::startpos();
+        let mut engine = Engine::new();
+        let (tree, info) = engine.search_tree(&pos, &[], 3, 1, 10_000);
+        assert_eq!(info.depth, 3);
+        assert!(!tree.truncated);
+        // Every root move is entered at depth 2, and nothing deeper is recorded.
+        let entered = tree
+            .events
+            .iter()
+            .filter(|e| matches!(e.note, stats::Note::Enter { depth: 2, .. }))
+            .count();
+        assert!(entered >= pos.legal_moves().len(), "{entered}");
+        assert!(tree.events.iter().all(|e| e.path.len() <= 1));
+        // The same search without recording finds the same score.
+        let (_, reports) = search(&pos, &Limits::depth(3));
+        assert_eq!(reports.last().unwrap().score, info.score);
+    }
 
     #[test]
     fn transposition_table_saves_nodes_without_changing_the_result() {

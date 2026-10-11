@@ -119,6 +119,7 @@ use crate::Score;
 use crate::eval::{EvalParams, evaluate};
 use crate::ordering::{MovePicker, OrderingTables, is_noisy};
 use crate::see::{SEE_VALUES, see};
+use crate::stats::{Note, SearchStats, SearchTree};
 use crate::tablebase::{self, Tablebase, TablebaseParams};
 use crate::tt::{Bound, TranspositionTable, score_from_tt, score_to_tt};
 
@@ -372,6 +373,10 @@ pub(crate) struct Searcher<'a> {
     tablebase: Option<(&'a dyn Tablebase, TablebaseParams)>,
     /// Tablebase probes that gave a result.
     tb_hits: u64,
+    /// What the search has done so far (see [`crate::stats`]).
+    stats: SearchStats,
+    /// The search tree, when one is being recorded.
+    tree: Option<SearchTree>,
 }
 
 /// The late move reduction table covers depths and move numbers below this.
@@ -438,6 +443,31 @@ impl<'a> Searcher<'a> {
             shared_nodes: None,
             tablebase: None,
             tb_hits: 0,
+            stats: SearchStats::default(),
+            tree: None,
+        }
+    }
+
+    /// Records the search's decisions in `tree` from now on.
+    pub(crate) fn record_tree(&mut self, tree: SearchTree) {
+        self.tree = Some(tree);
+    }
+
+    /// The recorded search tree, if one was being recorded.
+    pub(crate) fn take_tree(&mut self) -> Option<SearchTree> {
+        self.tree.take()
+    }
+
+    /// What the search has done so far.
+    pub(crate) fn stats(&self) -> SearchStats {
+        self.stats
+    }
+
+    /// Reports a decision to the statistics and, when one is being recorded, the search tree.
+    fn note(&mut self, note: Note) {
+        self.stats.count(note);
+        if let Some(tree) = &mut self.tree {
+            tree.record(&self.path, note);
         }
     }
 
@@ -507,6 +537,7 @@ impl<'a> Searcher<'a> {
         pv: &mut Vec<Move>,
     ) -> i32 {
         self.nodes += 1;
+        self.note(Note::Enter { depth, alpha, beta });
         self.seldepth = self.seldepth.max(ply);
         pv.clear();
         if self.should_stop() {
@@ -543,6 +574,7 @@ impl<'a> Searcher<'a> {
         if self.techniques.tt
             && let Some(entry) = self.tt.probe(pos.hash())
         {
+            self.note(Note::TtHit);
             tt_move = entry.best_move.filter(|mv| moves.contains(mv));
             if u32::from(entry.depth) >= depth {
                 let score = score_from_tt(entry.score, ply);
@@ -552,6 +584,7 @@ impl<'a> Searcher<'a> {
                     Bound::Upper => score <= alpha,
                 };
                 if usable {
+                    self.note(Note::TtCutoff);
                     pv.extend(tt_move);
                     return score;
                 }
@@ -570,6 +603,7 @@ impl<'a> Searcher<'a> {
             && let Some(wdl) = tb.probe_wdl(pos)
         {
             self.tb_hits += 1;
+            self.note(Note::Tablebase);
             let score = tablebase::score(wdl, ply);
             if self.techniques.tt {
                 let stored = score_to_tt(score, ply);
@@ -599,6 +633,7 @@ impl<'a> Searcher<'a> {
             && depth <= p.rfp_max_depth
             && static_eval - p.rfp_margin * depth as i32 >= beta
         {
+            self.note(Note::ReverseFutility);
             return static_eval;
         }
         // ANCHOR_END: reverse_futility
@@ -613,6 +648,7 @@ impl<'a> Searcher<'a> {
         {
             let score = self.quiescence(pos, ply, alpha, alpha + 1, pv);
             if score <= alpha {
+                self.note(Note::Razoring);
                 return score;
             }
             pv.clear();
@@ -628,6 +664,7 @@ impl<'a> Searcher<'a> {
             && has_pieces(pos)
             && static_eval >= beta
         {
+            self.note(Note::NullMove);
             let reduction = p.null_reduction + depth / p.null_depth_divisor;
             let mut child = pos.clone();
             child.make_null_move();
@@ -642,12 +679,14 @@ impl<'a> Searcher<'a> {
                 -beta + 1,
                 &mut null_pv,
             );
+            self.note(Note::Exit { score: -score });
             self.keys.pop();
             self.path.pop();
             if self.aborted {
                 return 0;
             }
             if score >= beta {
+                self.note(Note::NullMoveCutoff);
                 // A mate found after passing isn't a real mate: claim no more than beta.
                 return if score >= MATE - MAX_PLY as i32 {
                     beta
@@ -674,6 +713,8 @@ impl<'a> Searcher<'a> {
         let mut child_pv = Vec::new();
         // Quiet moves searched so far that didn't cause a cutoff (for the history penalty).
         let mut quiets_tried = Vec::new();
+        // Moves actually searched (not pruned) so far.
+        let mut searched = 0;
         self.keys.push(pos.hash());
         for (index, mv) in picker.enumerate() {
             let quiet = !is_noisy(mv);
@@ -692,6 +733,7 @@ impl<'a> Searcher<'a> {
                 && best > -MATE + MAX_PLY as i32
                 && quiets_tried.len() as u32 >= p.lmp_base + depth * depth
             {
+                self.note(Note::LateMovePruning(mv));
                 continue;
             }
             // ANCHOR_END: lmp
@@ -705,6 +747,7 @@ impl<'a> Searcher<'a> {
                 && best > -MATE + MAX_PLY as i32
                 && static_eval + p.futility_base + p.futility_per_depth * depth as i32 <= alpha
             {
+                self.note(Note::Futility(mv));
                 continue;
             }
             // ANCHOR_END: futility
@@ -724,6 +767,7 @@ impl<'a> Searcher<'a> {
                     p.see_capture_margin
                 };
                 if see(pos, mv) < -margin * (depth as i32) {
+                    self.note(Note::SeePruning(mv));
                     continue;
                 }
             }
@@ -752,6 +796,7 @@ impl<'a> Searcher<'a> {
             };
             // ANCHOR_END: lmr
 
+            searched += 1;
             self.path.push(Some(mv));
             let score = self.search_move(&child, depth - 1, alpha, beta, how, &mut child_pv);
             self.path.pop();
@@ -770,6 +815,7 @@ impl<'a> Searcher<'a> {
             }
             // Beta cutoff: the opponent won't allow this position, so stop looking.
             if self.techniques.alpha_beta && alpha >= beta {
+                self.note(Note::BetaCutoff(mv, searched));
                 if !is_noisy(mv) {
                     self.ordering
                         .record_cutoff(pos, mv, &quiets_tried, ply, depth, previous);
@@ -822,19 +868,46 @@ impl<'a> Searcher<'a> {
         how: MoveSearch,
         pv: &mut Vec<Move>,
     ) -> i32 {
-        let ply = self.path.len() as u32;
         let pvs = self.techniques.pvs && self.techniques.alpha_beta;
         let reduction = match how {
             MoveSearch::Later { reduction } if pvs => reduction,
-            _ => return -self.negamax(child, depth, ply, -beta, -alpha, pv),
+            _ => return self.search_child(child, depth, alpha, beta, pv),
         };
-        let mut score = -self.negamax(child, depth - reduction, ply, -alpha - 1, -alpha, pv);
+        let mv = self.path.last().copied().flatten();
+        if reduction > 0
+            && let Some(mv) = mv
+        {
+            self.note(Note::Reduced(mv, reduction));
+        }
+        let mut score = self.search_child(child, depth - reduction, alpha, alpha + 1, pv);
         if score > alpha && reduction > 0 && !self.aborted {
-            score = -self.negamax(child, depth, ply, -alpha - 1, -alpha, pv);
+            if let Some(mv) = mv {
+                self.note(Note::ReductionResearch(mv));
+            }
+            score = self.search_child(child, depth, alpha, alpha + 1, pv);
         }
         if score > alpha && score < beta && !self.aborted {
-            score = -self.negamax(child, depth, ply, -beta, -alpha, pv);
+            if let Some(mv) = mv {
+                self.note(Note::PvsResearch(mv));
+            }
+            score = self.search_child(child, depth, alpha, beta, pv);
         }
+        score
+    }
+
+    /// The score of `child` for the side that moved there, searched to `depth` within the
+    /// mover's window `[alpha, beta]`.
+    fn search_child(
+        &mut self,
+        child: &Position,
+        depth: u32,
+        alpha: i32,
+        beta: i32,
+        pv: &mut Vec<Move>,
+    ) -> i32 {
+        let ply = self.path.len() as u32;
+        let score = -self.negamax(child, depth, ply, -beta, -alpha, pv);
+        self.note(Note::Exit { score: -score });
         score
     }
     // ANCHOR_END: pvs
@@ -852,6 +925,7 @@ impl<'a> Searcher<'a> {
         pv: &mut Vec<Move>,
     ) -> i32 {
         self.nodes += 1;
+        self.stats.count(Note::Quiescence);
         self.seldepth = self.seldepth.max(ply);
         pv.clear();
         if self.should_stop() {
@@ -910,11 +984,13 @@ impl<'a> Searcher<'a> {
                         .piece_at(mv.to())
                         .map_or(SEE_VALUES[0], |p| SEE_VALUES[p.piece_type.index()]);
                     if stand_pat + gain + self.search_params.delta_margin <= alpha {
+                        self.stats.count(Note::DeltaPruning(mv));
                         continue;
                     }
                 }
                 // SEE pruning: a capture that loses material can't help.
                 if self.techniques.see_pruning && see(pos, mv) < 0 {
+                    self.stats.count(Note::SeePruning(mv));
                     continue;
                 }
             }
