@@ -31,7 +31,7 @@
 # Part IV: A complete engine
 
 - [Lazy SMP](ch17-smp.md)
-- [Tablebases, opening books and Chess960]()
+- [Tablebases, opening books and Chess960](ch18-endgames.md)
 - [Strength levels]()
 - [XBoard and playing on Lichess]()
 

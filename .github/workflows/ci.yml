@@ -28,6 +28,18 @@ jobs:
         run: cargo fmt --all --check
       - name: Clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Cache the test tablebases
+        uses: actions/cache@v4
+        with:
+          path: syzygy-tables
+          key: syzygy-test-${{ hashFiles('scripts/download-syzygy.sh') }}
+      # The tablebase tests run when this succeeds; if the download site is down they are
+      # skipped (with a warning) rather than blocking every PR.
+      - name: Download the test tablebases
+        continue-on-error: true
+        run: |
+          scripts/download-syzygy.sh syzygy-tables test
+          echo "CB2026_SYZYGY_PATH=$PWD/syzygy-tables" >> "$GITHUB_ENV"
       - name: Tests
         run: cargo test --workspace --locked
       - name: Perft suites (release build, every depth)

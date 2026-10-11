@@ -76,6 +76,11 @@
 //! - **Delta pruning** in the quiescence search: a capture that can't bring the score near
 //!   alpha even if it wins the captured piece outright is skipped.
 //!
+//! ## Tablebase probes (stage 18)
+//!
+//! With few pieces left, the search can ask the endgame tablebases for the exact result
+//! instead of searching on (see [`crate::tablebase`]).
+//!
 //! ## Quiescence search
 //!
 //! Stopping the search at a fixed depth and evaluating there is dangerous: the last move
@@ -114,6 +119,7 @@ use crate::Score;
 use crate::eval::{EvalParams, evaluate};
 use crate::ordering::{MovePicker, OrderingTables, is_noisy};
 use crate::see::{SEE_VALUES, see};
+use crate::tablebase::{self, Tablebase, TablebaseParams};
 use crate::tt::{Bound, TranspositionTable, score_from_tt, score_to_tt};
 
 /// The score of being checkmated right now (higher than any evaluation).
@@ -362,6 +368,10 @@ pub(crate) struct Searcher<'a> {
     lmr: Vec<[u8; LMR_TABLE_SIZE]>,
     /// A counter shared with other threads, which this search adds its nodes to.
     shared_nodes: Option<&'a AtomicU64>,
+    /// Endgame tablebases to probe, and when.
+    tablebase: Option<(&'a dyn Tablebase, TablebaseParams)>,
+    /// Tablebase probes that gave a result.
+    tb_hits: u64,
 }
 
 /// The late move reduction table covers depths and move numbers below this.
@@ -426,7 +436,19 @@ impl<'a> Searcher<'a> {
             path: Vec::new(),
             lmr: lmr_table(&search_params),
             shared_nodes: None,
+            tablebase: None,
+            tb_hits: 0,
         }
+    }
+
+    /// Probes `tb` during the search, as `params` allow.
+    pub(crate) fn use_tablebase(&mut self, tb: &'a dyn Tablebase, params: TablebaseParams) {
+        self.tablebase = Some((tb, params));
+    }
+
+    /// Tablebase probes that gave a result so far.
+    pub(crate) fn tb_hits(&self) -> u64 {
+        self.tb_hits
     }
 
     /// Adds this search's node count to `counter` as it goes (helper threads report their
@@ -529,6 +551,27 @@ impl<'a> Searcher<'a> {
             }
         }
         // ANCHOR_END: tt_probe
+
+        // ANCHOR: tb_probe
+        // Endgame tablebases: right after a capture or pawn move, a covered position's result
+        // is known exactly.
+        if let Some((tb, tb_params)) = self.tablebase
+            && ply > 0
+            && depth >= tb_params.probe_depth
+            && pos.halfmove_clock() == 0
+            && tablebase::covers(tb, &tb_params, pos)
+            && let Some(wdl) = tb.probe_wdl(pos)
+        {
+            self.tb_hits += 1;
+            let score = tablebase::score(wdl, ply);
+            if self.techniques.tt {
+                let stored = score_to_tt(score, ply);
+                self.tt
+                    .store(pos.hash(), None, stored, MAX_PLY, Bound::Exact);
+            }
+            return score;
+        }
+        // ANCHOR_END: tb_probe
 
         let p = self.search_params;
         let in_check = pos.in_check();

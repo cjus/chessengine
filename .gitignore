@@ -25,3 +25,4 @@ rustc-ice-*.txt
 
 # mdBook output
 book/book/
+syzygy-tables/
