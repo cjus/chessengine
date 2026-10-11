@@ -13,11 +13,14 @@
 //! - [`uci_client`], [`game`] and [`match_runner`]: a small tournament manager that plays two
 //!   UCI engines against each other, used by the `match` tool to measure changes.
 //! - [`sprt`]: Elo estimates and the sequential probability ratio test.
-//! - The `perft-suite`, `find-magics` and `match` command-line tools (`src/bin/`).
+//! - [`gauntlet`]: a rating on an outside scale (like CCRL Blitz) from matches against
+//!   reference engines, used by the `gauntlet` tool.
+//! - The `perft-suite`, `find-magics`, `match` and `gauntlet` command-line tools (`src/bin/`).
 
 #![forbid(unsafe_code)]
 
 pub mod game;
+pub mod gauntlet;
 pub mod match_runner;
 pub mod sprt;
 pub mod uci_client;

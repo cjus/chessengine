@@ -48,8 +48,30 @@ scripts/mac-sprt.sh <PR number> [elo0 elo1] [time control]
 This builds the PR and `main` in separate worktrees, runs the SPRT with one game per
 performance core minus one under `caffeinate`, and posts the result to the PR as a comment.
 
+```sh
+scripts/mac-gauntlet.sh <engines file> <issue or PR number> [games per engine] [tc] [git ref]
+```
+
+A rating gauntlet: `main` (or the given ref) plays each reference engine in the file (one
+`rating path` per line) and the `gauntlet` tool fits cb2026's rating on the reference list's
+scale (maximum likelihood with the reference ratings held fixed, see
+`crates/tools/src/gauntlet.rs`). The result is posted to the issue or PR. Run it at each
+milestone gate (see `docs/PRD.md`, "Testing and strength measurement").
+
 ## Bench
 
 From stage 5, `cb2026 bench` searches a fixed set of positions to a fixed depth and prints
 the total node count. Every commit message ends with `Bench: <nodes>`. If a change isn't meant
 to alter the search, the number must stay the same.
+
+## Rating gauntlets in a cloud session
+
+The `gauntlet` tool runs anywhere:
+
+```sh
+cargo run --release -p cb2026-tools --bin gauntlet -- --engine target/release/cb2026 \
+    --opponent /path/to/engine-a 2150 --opponent /path/to/engine-b 2400 \
+    --games 400 --tc 8+0.08 --concurrency 3
+```
+
+`--games` is per opponent. The last line is the rating with its 95% margin.
