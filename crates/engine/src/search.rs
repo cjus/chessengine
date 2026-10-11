@@ -17,6 +17,24 @@
 //! with good move ordering the number of positions searched drops from about `b^d` to about
 //! `b^(d/2)`: twice the depth for the same effort.
 //!
+//! ## Principal variation search (stage 11)
+//!
+//! With good move ordering the first move searched at a node is usually the best. **PVS**
+//! bets on it: the first move gets the full window, and every later move is searched with a
+//! **null window** `[alpha, alpha + 1]`, which only asks "is this move better than alpha?".
+//! A null-window search cuts off far more often, so it's much cheaper. When the bet fails
+//! (a later move does beat alpha), that move is searched again with the full window to get its
+//! real score. With good ordering re-searches are rare and PVS wins overall.
+//!
+//! ## Aspiration windows (stage 11)
+//!
+//! Iterative deepening's scores rarely change much from one depth to the next. So instead of
+//! searching each depth with the infinite window `[-∞, +∞]`, the root starts with a narrow
+//! window around the previous score, `[score − 25, score + 25]`, which prunes much more. If
+//! the true score falls outside (a **fail low** or **fail high**), the window is widened on
+//! that side and the depth searched again, doubling the margin each time until it gives up and
+//! uses the full window.
+//!
 //! ## Quiescence search
 //!
 //! Stopping the search at a fixed depth and evaluating there is dangerous: the last move
@@ -67,6 +85,29 @@ pub const DEFAULT_DEPTH: u32 = 6;
 /// How many nodes pass between checks of the stop flag, the clock and the node limit.
 const CHECK_INTERVAL: u64 = 1024;
 
+// ANCHOR: search_params
+/// The search's tunable numbers.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SearchParams {
+    /// Aspiration windows start at the previous score ± this many centipawns.
+    pub aspiration_delta: i32,
+    /// Aspiration windows are used from this depth on (shallow scores jump around too much).
+    pub aspiration_min_depth: u32,
+    /// Once the margin grows past this, the full window is used.
+    pub aspiration_max_delta: i32,
+}
+
+impl Default for SearchParams {
+    fn default() -> SearchParams {
+        SearchParams {
+            aspiration_delta: 25,
+            aspiration_min_depth: 5,
+            aspiration_max_delta: 800,
+        }
+    }
+}
+// ANCHOR_END: search_params
+
 /// Search techniques that can be switched off, to see what each one is worth.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Techniques {
@@ -89,6 +130,10 @@ pub struct Techniques {
     pub countermoves: bool,
     /// The history heuristic: quiet moves are ordered by how often they caused cutoffs.
     pub history: bool,
+    /// Principal variation search: moves after the first get a null-window search first.
+    pub pvs: bool,
+    /// Aspiration windows: each iteration starts with a narrow window around the last score.
+    pub aspiration: bool,
 }
 
 impl Default for Techniques {
@@ -101,6 +146,8 @@ impl Default for Techniques {
             killers: true,
             countermoves: true,
             history: true,
+            pvs: true,
+            aspiration: true,
         }
     }
 }
@@ -143,6 +190,7 @@ pub(crate) struct StopConditions<'a> {
 /// The state of one search.
 pub(crate) struct Searcher<'a> {
     params: &'a EvalParams,
+    search_params: SearchParams,
     tt: &'a mut TranspositionTable,
     ordering: &'a mut OrderingTables,
     techniques: Techniques,
@@ -162,6 +210,7 @@ pub(crate) struct Searcher<'a> {
 impl<'a> Searcher<'a> {
     pub(crate) fn new(
         params: &'a EvalParams,
+        search_params: SearchParams,
         tt: &'a mut TranspositionTable,
         ordering: &'a mut OrderingTables,
         techniques: Techniques,
@@ -170,6 +219,7 @@ impl<'a> Searcher<'a> {
     ) -> Searcher<'a> {
         Searcher {
             params,
+            search_params,
             tt,
             ordering,
             techniques,
@@ -293,11 +343,11 @@ impl<'a> Searcher<'a> {
         // Quiet moves searched so far that didn't cause a cutoff (for the history penalty).
         let mut quiets_tried = Vec::new();
         self.keys.push(pos.hash());
-        for mv in picker {
+        for (index, mv) in picker.enumerate() {
             let mut child = pos.clone();
             child.make_move(mv);
             self.path.push(mv);
-            let score = -self.negamax(&child, depth - 1, ply + 1, -beta, -alpha, &mut child_pv);
+            let score = self.search_move(&child, depth - 1, alpha, beta, index == 0, &mut child_pv);
             self.path.pop();
             if self.aborted {
                 break;
@@ -349,6 +399,34 @@ impl<'a> Searcher<'a> {
         best
     }
     // ANCHOR_END: negamax
+
+    // ANCHOR: pvs
+    /// The score of the move that led to `child` (the last move on the path), from the
+    /// mover's side: searched with the full window if it is the `first` move, otherwise (with
+    /// PVS on) with a null window first, and again with the full window only if it beats
+    /// `alpha`.
+    fn search_move(
+        &mut self,
+        child: &Position,
+        depth: u32,
+        alpha: i32,
+        beta: i32,
+        first: bool,
+        pv: &mut Vec<Move>,
+    ) -> i32 {
+        let ply = self.path.len() as u32;
+        let pvs = self.techniques.pvs && self.techniques.alpha_beta;
+        if first || !pvs {
+            return -self.negamax(child, depth, ply, -beta, -alpha, pv);
+        }
+        let score = -self.negamax(child, depth, ply, -alpha - 1, -alpha, pv);
+        if score > alpha && score < beta && !self.aborted {
+            -self.negamax(child, depth, ply, -beta, -alpha, pv)
+        } else {
+            score
+        }
+    }
+    // ANCHOR_END: pvs
 
     // ANCHOR: quiescence
     /// The quiescence score of `pos`, `ply` plies from the root, within `[alpha, beta]`:
@@ -436,8 +514,11 @@ impl<'a> Searcher<'a> {
     }
     // ANCHOR_END: quiescence
 
-    /// Searches the root position to `depth`, trying `root_moves` in the order given.
+    /// Searches the root position to `depth` within `[alpha, beta]`, trying `root_moves` in
+    /// the order given.
     ///
+    /// The score is fail-soft: at most `alpha` if every move failed low, at least `beta` if a
+    /// move failed high (the search then stops, since the caller will widen the window).
     /// If the search is stopped early, the best fully searched move is kept and `complete` is
     /// false; if not even one move was finished, `best_move` is the first move and `score`
     /// is `-INFINITY`.
@@ -446,6 +527,8 @@ impl<'a> Searcher<'a> {
         pos: &Position,
         root_moves: &[Move],
         depth: u32,
+        mut alpha: i32,
+        beta: i32,
     ) -> RootResult {
         let mut result = RootResult {
             best_move: root_moves.first().copied(),
@@ -453,19 +536,18 @@ impl<'a> Searcher<'a> {
             depth,
             ..RootResult::default()
         };
-        let mut alpha = -INFINITY;
         let mut child_pv = Vec::new();
         self.keys.push(pos.hash());
-        for &mv in root_moves {
+        for (index, &mv) in root_moves.iter().enumerate() {
             let mut child = pos.clone();
             child.make_move(mv);
             self.path.push(mv);
-            let score = -self.negamax(
+            let score = self.search_move(
                 &child,
                 depth.saturating_sub(1),
-                1,
-                -INFINITY,
-                -alpha,
+                alpha,
+                beta,
+                index == 0,
                 &mut child_pv,
             );
             self.path.pop();
@@ -480,6 +562,9 @@ impl<'a> Searcher<'a> {
                     .collect();
                 if self.techniques.alpha_beta {
                     alpha = alpha.max(score);
+                    if score >= beta {
+                        break;
+                    }
                 }
             }
         }
@@ -489,6 +574,65 @@ impl<'a> Searcher<'a> {
         result.complete = !self.aborted;
         result
     }
+
+    // ANCHOR: aspiration
+    /// Searches the root to `depth`, using an aspiration window around `previous` (the last
+    /// depth's score) when there is one. Fail-high moves are moved to the front of
+    /// `root_moves` for the re-search.
+    pub(crate) fn search_depth(
+        &mut self,
+        pos: &Position,
+        root_moves: &mut Vec<Move>,
+        depth: u32,
+        previous: Option<i32>,
+    ) -> RootResult {
+        let p = self.search_params;
+        let center = previous.filter(|score| {
+            self.techniques.aspiration
+                && self.techniques.alpha_beta
+                && depth >= p.aspiration_min_depth
+                && score.abs() < MATE - MAX_PLY as i32
+        });
+        let Some(center) = center else {
+            return self.search_root(pos, root_moves, depth, -INFINITY, INFINITY);
+        };
+        let mut delta = p.aspiration_delta;
+        let (mut alpha, mut beta) = (center - delta, center + delta);
+        let mut fail_high: Option<RootResult> = None;
+        loop {
+            let result = self.search_root(pos, root_moves, depth, alpha, beta);
+            if !result.complete {
+                // Stopped during a re-search before any move finished: the move that failed
+                // high is still the best information there is.
+                return match fail_high {
+                    Some(high) if result.score == -INFINITY => RootResult {
+                        complete: false,
+                        nodes: result.nodes,
+                        seldepth: result.seldepth,
+                        ..high
+                    },
+                    _ => result,
+                };
+            }
+            if result.score <= alpha {
+                alpha = (result.score - delta).max(-INFINITY);
+            } else if result.score >= beta {
+                beta = (result.score + delta).min(INFINITY);
+                if let Some(mv) = result.best_move {
+                    root_moves.retain(|&m| m != mv);
+                    root_moves.insert(0, mv);
+                }
+                fail_high = Some(result);
+            } else {
+                return result;
+            }
+            delta *= 2;
+            if delta > p.aspiration_max_delta {
+                (alpha, beta) = (-INFINITY, INFINITY);
+            }
+        }
+    }
+    // ANCHOR_END: aspiration
 
     /// Whether the search has been stopped (stop flag, hard time limit or node limit).
     pub(crate) fn aborted(&self) -> bool {
@@ -506,6 +650,16 @@ mod tests {
     use super::*;
 
     fn search(fen: &str, depth: u32, techniques: Techniques) -> RootResult {
+        search_with_window(fen, depth, techniques, None)
+    }
+
+    /// Searches to `depth`, with an aspiration window around `previous` if given.
+    fn search_with_window(
+        fen: &str,
+        depth: u32,
+        techniques: Techniques,
+        previous: Option<i32>,
+    ) -> RootResult {
         let pos = Position::from_fen(fen).unwrap();
         // Material only, so the expected scores can be worked out by hand.
         let params = EvalParams::material_only();
@@ -514,6 +668,7 @@ mod tests {
         let mut ordering = OrderingTables::default();
         let mut searcher = Searcher::new(
             &params,
+            SearchParams::default(),
             &mut tt,
             &mut ordering,
             techniques,
@@ -524,8 +679,8 @@ mod tests {
             },
             &[],
         );
-        let moves: Vec<Move> = pos.legal_moves().iter().copied().collect();
-        searcher.search_root(&pos, &moves, depth)
+        let mut moves: Vec<Move> = pos.legal_moves().iter().copied().collect();
+        searcher.search_depth(&pos, &mut moves, depth, previous)
     }
 
     #[test]
@@ -689,6 +844,44 @@ mod tests {
             with_nodes < without_nodes,
             "{with_nodes} vs {without_nodes}"
         );
+    }
+
+    #[test]
+    fn pvs_gives_the_same_score_with_fewer_nodes() {
+        let fen = "r1bq1rk1/pppp1ppp/2n2n2/2b1p3/2B1P3/2N2N2/PPPP1PPP/R1BQ1RK1 w - - 0 1";
+        let with = search(fen, 5, Techniques::default());
+        let without = search(
+            fen,
+            5,
+            Techniques {
+                pvs: false,
+                ..Techniques::default()
+            },
+        );
+        assert_eq!(with.score, without.score);
+        assert!(
+            with.nodes < without.nodes,
+            "{} vs {}",
+            with.nodes,
+            without.nodes
+        );
+    }
+
+    #[test]
+    fn a_failed_aspiration_window_is_widened_until_the_score_fits() {
+        // Without the table, so every search sees the same tree.
+        let techniques = Techniques {
+            tt: false,
+            ..Techniques::default()
+        };
+        let fen = "r1bq1rk1/pppp1ppp/2n2n2/2b1p3/2B1P3/2N2N2/PPPP1PPP/R1BQ1RK1 w - - 0 1";
+        let full = search_with_window(fen, 5, techniques, None);
+        // A guess far too low (fails high), then one far too high (fails low).
+        for guess in [full.score - 300, full.score + 300] {
+            let windowed = search_with_window(fen, 5, techniques, Some(guess));
+            assert_eq!(windowed.score, full.score, "guess {guess}");
+            assert_eq!(windowed.best_move, full.best_move, "guess {guess}");
+        }
     }
 
     #[test]

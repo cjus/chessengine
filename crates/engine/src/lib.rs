@@ -74,8 +74,8 @@ use cb2026_chess::{Move, Position};
 
 use eval::EvalParams;
 use search::{
-    DEFAULT_DEPTH, INFINITY, MATE, MAX_PLY, RootResult, Searcher, StopConditions, Techniques,
-    to_score,
+    DEFAULT_DEPTH, INFINITY, MATE, MAX_PLY, RootResult, SearchParams, Searcher, StopConditions,
+    Techniques, to_score,
 };
 use time::TimeParams;
 use tt::TranspositionTable;
@@ -187,6 +187,8 @@ pub struct Engine {
     pub techniques: Techniques,
     /// The time manager's settings.
     pub time: TimeParams,
+    /// The search's tunable numbers.
+    pub search_params: SearchParams,
     /// The transposition table, kept from one search to the next.
     pub tt: TranspositionTable,
     /// Killer moves, countermoves and history, for ordering quiet moves.
@@ -268,6 +270,7 @@ impl Engine {
 
         let mut searcher = Searcher::new(
             &self.params,
+            self.search_params,
             &mut self.tt,
             &mut self.ordering,
             self.techniques,
@@ -280,7 +283,8 @@ impl Engine {
         );
         let mut best: Option<RootResult> = None;
         for depth in 1..=max_depth {
-            let result = searcher.search_root(position, &root_moves, depth);
+            let previous = best.as_ref().map(|b| b.score);
+            let result = searcher.search_depth(position, &mut root_moves, depth, previous);
             // A stopped iteration still counts if it finished at least one move: the first
             // move searched is the previous best, so its result is at least as well-founded.
             let usable = result.complete || result.score > -INFINITY;
