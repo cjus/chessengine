@@ -30,6 +30,9 @@ pub struct MatchSettings {
     pub engines: [String; 2],
     /// UCI options for both engines.
     pub options: Vec<(String, String)>,
+    /// Extra UCI options for the first engine only (for example `Threads`, to test how the
+    /// engine scales against a single-threaded copy of itself).
+    pub first_options: Vec<(String, String)>,
     /// How long each move may take.
     pub time_control: TimeControl,
     /// Opening positions (FEN), played in order, each twice with colours swapped.
@@ -40,6 +43,17 @@ pub struct MatchSettings {
     pub concurrency: usize,
     /// Stop early when this test reaches a verdict.
     pub sprt: Option<Sprt>,
+}
+
+impl MatchSettings {
+    /// The options for engine `which` (0 = first): the shared ones, then its own.
+    pub fn engine_options(&self, which: usize) -> Vec<(String, String)> {
+        let mut options = self.options.clone();
+        if which == 0 {
+            options.extend(self.first_options.iter().cloned());
+        }
+        options
+    }
 }
 
 /// One finished game, as reported to the caller.
@@ -64,8 +78,10 @@ pub fn run_match(
         return Err("no opening positions".to_string());
     }
     // Check both engines start before launching workers.
-    for path in &settings.engines {
-        UciEngine::start(path, &settings.options).map_err(|e| format!("{path}: {e}"))?;
+    for which in 0..2 {
+        let path = &settings.engines[which];
+        UciEngine::start(path, &settings.engine_options(which))
+            .map_err(|e| format!("{path}: {e}"))?;
     }
 
     let total = settings.max_games.div_ceil(2) * 2;
@@ -80,10 +96,10 @@ pub fn run_match(
         let stop = Arc::clone(&stop);
         let sender = sender.clone();
         workers.push(thread::spawn(move || {
-            let start = |path: &str| UciEngine::start(path, &settings.options);
-            let (Ok(mut first), Ok(mut second)) =
-                (start(&settings.engines[0]), start(&settings.engines[1]))
-            else {
+            let start = |which: usize| {
+                UciEngine::start(&settings.engines[which], &settings.engine_options(which))
+            };
+            let (Ok(mut first), Ok(mut second)) = (start(0), start(1)) else {
                 return;
             };
             while !stop.load(Ordering::Relaxed) {

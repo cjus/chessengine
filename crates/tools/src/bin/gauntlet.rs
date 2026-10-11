@@ -104,6 +104,7 @@ fn run() -> Result<(), String> {
         let settings = MatchSettings {
             engines: [engine.clone(), path.clone()],
             options: options.clone(),
+            first_options: Vec::new(),
             time_control: tc,
             openings: openings.clone(),
             max_games: games,

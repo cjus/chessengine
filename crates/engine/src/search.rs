@@ -105,7 +105,7 @@
 //! [Quiescence Search](https://www.chessprogramming.org/Quiescence_Search) and
 //! [Checkmate](https://www.chessprogramming.org/Checkmate).
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Instant;
 
 use cb2026_chess::{Move, PieceType, Position};
@@ -343,7 +343,7 @@ pub(crate) struct StopConditions<'a> {
 pub(crate) struct Searcher<'a> {
     params: &'a EvalParams,
     search_params: SearchParams,
-    tt: &'a mut TranspositionTable,
+    tt: &'a TranspositionTable,
     ordering: &'a mut OrderingTables,
     techniques: Techniques,
     stop: &'a AtomicBool,
@@ -360,6 +360,8 @@ pub(crate) struct Searcher<'a> {
     path: Vec<Option<Move>>,
     /// Late move reductions by depth and move number (see [`lmr_table`]).
     lmr: Vec<[u8; LMR_TABLE_SIZE]>,
+    /// A counter shared with other threads, which this search adds its nodes to.
+    shared_nodes: Option<&'a AtomicU64>,
 }
 
 /// The late move reduction table covers depths and move numbers below this.
@@ -402,7 +404,7 @@ impl<'a> Searcher<'a> {
     pub(crate) fn new(
         params: &'a EvalParams,
         search_params: SearchParams,
-        tt: &'a mut TranspositionTable,
+        tt: &'a TranspositionTable,
         ordering: &'a mut OrderingTables,
         techniques: Techniques,
         stop: StopConditions<'a>,
@@ -423,13 +425,23 @@ impl<'a> Searcher<'a> {
             keys: history.to_vec(),
             path: Vec::new(),
             lmr: lmr_table(&search_params),
+            shared_nodes: None,
         }
+    }
+
+    /// Adds this search's node count to `counter` as it goes (helper threads report their
+    /// nodes this way, so the main thread can show the total).
+    pub(crate) fn count_nodes_in(&mut self, counter: &'a AtomicU64) {
+        self.shared_nodes = Some(counter);
     }
 
     /// Whether the search must end now (stop flag, time or node limit). Checked every
     /// [`CHECK_INTERVAL`] nodes, since reading the clock isn't free.
     fn should_stop(&mut self) -> bool {
         if !self.aborted && self.nodes.is_multiple_of(CHECK_INTERVAL) {
+            if let Some(counter) = self.shared_nodes {
+                counter.fetch_add(CHECK_INTERVAL, Ordering::Relaxed);
+            }
             self.aborted = self.stop.load(Ordering::Relaxed)
                 || self.deadline.is_some_and(|d| Instant::now() >= d)
                 || self.max_nodes.is_some_and(|n| self.nodes >= n);
@@ -1047,12 +1059,12 @@ mod tests {
         // Material only, so the expected scores can be worked out by hand.
         let params = EvalParams::material_only();
         let stop = AtomicBool::new(false);
-        let mut tt = TranspositionTable::new(1);
+        let tt = TranspositionTable::new(1);
         let mut ordering = OrderingTables::default();
         let mut searcher = Searcher::new(
             &params,
             SearchParams::default(),
-            &mut tt,
+            &tt,
             &mut ordering,
             techniques,
             StopConditions {

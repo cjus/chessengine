@@ -5,11 +5,17 @@
 //!     --engine NEW --engine OLD \
 //!     [--tc 8+0.08 | --tc 40/60 | --tc nodes=20000 | --tc depth=4] \
 //!     [--games 1000] [--concurrency 3] [--openings tests/data/openings.epd] \
-//!     [--sprt 0 5] [--option Name=Value ...] [--pgn games.pgn]
+//!     [--sprt 0 5] [--option Name=Value ...] [--first-option Name=Value ...] [--pgn games.pgn]
 //! ```
 //!
+//! `--option` is sent to both engines, `--first-option` only to the first (for example
+//! `--first-option Threads=4` to measure how the engine scales against one thread).
+//!
 //! Results are from the first engine's point of view. The last lines count the games that
-//! ended badly (time losses, illegal moves, crashes), for robustness runs. With `--sprt elo0 elo1` the match stops
+//! ended badly (time losses, illegal moves, crashes), for robustness runs. With
+//! `--sprt elo0 elo1` the match stops as soon as the test passes or fails. Exit status: 0 if
+//! the SPRT passed (or no SPRT was run), 1 if it failed or was inconclusive, 2 for usage
+//! errors.
 //! as soon as the test passes or fails. Exit status: 0 if the SPRT passed (or no SPRT was
 //! run), 1 if it failed or was inconclusive, 2 for usage errors.
 
@@ -22,7 +28,8 @@ use cb2026_tools::match_runner::{MatchSettings, parse_openings, run_match};
 use cb2026_tools::sprt::{Sprt, Verdict};
 
 const USAGE: &str = "Usage: match --engine A --engine B [--tc 8+0.08|40/60|nodes=N|depth=N] \
-[--games N] [--concurrency N] [--openings FILE] [--sprt ELO0 ELO1] [--option Name=Value] [--pgn FILE]";
+[--games N] [--concurrency N] [--openings FILE] [--sprt ELO0 ELO1] [--option Name=Value] \
+[--first-option Name=Value] [--pgn FILE]";
 
 fn main() -> ExitCode {
     match run() {
@@ -42,6 +49,7 @@ fn run() -> Result<ExitCode, String> {
     let mut openings_path = "tests/data/openings.epd".to_string();
     let mut sprt = None;
     let mut options = Vec::new();
+    let mut first_options = Vec::new();
     let mut pgn: Option<File> = None;
 
     let mut args = std::env::args().skip(1);
@@ -69,12 +77,17 @@ fn run() -> Result<ExitCode, String> {
                     .map_err(|e| format!("--sprt: {e}"))?;
                 sprt = Some(Sprt::new(elo0, elo1));
             }
-            "--option" => {
+            "--option" | "--first-option" => {
                 let text = value()?;
                 let (name, val) = text
                     .split_once('=')
-                    .ok_or(format!("--option expects Name=Value, got '{text}'"))?;
-                options.push((name.to_string(), val.to_string()));
+                    .ok_or(format!("{arg} expects Name=Value, got '{text}'"))?;
+                let list = if arg == "--option" {
+                    &mut options
+                } else {
+                    &mut first_options
+                };
+                list.push((name.to_string(), val.to_string()));
             }
             "--pgn" => {
                 let path = value()?;
@@ -95,6 +108,7 @@ fn run() -> Result<ExitCode, String> {
     let settings = MatchSettings {
         engines,
         options,
+        first_options,
         time_control: tc,
         openings: parse_openings(&text),
         max_games: games,

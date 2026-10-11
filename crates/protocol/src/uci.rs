@@ -8,6 +8,7 @@
 //! < id author the cb2026 authors
 //! < option name Hash type spin default 16 min 1 max 65536
 //! < option name Clear Hash type button
+//! < option name Threads type spin default 1 min 1 max 256
 //! < option name Move Overhead type spin default 30 min 0 max 5000
 //! < option name UCI_Chess960 type check default false
 //! < uciok
@@ -36,7 +37,7 @@ use std::time::Duration;
 
 use cb2026_chess::{Move, Position};
 use cb2026_engine::tt::{DEFAULT_HASH_MB, MAX_HASH_MB};
-use cb2026_engine::{AUTHOR, Engine, Limits, SearchInfo, id_name};
+use cb2026_engine::{AUTHOR, Engine, Limits, MAX_THREADS, SearchInfo, id_name};
 
 /// Where the engine's replies go. Shared between the command loop and the search thread.
 type Output = Arc<Mutex<Box<dyn Write + Send>>>;
@@ -134,6 +135,10 @@ impl Session {
                 send(&self.output, "option name Clear Hash type button");
                 send(
                     &self.output,
+                    &format!("option name Threads type spin default 1 min 1 max {MAX_THREADS}"),
+                );
+                send(
+                    &self.output,
                     "option name Move Overhead type spin default 30 min 0 max 5000",
                 );
                 send(
@@ -197,6 +202,17 @@ impl Session {
                 _ => send(
                     &self.output,
                     &format!("info string Hash must be 1-{MAX_HASH_MB} (MB), not '{value}'"),
+                ),
+            },
+            "threads" => match value.parse::<usize>() {
+                Ok(n) if (1..=MAX_THREADS).contains(&n) => {
+                    if let Some(engine) = self.engine.as_mut() {
+                        engine.threads = n;
+                    }
+                }
+                _ => send(
+                    &self.output,
+                    &format!("info string Threads must be 1-{MAX_THREADS}, not '{value}'"),
                 ),
             },
             "clear hash" => {
@@ -522,6 +538,22 @@ mod tests {
         assert!(!lines.iter().any(|l| l.starts_with("info string")));
         let bad = session("setoption name Hash value 0\nisready\n");
         assert!(bad.iter().any(|l| l.contains("Hash must be 1-65536")));
+    }
+
+    #[test]
+    fn threads_option() {
+        let lines = session(
+            "uci\nsetoption name Threads value 3\nposition startpos\ngo depth 6\nisready\n",
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|l| l.starts_with("option name Threads type spin default 1"))
+        );
+        assert!(!lines.iter().any(|l| l.starts_with("info string")));
+        assert!(lines.iter().any(|l| l.starts_with("bestmove ")));
+        let bad = session("setoption name Threads value 0\nisready\n");
+        assert!(bad.iter().any(|l| l.contains("Threads must be 1-256")));
     }
 
     #[test]
