@@ -91,6 +91,16 @@
 //! more selectively (for example only checks that don't lose material, or only "singular"
 //! moves). The switch stays, so the experiment can be repeated.
 //!
+//! ## Internal iterative reductions
+//!
+//! The transposition table's best move is usually the best move, and searching it first is
+//! what makes alpha-beta fast. A node at some depth with no hash move has never been searched
+//! (or always failed low), so its move ordering will be poor; and nodes like that are rarely on
+//! the principal variation. **Internal iterative reduction** (IIR) searches such nodes one ply
+//! shallower, from depth 4 on. If the node matters, the next iteration finds it again, now with
+//! a hash move, at full depth. (The older **internal iterative deepening** did a shallow search
+//! first just to find a move to order first; reducing turned out to be cheaper and as good.)
+//!
 //! ## Tablebase probes (stage 18)
 //!
 //! With few pieces left, the search can ask the endgame tablebases for the exact result
@@ -200,6 +210,8 @@ pub struct SearchParams {
     /// Delta pruning: a capture is skipped if winning the piece plus this margin still
     /// leaves the score at or below alpha.
     pub delta_margin: i32,
+    /// Internal iterative reductions apply from this depth on.
+    pub iir_min_depth: u32,
 }
 
 impl Default for SearchParams {
@@ -228,6 +240,7 @@ impl Default for SearchParams {
             see_quiet_margin: 60,
             see_capture_margin: 100,
             delta_margin: 200,
+            iir_min_depth: 4,
         }
     }
 }
@@ -280,6 +293,8 @@ pub struct Techniques {
     pub see_ordering: bool,
     /// Search moves that give check one ply deeper (off by default).
     pub check_extension: bool,
+    /// Internal iterative reductions: search nodes without a hash move a ply shallower.
+    pub iir: bool,
 }
 
 impl Default for Techniques {
@@ -305,6 +320,7 @@ impl Default for Techniques {
             see_ordering: true,
             // Off by default: it didn't measure stronger (see the module documentation).
             check_extension: false,
+            iir: true,
         }
     }
 }
@@ -326,6 +342,7 @@ impl Techniques {
             see_pruning: false,
             delta_pruning: false,
             check_extension: false,
+            iir: false,
             ..Techniques::default()
         }
     }
@@ -611,6 +628,19 @@ impl<'a> Searcher<'a> {
             }
         }
         // ANCHOR_END: tt_probe
+
+        // ANCHOR: iir
+        // Internal iterative reduction: with no hash move to try first, move ordering is poor
+        // and the node probably isn't important; search it a ply shallower.
+        let depth = if self.techniques.iir
+            && tt_move.is_none()
+            && depth >= self.search_params.iir_min_depth
+        {
+            depth - 1
+        } else {
+            depth
+        };
+        // ANCHOR_END: iir
 
         // ANCHOR: tb_probe
         // Endgame tablebases: right after a capture or pawn move, a covered position's result

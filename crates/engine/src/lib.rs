@@ -776,15 +776,36 @@ mod tests {
     fn check_extensions_see_further_along_checks() {
         // Philidor's legacy: 1. Nf7+ Kg8 2. Nh6+ Kh8 3. Qg8+ Rxg8 4. Nf7#, every move a check.
         let fen = "4r2k/6pp/8/3Q2N1/8/8/6PP/6K1 w - - 0 1";
+        // Internal iterative reductions are off: they shorten some of these lines too, and
+        // the test is about the extension alone.
         let mut engine = Engine::new();
         engine.techniques.check_extension = true;
+        engine.techniques.iir = false;
         assert_eq!(search_with(&mut engine, fen, 7).score, Score::Mate(4));
-        let mut without = Engine::new();
+        let mut without = engine.clone();
+        without.new_game();
         without.techniques.check_extension = false;
         assert!(matches!(
             search_with(&mut without, fen, 7).score,
             Score::Centipawns(_)
         ));
+    }
+
+    #[test]
+    fn internal_iterative_reductions_save_nodes_and_still_find_mates() {
+        let nodes = |iir: bool| {
+            let mut engine = Engine::new();
+            engine.techniques.iir = iir;
+            search_with(&mut engine, KIWIPETE, 8).nodes
+        };
+        let (with, without) = (nodes(true), nodes(false));
+        assert!(with < without, "{with} vs {without}");
+        let mut engine = Engine::new();
+        let mate_in_two = "r2qkb1r/pp2nppp/3p4/2pNN1B1/2BnP3/3P4/PPP2PPP/R2bK2R w KQkq - 1 0";
+        assert_eq!(
+            search_with(&mut engine, mate_in_two, 6).score,
+            Score::Mate(2)
+        );
     }
 
     #[test]
