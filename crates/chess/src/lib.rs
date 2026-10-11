@@ -38,6 +38,7 @@ pub mod makemove;
 pub mod movegen;
 pub mod moves;
 pub mod perft;
+pub mod pgn;
 pub mod piece;
 pub mod position;
 pub mod san;

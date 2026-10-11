@@ -191,7 +191,7 @@ impl Shell {
 
     /// An engine for experiments: a copy of ours at full strength, one line, one thread, no
     /// book, and an empty transposition table (so earlier searches don't skew a comparison).
-    fn lab_engine(&self) -> Engine {
+    pub(crate) fn lab_engine(&self) -> Engine {
         let mut engine = self.engine.clone();
         engine.skill_level = levels::FULL_STRENGTH;
         engine.limit_strength = false;
@@ -203,12 +203,12 @@ impl Shell {
     }
 
     fn history_hashes(&self) -> Vec<u64> {
-        self.history.iter().map(|(pos, _)| pos.hash()).collect()
+        self.history.iter().map(|p| p.before.hash()).collect()
     }
 
     /// Searches the current position with `engine`, returning the last main-line report and
     /// the move chosen.
-    fn lab_search(
+    pub(crate) fn lab_search(
         &self,
         engine: &mut Engine,
         limits: &Limits,
