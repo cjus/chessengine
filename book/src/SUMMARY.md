@@ -16,7 +16,7 @@
 - [Iterative deepening and time management](ch06-iterative.md)
 - [Quiescence search and MVV-LVA](ch07-quiescence.md)
 - [The transposition table](ch08-tt.md)
-- [Piece-square tables and tapered evaluation]()
+- [Piece-square tables and tapered evaluation](ch09-pst.md)
 - [Move ordering]()
 - [Principal variation search and aspiration windows]()
 - [Null-move pruning]()
