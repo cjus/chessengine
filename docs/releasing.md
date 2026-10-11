@@ -1,0 +1,29 @@
+# Releasing cb2026
+
+Releases are built by the `Release` workflow (`.github/workflows/release.yml`) from a version
+tag. Claude's cloud sessions can't push tags, so the tag is Carlos's step.
+
+## Before a release
+
+1. The milestone's gates have passed (`docs/PRD.md`, "Milestones"): for v1.0 (M5), the
+   rating gauntlet, a clean 10,000-game robustness run (`docs/testing.md`, "Robustness runs")
+   and the GUI compatibility matrix (`docs/gui-compat.md`).
+2. The version in the root `Cargo.toml` (`[workspace.package] version`) is the new version, and
+   `docs/elo-ledger.md` and the book are up to date. Claude prepares this in a PR.
+
+## Making the release
+
+```sh
+git checkout main && git pull
+git tag v1.0.0            # the version from Cargo.toml, with a v
+git push origin v1.0.0
+```
+
+The workflow builds `cb2026` for Linux (x86-64), macOS (Apple Silicon and Intel) and Windows
+(x86-64), packages each with the README and licence, adds `SHA256SUMS.txt`, and creates a
+**draft** release with notes generated from the merged PRs. Check the draft on GitHub
+(Releases), edit the notes if needed, and publish it. The `Cross-platform` workflow also runs
+the tests on macOS and Windows for the tag.
+
+The binaries are built for each platform's baseline CPU, so they run everywhere; building from
+source with `RUSTFLAGS="-C target-cpu=native"` is a little faster on a given machine.

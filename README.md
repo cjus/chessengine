@@ -16,6 +16,8 @@ cb2026 --xboard   # XBoard/CECP mode
 cb2026 bench      # fixed benchmark; prints nodes and speed
 ```
 
+Releases are made from version tags; see [`docs/releasing.md`](docs/releasing.md).
+
 ## License
 
 GPL-3.0. See [`LICENSE`](LICENSE).
