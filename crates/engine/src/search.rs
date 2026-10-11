@@ -17,6 +17,22 @@
 //! with good move ordering the number of positions searched drops from about `b^d` to about
 //! `b^(d/2)`: twice the depth for the same effort.
 //!
+//! ## Quiescence search
+//!
+//! Stopping the search at a fixed depth and evaluating there is dangerous: the last move
+//! might be QxP with the pawn defended, and counting material right then says "a pawn up"
+//! when the queen is about to be lost. This is the **horizon effect**. The fix is to keep
+//! searching *captures only* past the nominal depth, until the position is quiet:
+//!
+//! - **Stand pat:** the side to move doesn't have to capture. Its static evaluation is a lower
+//!   bound on its score, and if that's already `>= beta`, it can stop there.
+//! - Otherwise it tries each capture (most valuable victim first, see [`crate::ordering`]) and
+//!   keeps the best.
+//! - **In check** there is no standing pat: every legal move is searched, so mates at the
+//!   horizon are seen.
+//!
+//! Captures run out quickly, so the quiescence search always ends.
+//!
 //! ## Scores for mate and draws
 //!
 //! - **Checkmate** is scored `-MATE + ply` for the side that is mated, so a quicker mate scores
@@ -26,7 +42,8 @@
 //!   once, it can be repeated again.
 //!
 //! See the Chess Programming Wiki, [Negamax](https://www.chessprogramming.org/Negamax),
-//! [Alpha-Beta](https://www.chessprogramming.org/Alpha-Beta) and
+//! [Alpha-Beta](https://www.chessprogramming.org/Alpha-Beta),
+//! [Quiescence Search](https://www.chessprogramming.org/Quiescence_Search) and
 //! [Checkmate](https://www.chessprogramming.org/Checkmate).
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -35,6 +52,7 @@ use std::time::Instant;
 use cb2026_chess::{Move, Position};
 
 use crate::eval::{EvalParams, evaluate};
+use crate::ordering::{is_noisy, order_moves};
 use crate::{Limits, Score};
 
 /// The score of being checkmated right now (higher than any evaluation).
@@ -54,11 +72,21 @@ pub struct Techniques {
     /// Alpha-beta pruning. Off, the search is plain minimax: the same moves and scores, many
     /// more nodes.
     pub alpha_beta: bool,
+    /// Quiescence search at the horizon. Off, positions at depth 0 are evaluated as they are,
+    /// in the middle of exchanges.
+    pub quiescence: bool,
+    /// MVV-LVA move ordering: captures first, biggest victim first. Off, moves are searched
+    /// in generation order.
+    pub mvv_lva: bool,
 }
 
 impl Default for Techniques {
     fn default() -> Techniques {
-        Techniques { alpha_beta: true }
+        Techniques {
+            alpha_beta: true,
+            quiescence: true,
+            mvv_lva: true,
+        }
     }
 }
 
@@ -181,14 +209,25 @@ impl<'a> Searcher<'a> {
         if self.is_draw(pos) {
             return 0;
         }
-        if depth == 0 || ply >= MAX_PLY {
+        if ply >= MAX_PLY {
             return evaluate(pos, self.params);
         }
+        if depth == 0 {
+            return if self.techniques.quiescence {
+                self.quiescence(pos, ply, alpha, beta, pv)
+            } else {
+                evaluate(pos, self.params)
+            };
+        }
 
+        let mut moves: Vec<Move> = moves.iter().copied().collect();
+        if self.techniques.mvv_lva {
+            order_moves(pos, &mut moves);
+        }
         let mut best = -INFINITY;
         let mut child_pv = Vec::new();
         self.keys.push(pos.hash());
-        for &mv in moves.iter() {
+        for &mv in &moves {
             let mut child = pos.clone();
             child.make_move(mv);
             let score = -self.negamax(&child, depth - 1, ply + 1, -beta, -alpha, &mut child_pv);
@@ -213,6 +252,77 @@ impl<'a> Searcher<'a> {
         best
     }
     // ANCHOR_END: negamax
+
+    // ANCHOR: quiescence
+    /// The quiescence score of `pos`, `ply` plies from the root, within `[alpha, beta]`:
+    /// captures (and queen promotions) only, until the position is quiet. In check, every
+    /// evasion is searched instead.
+    fn quiescence(
+        &mut self,
+        pos: &Position,
+        ply: u32,
+        mut alpha: i32,
+        beta: i32,
+        pv: &mut Vec<Move>,
+    ) -> i32 {
+        self.nodes += 1;
+        self.seldepth = self.seldepth.max(ply);
+        pv.clear();
+        if self.should_stop() {
+            return 0;
+        }
+
+        let in_check = pos.in_check();
+        let all_moves = pos.legal_moves();
+        if all_moves.is_empty() {
+            return if in_check { -MATE + ply as i32 } else { 0 };
+        }
+        if ply >= MAX_PLY {
+            return evaluate(pos, self.params);
+        }
+
+        let mut best = -INFINITY;
+        if !in_check {
+            // Stand pat: not capturing is an option, so the static score is a lower bound.
+            best = evaluate(pos, self.params);
+            if self.techniques.alpha_beta && best >= beta {
+                return best;
+            }
+            alpha = alpha.max(best);
+        }
+
+        let mut moves: Vec<Move> = all_moves
+            .iter()
+            .copied()
+            .filter(|&mv| in_check || is_noisy(mv))
+            .collect();
+        if self.techniques.mvv_lva {
+            order_moves(pos, &mut moves);
+        }
+        let mut child_pv = Vec::new();
+        for mv in moves {
+            let mut child = pos.clone();
+            child.make_move(mv);
+            let score = -self.quiescence(&child, ply + 1, -beta, -alpha, &mut child_pv);
+            if self.aborted {
+                break;
+            }
+            if score > best {
+                best = score;
+                if score > alpha {
+                    alpha = score;
+                    pv.clear();
+                    pv.push(mv);
+                    pv.extend_from_slice(&child_pv);
+                }
+            }
+            if self.techniques.alpha_beta && alpha >= beta {
+                break;
+            }
+        }
+        best
+    }
+    // ANCHOR_END: quiescence
 
     /// Searches the root position to `depth`, trying `root_moves` in the order given.
     ///
@@ -322,11 +432,23 @@ mod tests {
     #[test]
     fn alpha_beta_gives_the_minimax_score_with_fewer_nodes() {
         let fen = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
-        let with = search(fen, 3, Techniques::default());
-        let without = search(fen, 3, Techniques { alpha_beta: false });
+        // Without quiescence: a minimax quiescence search would take minutes.
+        let plain = Techniques {
+            quiescence: false,
+            ..Techniques::default()
+        };
+        let with = search(fen, 3, plain);
+        let without = search(
+            fen,
+            3,
+            Techniques {
+                alpha_beta: false,
+                ..plain
+            },
+        );
         assert_eq!(with.score, without.score);
-        // Without move ordering (stage 10) alpha-beta is far from its best case, but it still
-        // cuts the tree down a lot.
+        // With only MVV-LVA ordering (stage 10 does much better) alpha-beta is far from its
+        // best case, but it still cuts the tree down a lot.
         assert!(
             with.nodes * 2 < without.nodes,
             "{} vs {}",
@@ -343,6 +465,61 @@ mod tests {
         // Up a rook but at move 100 of the fifty-move rule: every move draws.
         let result = search("4k3/8/8/8/8/8/8/R3K3 w - - 99 80", 2, Techniques::default());
         assert_eq!(result.score, 0);
+    }
+
+    #[test]
+    fn quiescence_sees_past_the_horizon() {
+        // Qxd5 wins a pawn at depth 1, but exd5 wins the queen back.
+        let fen = "4k3/8/4p3/3p4/8/8/8/3QK3 w - - 0 1";
+        let blind = search(
+            fen,
+            1,
+            Techniques {
+                quiescence: false,
+                ..Techniques::default()
+            },
+        );
+        // A queen against two pawns is +700; the blind search thinks it's +800 after Qxd5.
+        assert_eq!(blind.best_move.unwrap().to_string(), "d1d5");
+        assert_eq!(blind.score, 800);
+        let result = search(fen, 1, Techniques::default());
+        assert_ne!(result.best_move.unwrap().to_string(), "d1d5");
+        assert_eq!(result.score, 700);
+        assert!(result.seldepth > 1);
+    }
+
+    #[test]
+    fn quiescence_finds_mate_at_the_horizon() {
+        // At depth 1 White plays Re8+ and the quiescence search, in check, finds no evasion.
+        let result = search(
+            "6k1/5ppp/8/8/8/8/8/4R1K1 w - - 0 1",
+            1,
+            Techniques::default(),
+        );
+        assert_eq!(to_score(result.score), Score::Mate(1));
+    }
+
+    #[test]
+    fn mvv_lva_gives_the_same_score_with_fewer_nodes() {
+        // A quiet opening position: in a tactical one like Kiwipete, the unordered quiescence
+        // search takes millions of nodes.
+        let fen = "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3";
+        let ordered = search(fen, 4, Techniques::default());
+        let unordered = search(
+            fen,
+            4,
+            Techniques {
+                mvv_lva: false,
+                ..Techniques::default()
+            },
+        );
+        assert_eq!(ordered.score, unordered.score);
+        assert!(
+            ordered.nodes * 2 < unordered.nodes,
+            "{} vs {}",
+            ordered.nodes,
+            unordered.nodes
+        );
     }
 
     #[test]

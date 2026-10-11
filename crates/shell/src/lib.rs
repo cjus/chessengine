@@ -32,6 +32,7 @@
 //! | `set depth <N>`, `set movetime <MS>` | How long the engine thinks about its own moves |
 //! | `think on\|off` | Show the engine's thinking depth by depth |
 //! | `set alphabeta on\|off` | Switch alpha-beta off to compare with plain minimax |
+//! | `set quiescence on\|off`, `set mvvlva on\|off` | Switch the quiescence search or MVV-LVA move ordering off |
 //! | `bench` | The fixed benchmark |
 //! | `bb <set>` | Show a bitboard: `occupied`, `empty`, `white`, `black`, `checkers`, `pinned`, or a piece letter (`P`, `n`, ...) |
 //! | `help` | List commands |
@@ -97,6 +98,9 @@ Commands:
   set movetime <MS>    The engine thinks MS milliseconds per move (default 1000)
   think on|off         Show the engine's thinking, depth by depth (default on)
   set alphabeta on|off Alpha-beta pruning (off: plain minimax, same moves, more nodes)
+  set quiescence on|off
+                       Search captures past the horizon (off: evaluate mid-exchange)
+  set mvvlva on|off    Search captures first, biggest victim first
   bench                The fixed benchmark: total nodes and speed
   bb <set>             Show a bitboard: occupied, empty, white, black, checkers,
                        pinned, or a piece letter (P N B R Q K for White, p n b r q k)
@@ -585,6 +589,7 @@ impl Shell {
     /// `set <option> <value>`: engine settings that are useful to switch while learning.
     fn set(&mut self, args: &str) -> Response {
         let mut words = args.split_whitespace();
+        let on_off_text = |on: bool| if on { "on" } else { "off" };
         let on_off = |word: Option<&str>| match word {
             Some("on") => Some(true),
             Some("off") => Some(false),
@@ -606,11 +611,17 @@ impl Shell {
             (Some("alphabeta"), value) if on_off(value).is_some() => {
                 self.engine.techniques.alpha_beta = on_off(value).unwrap_or(true);
             }
+            (Some("quiescence"), value) if on_off(value).is_some() => {
+                self.engine.techniques.quiescence = on_off(value).unwrap_or(true);
+            }
+            (Some("mvvlva"), value) if on_off(value).is_some() => {
+                self.engine.techniques.mvv_lva = on_off(value).unwrap_or(true);
+            }
             (None, _) => {}
             _ => return Response::text(SET_USAGE),
         }
         Response::text(format!(
-            "Sliding attacks: {}\nEngine moves: {}\nAlpha-beta pruning: {}",
+            "Sliding attacks: {}\nEngine moves: {}\nAlpha-beta pruning: {}\nQuiescence search: {}\nMVV-LVA ordering: {}",
             match slider_method() {
                 SliderMethod::Rays => "walking rays",
                 SliderMethod::Magics => "magic bitboards",
@@ -624,6 +635,8 @@ impl Shell {
             } else {
                 "off (plain minimax)"
             },
+            on_off_text(self.engine.techniques.quiescence),
+            on_off_text(self.engine.techniques.mvv_lva),
         ))
     }
 
@@ -683,8 +696,7 @@ fn parse_move(pos: &Position, text: &str) -> Option<Move> {
 }
 
 /// Usage for the `set` command.
-const SET_USAGE: &str =
-    "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set alphabeta on|off";
+const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set alphabeta|quiescence|mvvlva on|off";
 
 /// How long the engine thinks per move by default in the shell.
 const DEFAULT_MOVETIME_MS: u64 = 1000;
@@ -960,6 +972,18 @@ mod tests {
                 .execute("set alphabeta on")
                 .output
                 .contains("pruning: on")
+        );
+        assert!(
+            shell
+                .execute("set quiescence off")
+                .output
+                .contains("Quiescence search: off")
+        );
+        assert!(
+            shell
+                .execute("set mvvlva off")
+                .output
+                .contains("MVV-LVA ordering: off")
         );
         assert!(shell.execute("set depth 0").output.starts_with("Usage"));
         assert!(shell.execute("set colour blue").output.starts_with("Usage"));
