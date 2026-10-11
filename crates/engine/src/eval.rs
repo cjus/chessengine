@@ -31,6 +31,11 @@
 //! Blending, instead of switching at some point, avoids a jump in the score when one piece is
 //! traded, which the search would otherwise try to exploit.
 //!
+//! ## The full evaluation (stage 15)
+//!
+//! Mobility, pawn structure, passed pawns, the bishop pair, rook files, king safety and tempo
+//! live in [`crate::hce`]. [`trace`] collects every term for each side.
+//!
 //! The tables below are cb2026's own starting values, written by hand from the principles
 //! above. They are rough on purpose: stage 16 tunes every number on self-play games.
 //!
@@ -39,6 +44,8 @@
 //! [Tapered Eval](https://www.chessprogramming.org/Tapered_Eval).
 
 use cb2026_chess::{Color, PieceType, Position, Square};
+
+use crate::hce::{self, TermParams};
 
 /// The phase of the starting position: the most material the phase counts.
 pub const MAX_PHASE: i32 = 24;
@@ -66,6 +73,8 @@ pub struct EvalParams {
     pub use_pst: bool,
     /// Blend middlegame and endgame values by phase (off: middlegame values only).
     pub tapered: bool,
+    /// The positional terms of the full evaluation (stage 15).
+    pub terms: TermParams,
 }
 // ANCHOR_END: params
 
@@ -79,6 +88,7 @@ impl Default for EvalParams {
             phase_weights: [0, 1, 1, 2, 4, 0],
             use_pst: true,
             tapered: true,
+            terms: TermParams::default(),
         }
     }
 }
@@ -93,6 +103,7 @@ impl EvalParams {
             eg_values: values,
             use_pst: false,
             tapered: false,
+            terms: TermParams::none(),
             ..EvalParams::default()
         }
     }
@@ -110,44 +121,82 @@ pub fn pst_index(color: Color, square: Square) -> usize {
 }
 // ANCHOR_END: pst_index
 
-/// An evaluation split into its parts, for the shell's `eval` command. All values are from
-/// White's point of view.
+/// A middlegame and an endgame value, in centipawns.
+pub type MgEg = (i32, i32);
+
+/// An evaluation split into its parts, for the shell's `eval` command. Each term holds one
+/// value per side (indexed by [`Color::index`]), each from that side's own point of view.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct EvalTrace {
-    /// Material, middlegame and endgame.
-    pub material: (i32, i32),
-    /// Piece-square tables, middlegame and endgame.
-    pub pst: (i32, i32),
+    /// Material.
+    pub material: [MgEg; 2],
+    /// Piece-square tables.
+    pub pst: [MgEg; 2],
+    /// Mobility.
+    pub mobility: [MgEg; 2],
+    /// Pawn structure: doubled and isolated pawns.
+    pub pawns: [MgEg; 2],
+    /// Passed pawns.
+    pub passed: [MgEg; 2],
+    /// Bishop pair and rook files.
+    pub pieces: [MgEg; 2],
+    /// King safety: pawn shield and attacks on the king zone.
+    pub king_safety: [MgEg; 2],
+    /// The side to move's tempo bonus.
+    pub tempo: [MgEg; 2],
     /// The game phase, from 0 (bare kings and pawns) to [`MAX_PHASE`].
     pub phase: i32,
     /// The blended total, from White's point of view.
     pub total: i32,
 }
 
+impl EvalTrace {
+    /// Every term with its name, in display order.
+    pub fn terms(&self) -> [(&'static str, [MgEg; 2]); 8] {
+        [
+            ("Material", self.material),
+            ("Piece-squares", self.pst),
+            ("Mobility", self.mobility),
+            ("Pawn structure", self.pawns),
+            ("Passed pawns", self.passed),
+            ("Pieces", self.pieces),
+            ("King safety", self.king_safety),
+            ("Tempo", self.tempo),
+        ]
+    }
+
+    /// White's total minus Black's, middlegame and endgame.
+    pub fn net(&self) -> MgEg {
+        self.terms().iter().fold((0, 0), |(mg, eg), (_, [w, b])| {
+            (mg + w.0 - b.0, eg + w.1 - b.1)
+        })
+    }
+}
+
 // ANCHOR: evaluate
-/// Works out the evaluation's parts, from White's point of view.
+/// Works out the evaluation's parts; the total is from White's point of view.
 pub fn trace(pos: &Position, params: &EvalParams) -> EvalTrace {
     let mut t = EvalTrace::default();
     let mut phase = 0;
     for color in Color::ALL {
-        let sign = if color == Color::White { 1 } else { -1 };
+        let side = color.index();
         for piece_type in PieceType::ALL {
             let i = piece_type.index();
             for square in pos.pieces(color, piece_type) {
-                t.material.0 += sign * params.mg_values[i];
-                t.material.1 += sign * params.eg_values[i];
+                t.material[side].0 += params.mg_values[i];
+                t.material[side].1 += params.eg_values[i];
                 if params.use_pst {
                     let at = pst_index(color, square);
-                    t.pst.0 += sign * params.mg_pst[i][at];
-                    t.pst.1 += sign * params.eg_pst[i][at];
+                    t.pst[side].0 += params.mg_pst[i][at];
+                    t.pst[side].1 += params.eg_pst[i][at];
                 }
                 phase += params.phase_weights[i];
             }
         }
     }
+    hce::add_terms(pos, &params.terms, &mut t);
     t.phase = phase.min(MAX_PHASE);
-    let mg = t.material.0 + t.pst.0;
-    let eg = t.material.1 + t.pst.1;
+    let (mg, eg) = t.net();
     t.total = if params.tapered {
         (mg * t.phase + eg * (MAX_PHASE - t.phase)) / MAX_PHASE
     } else {
@@ -336,8 +385,9 @@ mod tests {
     }
 
     #[test]
-    fn start_position_is_balanced() {
-        assert_eq!(eval(cb2026_chess::STARTING_FEN), 0);
+    fn start_position_is_balanced_apart_from_the_tempo() {
+        let tempo = TermParams::default().tempo.0;
+        assert_eq!(eval(cb2026_chess::STARTING_FEN), tempo);
     }
 
     #[test]
@@ -401,11 +451,12 @@ mod tests {
         let params = EvalParams {
             use_pst: false,
             tapered: false,
+            terms: TermParams::none(),
             ..EvalParams::default()
         };
         // Material only, middlegame value.
         assert_eq!(evaluate(&pos, &params), 320);
         let t = trace(&pos, &params);
-        assert_eq!(t.pst, (0, 0));
+        assert_eq!(t.pst, [(0, 0); 2]);
     }
 }
