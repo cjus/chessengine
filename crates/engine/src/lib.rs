@@ -514,9 +514,20 @@ impl Engine {
                 .iter()
                 .find(|line| line.best_move == chosen)
                 .unwrap_or(best);
+            let best_move = chosen.or(root_fallback);
+            // The expected reply is the line's second move. A line cut short (by a
+            // transposition table cutoff just below the root) may not have one; then the
+            // table's best move for the position after ours is the next best guess.
+            let ponder_move = line.pv.get(1).copied().or_else(|| {
+                let mut after = position.clone();
+                after.make_move(best_move?);
+                tt.probe(after.hash())
+                    .and_then(|entry| entry.best_move)
+                    .filter(|mv| after.legal_moves().contains(mv))
+            });
             SearchResult {
-                best_move: chosen.or(root_fallback),
-                ponder_move: line.pv.get(1).copied(),
+                best_move,
+                ponder_move,
             }
             // ANCHOR_END: level_choice
         })

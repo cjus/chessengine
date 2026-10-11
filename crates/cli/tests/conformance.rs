@@ -223,8 +223,10 @@ fn xboard_game_with_clock() {
             Step("level 40 0:30 0", 0),
             Step("post", 0),
             Step("hard", 0),
-            Step("time 3000", 0),
-            Step("otim 3000", 0),
+            // 10 s on the clock: about a quarter of a second for this move, so even a debug
+            // build answers well inside the wait below.
+            Step("time 1000", 0),
+            Step("otim 1000", 0),
             Step("usermove e2e4", 2500),
             Step("ping 1", 300),
             Step("quit", 0),

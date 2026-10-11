@@ -765,36 +765,39 @@ mod tests {
         assert!(moves(&lines).is_empty());
     }
 
+    /// Polls `condition` until it holds, for up to five seconds (tests run on busy machines).
+    fn wait_until(mut condition: impl FnMut() -> bool) -> bool {
+        let start = std::time::Instant::now();
+        while start.elapsed() < Duration::from_secs(5) {
+            if condition() {
+                return true;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        false
+    }
+
     #[test]
     fn ponders_on_the_expected_reply() {
         let captured = Captured::default();
         let mut session = Session::new(Box::new(captured.clone()), Engine::new());
-        let wait = || thread::sleep(Duration::from_millis(700));
         let played = || {
-            moves(
-                &String::from_utf8(captured.0.lock().unwrap().clone())
-                    .unwrap()
-                    .lines()
-                    .map(str::to_string)
-                    .collect::<Vec<_>>(),
-            )
-            .len()
+            let text = String::from_utf8(captured.0.lock().unwrap().clone()).unwrap();
+            text.lines().filter(|l| l.starts_with("move ")).count()
         };
         for line in ["new", "hard", "st 0.3", "usermove e2e4"] {
             session.handle(line);
         }
-        wait();
+        assert!(wait_until(|| played() == 1));
         session.handle("ping 1");
-        assert_eq!(played(), 1);
         // After moving it ponders, and doesn't move again by itself.
         let expected = session.pondering().expect("pondering after its move");
-        wait();
+        thread::sleep(Duration::from_millis(700));
         assert_eq!(played(), 1);
         // A ponder hit: the same search answers within its time.
         session.handle(&format!("usermove {}", expected.to_uci(false)));
-        wait();
+        assert!(wait_until(|| played() == 2));
         session.handle("ping 2");
-        assert_eq!(played(), 2);
         assert_eq!(session.history.len(), 4);
         // A miss: any other move ends the ponder search and starts a new one.
         let expected = session.pondering().expect("pondering again");
@@ -806,9 +809,8 @@ mod tests {
             .find(|&mv| mv != expected)
             .unwrap();
         session.handle(&format!("usermove {}", other.to_uci(false)));
-        wait();
+        assert!(wait_until(|| played() == 3));
         session.handle("ping 3");
-        assert_eq!(played(), 3);
         assert_eq!(session.history.len(), 6);
         // `easy` stops pondering.
         assert!(session.pondering().is_some());
