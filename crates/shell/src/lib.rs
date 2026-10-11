@@ -38,6 +38,7 @@
 //! | `set pvs on\|off`, `set aspiration on\|off` | Principal variation search; aspiration windows |
 //! | `set nullmove on\|off` | Null-move pruning |
 //! | `set lmr on\|off`, `set lmp on\|off` | Late move reductions; late move pruning |
+//! | `set rfp\|razoring\|futility\|seeprune\|delta\|seeorder on\|off` | Stage 14's pruning and SEE ordering |
 //! | `eval` | The static evaluation, term by term |
 //! | `set pst on\|off`, `set tapered on\|off` | Switch the piece-square tables or the middlegame/endgame blend off |
 //! | `bench` | The fixed benchmark |
@@ -120,6 +121,10 @@ Commands:
   set nullmove on|off  Null-move pruning
   set lmr on|off       Late move reductions: search late quiet moves less deeply
   set lmp on|off       Late move pruning: skip late quiet moves near the leaves
+  set rfp|razoring|futility|seeprune|delta on|off
+                       Reverse futility pruning, razoring, futility pruning, SEE pruning,
+                       delta pruning
+  set seeorder on|off  Search captures that lose material (by SEE) after quiet moves
   set pst on|off       Piece-square tables (off: material only)
   set tapered on|off   Blend middlegame and endgame values by phase (off: middlegame only)
   eval                 The static evaluation of the position, term by term
@@ -706,6 +711,24 @@ impl Shell {
             (Some("lmp"), value) if on_off(value).is_some() => {
                 self.engine.techniques.late_move_pruning = on_off(value).unwrap_or(true);
             }
+            (Some("rfp"), value) if on_off(value).is_some() => {
+                self.engine.techniques.reverse_futility = on_off(value).unwrap_or(true);
+            }
+            (Some("razoring"), value) if on_off(value).is_some() => {
+                self.engine.techniques.razoring = on_off(value).unwrap_or(true);
+            }
+            (Some("futility"), value) if on_off(value).is_some() => {
+                self.engine.techniques.futility = on_off(value).unwrap_or(true);
+            }
+            (Some("seeprune"), value) if on_off(value).is_some() => {
+                self.engine.techniques.see_pruning = on_off(value).unwrap_or(true);
+            }
+            (Some("delta"), value) if on_off(value).is_some() => {
+                self.engine.techniques.delta_pruning = on_off(value).unwrap_or(true);
+            }
+            (Some("seeorder"), value) if on_off(value).is_some() => {
+                self.engine.techniques.see_ordering = on_off(value).unwrap_or(true);
+            }
             (Some("tt"), value) if on_off(value).is_some() => {
                 self.engine.techniques.tt = on_off(value).unwrap_or(true);
             }
@@ -717,7 +740,7 @@ impl Shell {
             _ => return Response::text(SET_USAGE),
         }
         Response::text(format!(
-            "Sliding attacks: {}\nEngine moves: {}\nAlpha-beta pruning: {}\nQuiescence search: {}\nMVV-LVA ordering: {}\nTransposition table: {} ({} MB)\nPiece-square tables: {}\nTapered evaluation: {}\nKillers, countermoves, history: {}, {}, {}\nPVS, aspiration windows: {}, {}\nNull-move pruning: {}\nLate move reductions, pruning: {}, {}",
+            "Sliding attacks: {}\nEngine moves: {}\nAlpha-beta pruning: {}\nQuiescence search: {}\nMVV-LVA ordering: {}\nTransposition table: {} ({} MB)\nPiece-square tables: {}\nTapered evaluation: {}\nKillers, countermoves, history: {}, {}, {}\nPVS, aspiration windows: {}, {}\nNull-move pruning: {}\nLate move reductions, pruning: {}, {}\nReverse futility, razoring, futility: {}, {}, {}\nSEE pruning, delta pruning, SEE ordering: {}, {}, {}",
             match slider_method() {
                 SliderMethod::Rays => "walking rays",
                 SliderMethod::Magics => "magic bitboards",
@@ -745,6 +768,12 @@ impl Shell {
             on_off_text(self.engine.techniques.null_move),
             on_off_text(self.engine.techniques.lmr),
             on_off_text(self.engine.techniques.late_move_pruning),
+            on_off_text(self.engine.techniques.reverse_futility),
+            on_off_text(self.engine.techniques.razoring),
+            on_off_text(self.engine.techniques.futility),
+            on_off_text(self.engine.techniques.see_pruning),
+            on_off_text(self.engine.techniques.delta_pruning),
+            on_off_text(self.engine.techniques.see_ordering),
         ))
     }
 
@@ -804,7 +833,7 @@ fn parse_move(pos: &Position, text: &str) -> Option<Move> {
 }
 
 /// Usage for the `set` command.
-const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set alphabeta|quiescence|mvvlva|tt|killers|countermoves|history|pvs|aspiration|nullmove|lmr|lmp|pst|tapered on|off";
+const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set alphabeta|quiescence|mvvlva|tt|killers|countermoves|history|pvs|aspiration|nullmove|lmr|lmp|rfp|razoring|futility|seeprune|delta|seeorder|pst|tapered on|off";
 
 /// How long the engine thinks per move by default in the shell.
 const DEFAULT_MOVETIME_MS: u64 = 1000;

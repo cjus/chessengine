@@ -35,9 +35,11 @@
 //! ## The order, and staged picking
 //!
 //! 1. The transposition table move.
-//! 2. Captures and queen promotions, by MVV-LVA.
+//! 2. Captures and queen promotions, by MVV-LVA (from stage 14, only those that don't lose
+//!    material by static exchange evaluation).
 //! 3. The two killers, then the countermove.
 //! 4. The other quiet moves, by history.
+//! 5. Captures that lose material (stage 14).
 //!
 //! The moves are not sorted up front. A [`MovePicker`] picks the best remaining move each time
 //! one is asked for. Most nodes that cut off do so on the first move or two, so the work of
@@ -53,6 +55,7 @@
 use cb2026_chess::{Color, Move, MoveKind, PieceType, Position};
 
 use crate::search::{MAX_PLY, Techniques};
+use crate::see::see;
 
 // ANCHOR: mvv_lva
 /// The MVV-LVA key of `mv` in `pos`: higher means search earlier. Quiet moves score 0;
@@ -108,6 +111,7 @@ const TT_MOVE_KEY: i32 = 3_000_000;
 const NOISY_KEY: i32 = 2_000_000;
 const KILLER_KEYS: [i32; 2] = [1_000_000, 900_000];
 const COUNTERMOVE_KEY: i32 = 800_000;
+const BAD_CAPTURE_KEY: i32 = -1_000_000;
 /// The largest a history score can get (in either direction).
 pub const HISTORY_MAX: i32 = 16_384;
 
@@ -242,7 +246,12 @@ impl MovePicker {
             if Some(mv) == tt_move {
                 TT_MOVE_KEY
             } else if techniques.mvv_lva && is_noisy(mv) {
-                NOISY_KEY + mvv_lva(pos, mv)
+                // Captures that lose material in the exchange go after the quiet moves.
+                if techniques.see_ordering && see(pos, mv) < 0 {
+                    BAD_CAPTURE_KEY + mvv_lva(pos, mv)
+                } else {
+                    NOISY_KEY + mvv_lva(pos, mv)
+                }
             } else if Some(mv) == killers[0] {
                 KILLER_KEYS[0]
             } else if Some(mv) == killers[1] {

@@ -94,7 +94,8 @@ deepening and proper time management.
 
 ## Bench
 
-`cb2026 bench` searches 14 fixed positions to depth 4 and prints the node count:
+`cb2026 bench` searches 14 fixed positions to a fixed depth (4 at this stage, 10 from stage
+14 on) and prints the node count:
 
 ```text
 $ cb2026 bench

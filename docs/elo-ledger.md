@@ -18,3 +18,4 @@ self-play unless noted, so it overstates gains against other engines.
 | 2026-10-11 | Stage 11: principal variation search + aspiration windows (vs stage 10) | cjus/chessengine#33 | SPRT | 8+0.08, test Mac (M1 Max), 7 games at a time | 2001 | +818 −654 =529, about +28.5 ± 13.1 | passed (2.95 ≥ 2.94), [0, 5] |
 | 2026-10-11 | Stage 12: null-move pruning (vs stage 11) | cjus/chessengine#41 | SPRT | 8+0.08, cloud, 3 games at a time | 255 | +155 −39 =61, about +170 ± 40 | passed (2.97 ≥ 2.94), [0, 5] |
 | 2026-10-11 | Stage 13: late move reductions + late move pruning (vs stage 12) | cjus/chessengine#42 | SPRT | 8+0.08, cloud, 3 games at a time | 113 | +73 −5 =35, about +242 ± 59 | passed (2.95 ≥ 2.94), [0, 5] |
+| 2026-10-11 | Stage 14: SEE, reverse futility, razoring, futility, SEE and delta pruning (vs stage 13) | cjus/chessengine#43 | SPRT | 8+0.08, cloud, 3 games at a time | 328 | +174 −55 =99, about +132 ± 33 | passed (2.96 ≥ 2.94), [0, 5] |

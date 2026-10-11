@@ -21,7 +21,7 @@
 - [Principal variation search and aspiration windows](ch11-pvs.md)
 - [Null-move pruning](ch12-nullmove.md)
 - [Late move reductions and pruning](ch13-lmr.md)
-- [Futility, razoring and SEE pruning]()
+- [Futility, razoring and SEE pruning](ch14-pruning.md)
 
 # Part III: Evaluation
 
