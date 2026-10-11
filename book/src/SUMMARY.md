@@ -17,7 +17,7 @@
 - [Quiescence search and MVV-LVA](ch07-quiescence.md)
 - [The transposition table](ch08-tt.md)
 - [Piece-square tables and tapered evaluation](ch09-pst.md)
-- [Move ordering]()
+- [Move ordering](ch10-ordering.md)
 - [Principal variation search and aspiration windows]()
 - [Null-move pruning]()
 - [Late move reductions and pruning]()

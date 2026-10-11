@@ -128,12 +128,27 @@ impl Position {
     /// ```
     pub fn legal_moves(&self) -> MoveList {
         let mut list = MoveList::new();
-        self.generate(&mut list);
+        self.generate(&mut list, Gen::All);
+        list
+    }
+
+    /// The legal **noisy** moves: captures (en passant included) and promotions, the moves
+    /// that change the material balance. The quiescence search only needs these, and
+    /// generating them alone is much cheaper than generating every move and filtering.
+    ///
+    /// ```
+    /// use cb2026_chess::Position;
+    ///
+    /// assert!(Position::startpos().noisy_moves().is_empty());
+    /// ```
+    pub fn noisy_moves(&self) -> MoveList {
+        let mut list = MoveList::new();
+        self.generate(&mut list, Gen::Noisy);
         list
     }
 
     // ANCHOR: generate
-    fn generate(&self, list: &mut MoveList) {
+    fn generate(&self, list: &mut MoveList, gen_kind: Gen) {
         let us = self.side_to_move();
         let them = !us;
         let own = self.pieces_of_color(us);
@@ -141,11 +156,16 @@ impl Position {
         let occupied = self.occupied();
         let king = self.king_square(us);
         let checkers = self.checkers();
+        // Where pieces may move: any square not holding one of ours, or only enemy pieces.
+        let targets = match gen_kind {
+            Gen::All => !own,
+            Gen::Noisy => enemy,
+        };
 
         // King moves: never onto a square the enemy attacks. Lift the king off the board
         // first, or it would seem to block a slider's attack on the square behind it.
         let without_king = occupied.without(king);
-        for to in king_attacks(king) & !own {
+        for to in king_attacks(king) & targets {
             if (self.attackers_to(to, without_king) & enemy).is_empty() {
                 list.push(Move::new(king, to, capture_or_quiet(enemy, to)));
             }
@@ -175,7 +195,7 @@ impl Position {
         // Knights. A pinned knight never has a legal move: no knight move stays on a line
         // through its own square, and the pin mask takes care of that by itself.
         for from in self.pieces(us, PieceType::Knight) {
-            for to in knight_attacks(from) & !own & check_mask & pin_mask(from) {
+            for to in knight_attacks(from) & targets & check_mask & pin_mask(from) {
                 list.push(Move::new(from, to, capture_or_quiet(enemy, to)));
             }
         }
@@ -188,15 +208,15 @@ impl Position {
         ];
         for (piece_type, attacks) in sliders {
             for from in self.pieces(us, piece_type) {
-                for to in attacks(from, occupied) & !own & check_mask & pin_mask(from) {
+                for to in attacks(from, occupied) & targets & check_mask & pin_mask(from) {
                     list.push(Move::new(from, to, capture_or_quiet(enemy, to)));
                 }
             }
         }
 
-        self.generate_pawn_moves(list, check_mask, &pin_mask);
+        self.generate_pawn_moves(list, check_mask, &pin_mask, gen_kind);
 
-        if checkers.is_empty() {
+        if checkers.is_empty() && gen_kind == Gen::All {
             self.generate_castling(list);
         }
     }
@@ -206,6 +226,7 @@ impl Position {
         list: &mut MoveList,
         check_mask: Bitboard,
         pin_mask: &dyn Fn(Square) -> Bitboard,
+        gen_kind: Gen,
     ) {
         let us = self.side_to_move();
         let enemy = self.pieces_of_color(!us);
@@ -222,12 +243,15 @@ impl Position {
         for from in self.pieces(us, PieceType::Pawn) {
             let allowed = check_mask & pin_mask(from);
 
-            // Pushes: one square, or two from the starting rank, onto empty squares.
+            // Pushes: one square, or two from the starting rank, onto empty squares. Noisy
+            // generation only wants the pushes that promote.
             if let Some(one) = ahead(from).filter(|s| !occupied.contains(*s)) {
-                if allowed.contains(one) {
+                let wanted = gen_kind == Gen::All || one.rank() == last_rank;
+                if wanted && allowed.contains(one) {
                     push_pawn_move(list, from, one, false, last_rank);
                 }
-                if from.rank() == start_rank
+                if gen_kind == Gen::All
+                    && from.rank() == start_rank
                     && let Some(two) = ahead(one).filter(|s| !occupied.contains(*s))
                     && allowed.contains(two)
                 {
@@ -307,6 +331,15 @@ impl Position {
 }
 
 /// A capture if an enemy piece stands on `to`, otherwise a quiet move.
+/// Which moves to generate.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Gen {
+    /// Every legal move.
+    All,
+    /// Captures and promotions only.
+    Noisy,
+}
+
 fn capture_or_quiet(enemy: Bitboard, to: Square) -> MoveKind {
     if enemy.contains(to) {
         MoveKind::Capture
@@ -334,6 +367,44 @@ fn push_pawn_move(list: &mut MoveList, from: Square, to: Square, capture: bool, 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Noisy generation must give exactly the captures and promotions among the legal moves,
+    /// in every position reachable within two plies of each perft test position.
+    #[test]
+    fn noisy_moves_are_the_legal_captures_and_promotions() {
+        let suite = include_str!("../../../tests/data/perft.epd");
+        let check = |pos: &Position| {
+            let mut expected: Vec<Move> = pos
+                .legal_moves()
+                .iter()
+                .copied()
+                .filter(|mv| mv.is_capture() || mv.promotion().is_some())
+                .collect();
+            let mut noisy: Vec<Move> = pos.noisy_moves().iter().copied().collect();
+            let key = |mv: &Move| (mv.from().index(), mv.to().index(), mv.to_uci(false));
+            expected.sort_by_key(key);
+            noisy.sort_by_key(key);
+            assert_eq!(noisy, expected, "{}", pos.to_fen());
+        };
+        for line in suite
+            .lines()
+            .filter(|l| !l.trim().is_empty() && !l.starts_with('#'))
+        {
+            let fen = line.split(';').next().unwrap().trim();
+            let pos = Position::from_fen(fen).unwrap();
+            check(&pos);
+            for &mv in pos.legal_moves().iter() {
+                let mut child = pos.clone();
+                child.make_move(mv);
+                check(&child);
+                for &reply in child.legal_moves().iter() {
+                    let mut grandchild = child.clone();
+                    grandchild.make_move(reply);
+                    check(&grandchild);
+                }
+            }
+        }
+    }
 
     fn moves_uci(fen: &str) -> Vec<String> {
         let mut moves: Vec<String> = Position::from_fen(fen)

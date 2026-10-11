@@ -51,10 +51,10 @@ use std::time::Instant;
 
 use cb2026_chess::{Move, Position};
 
+use crate::Score;
 use crate::eval::{EvalParams, evaluate};
-use crate::ordering::{is_noisy, order_moves};
+use crate::ordering::{MovePicker, OrderingTables, is_noisy};
 use crate::tt::{Bound, TranspositionTable, score_from_tt, score_to_tt};
-use crate::{Limits, Score};
 
 /// The score of being checkmated right now (higher than any evaluation).
 pub const MATE: i32 = 32_000;
@@ -82,6 +82,13 @@ pub struct Techniques {
     /// The transposition table: reuse results for positions already searched, and search
     /// their best move first. Off, the table is neither read nor written.
     pub tt: bool,
+    /// Killer moves: quiet moves that caused a cutoff at the same ply are tried early.
+    pub killers: bool,
+    /// The countermove heuristic: the quiet move that last refuted the opponent's move is
+    /// tried early.
+    pub countermoves: bool,
+    /// The history heuristic: quiet moves are ordered by how often they caused cutoffs.
+    pub history: bool,
 }
 
 impl Default for Techniques {
@@ -91,6 +98,9 @@ impl Default for Techniques {
             quiescence: true,
             mvv_lva: true,
             tt: true,
+            killers: true,
+            countermoves: true,
+            history: true,
         }
     }
 }
@@ -119,10 +129,22 @@ pub(crate) struct RootResult {
     pub complete: bool,
 }
 
+/// When a search must stop early.
+#[derive(Clone, Copy)]
+pub(crate) struct StopConditions<'a> {
+    /// Set by another thread (the GUI's `stop`).
+    pub stop: &'a AtomicBool,
+    /// The hard time limit.
+    pub deadline: Option<Instant>,
+    /// The node limit.
+    pub max_nodes: Option<u64>,
+}
+
 /// The state of one search.
 pub(crate) struct Searcher<'a> {
     params: &'a EvalParams,
     tt: &'a mut TranspositionTable,
+    ordering: &'a mut OrderingTables,
     techniques: Techniques,
     stop: &'a AtomicBool,
     deadline: Option<Instant>,
@@ -133,29 +155,32 @@ pub(crate) struct Searcher<'a> {
     /// Hash keys of the positions before the current one: the game so far, then the search
     /// path. Used to detect repetitions.
     keys: Vec<u64>,
+    /// The moves from the root to the current position (for the countermove heuristic).
+    path: Vec<Move>,
 }
 
 impl<'a> Searcher<'a> {
     pub(crate) fn new(
         params: &'a EvalParams,
         tt: &'a mut TranspositionTable,
+        ordering: &'a mut OrderingTables,
         techniques: Techniques,
-        stop: &'a AtomicBool,
-        limits: &Limits,
+        stop: StopConditions<'a>,
         history: &[u64],
-        deadline: Option<Instant>,
     ) -> Searcher<'a> {
         Searcher {
             params,
             tt,
+            ordering,
             techniques,
-            stop,
-            deadline,
-            max_nodes: limits.nodes,
+            stop: stop.stop,
+            deadline: stop.deadline,
+            max_nodes: stop.max_nodes,
             nodes: 0,
             seldepth: 0,
             aborted: false,
             keys: history.to_vec(),
+            path: Vec::new(),
         }
     }
 
@@ -251,23 +276,29 @@ impl<'a> Searcher<'a> {
         }
         // ANCHOR_END: tt_probe
 
-        let mut moves: Vec<Move> = moves.iter().copied().collect();
-        if self.techniques.mvv_lva {
-            order_moves(pos, &mut moves);
-        }
-        if let Some(first) = tt_move {
-            moves.retain(|&mv| mv != first);
-            moves.insert(0, first);
-        }
+        let previous = self.path.last().copied();
+        let picker = MovePicker::new(
+            pos,
+            &moves,
+            tt_move,
+            ply,
+            previous,
+            self.ordering,
+            &self.techniques,
+        );
         let original_alpha = alpha;
         let mut best = -INFINITY;
         let mut best_move = None;
         let mut child_pv = Vec::new();
+        // Quiet moves searched so far that didn't cause a cutoff (for the history penalty).
+        let mut quiets_tried = Vec::new();
         self.keys.push(pos.hash());
-        for &mv in &moves {
+        for mv in picker {
             let mut child = pos.clone();
             child.make_move(mv);
+            self.path.push(mv);
             let score = -self.negamax(&child, depth - 1, ply + 1, -beta, -alpha, &mut child_pv);
+            self.path.pop();
             if self.aborted {
                 break;
             }
@@ -283,7 +314,14 @@ impl<'a> Searcher<'a> {
             }
             // Beta cutoff: the opponent won't allow this position, so stop looking.
             if self.techniques.alpha_beta && alpha >= beta {
+                if !is_noisy(mv) {
+                    self.ordering
+                        .record_cutoff(pos, mv, &quiets_tried, ply, depth, previous);
+                }
                 break;
+            }
+            if !is_noisy(mv) {
+                quiets_tried.push(mv);
             }
         }
         self.keys.pop();
@@ -331,11 +369,19 @@ impl<'a> Searcher<'a> {
             return 0;
         }
 
+        // In check every evasion counts; otherwise only captures and promotions are
+        // generated. (So a stalemate reached by captures isn't noticed: a rare error that all
+        // engines accept for the speed.)
         let in_check = pos.in_check();
-        let all_moves = pos.legal_moves();
-        if all_moves.is_empty() {
-            return if in_check { -MATE + ply as i32 } else { 0 };
-        }
+        let moves = if in_check {
+            let evasions = pos.legal_moves();
+            if evasions.is_empty() {
+                return -MATE + ply as i32;
+            }
+            evasions
+        } else {
+            pos.noisy_moves()
+        };
         if ply >= MAX_PLY {
             return evaluate(pos, self.params);
         }
@@ -350,16 +396,23 @@ impl<'a> Searcher<'a> {
             alpha = alpha.max(best);
         }
 
-        let mut moves: Vec<Move> = all_moves
+        // Under-promotions are generated but almost never matter: skip them.
+        let moves: Vec<Move> = moves
             .iter()
             .copied()
             .filter(|&mv| in_check || is_noisy(mv))
             .collect();
-        if self.techniques.mvv_lva {
-            order_moves(pos, &mut moves);
-        }
+        let picker = MovePicker::new(
+            pos,
+            &moves,
+            None,
+            ply,
+            None,
+            self.ordering,
+            &self.techniques,
+        );
         let mut child_pv = Vec::new();
-        for mv in moves {
+        for mv in picker {
             let mut child = pos.clone();
             child.make_move(mv);
             let score = -self.quiescence(&child, ply + 1, -beta, -alpha, &mut child_pv);
@@ -406,6 +459,7 @@ impl<'a> Searcher<'a> {
         for &mv in root_moves {
             let mut child = pos.clone();
             child.make_move(mv);
+            self.path.push(mv);
             let score = -self.negamax(
                 &child,
                 depth.saturating_sub(1),
@@ -414,6 +468,7 @@ impl<'a> Searcher<'a> {
                 -alpha,
                 &mut child_pv,
             );
+            self.path.pop();
             if self.aborted {
                 break;
             }
@@ -455,9 +510,20 @@ mod tests {
         // Material only, so the expected scores can be worked out by hand.
         let params = EvalParams::material_only();
         let stop = AtomicBool::new(false);
-        let limits = Limits::depth(depth);
         let mut tt = TranspositionTable::new(1);
-        let mut searcher = Searcher::new(&params, &mut tt, techniques, &stop, &limits, &[], None);
+        let mut ordering = OrderingTables::default();
+        let mut searcher = Searcher::new(
+            &params,
+            &mut tt,
+            &mut ordering,
+            techniques,
+            StopConditions {
+                stop: &stop,
+                deadline: None,
+                max_nodes: None,
+            },
+            &[],
+        );
         let moves: Vec<Move> = pos.legal_moves().iter().copied().collect();
         searcher.search_root(&pos, &moves, depth)
     }
@@ -570,15 +636,22 @@ mod tests {
     #[test]
     fn mvv_lva_gives_the_same_score_with_fewer_nodes() {
         // A quiet opening position: in a tactical one like Kiwipete, the unordered quiescence
-        // search takes millions of nodes.
+        // search takes millions of nodes. The quiet-move heuristics are off, to measure
+        // MVV-LVA alone.
         let fen = "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3";
-        let ordered = search(fen, 4, Techniques::default());
+        let plain = Techniques {
+            killers: false,
+            countermoves: false,
+            history: false,
+            ..Techniques::default()
+        };
+        let ordered = search(fen, 4, plain);
         let unordered = search(
             fen,
             4,
             Techniques {
                 mvv_lva: false,
-                ..Techniques::default()
+                ..plain
             },
         );
         assert_eq!(ordered.score, unordered.score);
@@ -587,6 +660,34 @@ mod tests {
             "{} vs {}",
             ordered.nodes,
             unordered.nodes
+        );
+    }
+
+    #[test]
+    fn quiet_move_ordering_gives_the_same_scores_with_fewer_nodes() {
+        // Over a few positions: on any single one a heuristic can be unlucky.
+        let fens = [
+            "r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3",
+            "r1bq1rk1/pppp1ppp/2n2n2/2b1p3/2B1P3/2N2N2/PPPP1PPP/R1BQ1RK1 w - - 0 1",
+            "r2q1rk1/pp2bppp/2n1pn2/3p4/3P4/2NBPN2/PP3PPP/R2Q1RK1 w - - 0 10",
+        ];
+        let off = Techniques {
+            killers: false,
+            countermoves: false,
+            history: false,
+            ..Techniques::default()
+        };
+        let (mut with_nodes, mut without_nodes) = (0, 0);
+        for fen in fens {
+            let with = search(fen, 4, Techniques::default());
+            let without = search(fen, 4, off);
+            assert_eq!(with.score, without.score, "{fen}");
+            with_nodes += with.nodes;
+            without_nodes += without.nodes;
+        }
+        assert!(
+            with_nodes < without_nodes,
+            "{with_nodes} vs {without_nodes}"
         );
     }
 
