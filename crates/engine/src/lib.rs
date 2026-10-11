@@ -773,6 +773,21 @@ mod tests {
     const KIWIPETE: &str = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
 
     #[test]
+    fn check_extensions_see_further_along_checks() {
+        // Philidor's legacy: 1. Nf7+ Kg8 2. Nh6+ Kh8 3. Qg8+ Rxg8 4. Nf7#, every move a check.
+        let fen = "4r2k/6pp/8/3Q2N1/8/8/6PP/6K1 w - - 0 1";
+        let mut engine = Engine::new();
+        engine.techniques.check_extension = true;
+        assert_eq!(search_with(&mut engine, fen, 7).score, Score::Mate(4));
+        let mut without = Engine::new();
+        without.techniques.check_extension = false;
+        assert!(matches!(
+            search_with(&mut without, fen, 7).score,
+            Score::Centipawns(_)
+        ));
+    }
+
+    #[test]
     fn statistics_add_up_to_the_nodes_searched() {
         let pos = Position::from_fen(KIWIPETE).unwrap();
         let (result, reports) = search(&pos, &Limits::depth(6));

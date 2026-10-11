@@ -76,6 +76,21 @@
 //! - **Delta pruning** in the quiescence search: a capture that can't bring the score near
 //!   alpha even if it wins the captured piece outright is skipped.
 //!
+//! ## Check extensions
+//!
+//! Reductions search unpromising moves less deeply; an **extension** searches a forcing move
+//! more deeply. A move that gives check is searched one ply deeper than the rest: a check
+//! leaves the opponent few replies, so the extra ply is cheap, and checks are where the
+//! horizon hides mates and lost pieces. Extensions are limited to the first half of
+//! [`MAX_PLY`], so a long series of checks can't grow the search without bound.
+//!
+//! **Off by default.** Extending every check made the search about 24% bigger, and an SPRT
+//! against the same engine without it found no gain: −8 ± 18 Elo after 840 games at 8+0.08.
+//! Late move reductions already spare checking moves, and the quiescence search follows the
+//! captures, so most of what the extension would find is found anyway. Strong engines extend
+//! more selectively (for example only checks that don't lose material, or only "singular"
+//! moves). The switch stays, so the experiment can be repeated.
+//!
 //! ## Tablebase probes (stage 18)
 //!
 //! With few pieces left, the search can ask the endgame tablebases for the exact result
@@ -263,6 +278,8 @@ pub struct Techniques {
     pub delta_pruning: bool,
     /// Order captures that lose material (by SEE) after the quiet moves.
     pub see_ordering: bool,
+    /// Search moves that give check one ply deeper (off by default).
+    pub check_extension: bool,
 }
 
 impl Default for Techniques {
@@ -286,6 +303,8 @@ impl Default for Techniques {
             see_pruning: true,
             delta_pruning: true,
             see_ordering: true,
+            // Off by default: it didn't measure stronger (see the module documentation).
+            check_extension: false,
         }
     }
 }
@@ -306,6 +325,7 @@ impl Techniques {
             futility: false,
             see_pruning: false,
             delta_pruning: false,
+            check_extension: false,
             ..Techniques::default()
         }
     }
@@ -796,9 +816,16 @@ impl<'a> Searcher<'a> {
             };
             // ANCHOR_END: lmr
 
+            // ANCHOR: check_extension
+            // Check extension: a move that gives check is searched one ply deeper.
+            let extension =
+                u32::from(self.techniques.check_extension && gives_check && ply < MAX_PLY / 2);
+            // ANCHOR_END: check_extension
+
             searched += 1;
             self.path.push(Some(mv));
-            let score = self.search_move(&child, depth - 1, alpha, beta, how, &mut child_pv);
+            let child_depth = depth - 1 + extension;
+            let score = self.search_move(&child, child_depth, alpha, beta, how, &mut child_pv);
             self.path.pop();
             if self.aborted {
                 break;

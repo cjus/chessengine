@@ -131,6 +131,11 @@ pub(crate) const SWITCHES: &[Switch] = &[
         flag: |e| &mut e.techniques.see_ordering,
     },
     Switch {
+        name: "checkext",
+        description: "Check extensions (off by default)",
+        flag: |e| &mut e.techniques.check_extension,
+    },
+    Switch {
         name: "mobility",
         description: "Evaluation: mobility",
         flag: |e| &mut e.params.terms.use_mobility,
