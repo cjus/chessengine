@@ -14,7 +14,7 @@
 
 - [Material, negamax and alpha-beta](ch05-alphabeta.md)
 - [Iterative deepening and time management](ch06-iterative.md)
-- [Quiescence search]()
+- [Quiescence search and MVV-LVA](ch07-quiescence.md)
 - [The transposition table]()
 - [Piece-square tables and tapered evaluation]()
 - [Move ordering]()

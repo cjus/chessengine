@@ -33,7 +33,9 @@
 //!
 //! - [`eval`]: material evaluation (stage 5).
 //! - [`search`]: negamax with alpha-beta, mate scores and draw detection (stage 5), driven by
-//!   iterative deepening in [`Engine::search`] (stage 6).
+//!   iterative deepening in [`Engine::search`] (stage 6), with a quiescence search at the
+//!   horizon (stage 7).
+//! - [`ordering`]: move ordering by MVV-LVA (stage 7).
 //! - [`time`]: time management: soft and hard limits per move (stage 6).
 //! - [`bench`](mod@bench): the fixed benchmark behind `cb2026 bench` and every commit's `Bench:` line.
 //!
@@ -58,6 +60,7 @@
 
 pub mod bench;
 pub mod eval;
+pub mod ordering;
 pub mod search;
 pub mod time;
 
@@ -214,6 +217,9 @@ impl Engine {
             .collect();
         if root_moves.is_empty() {
             return SearchResult::default();
+        }
+        if self.techniques.mvv_lva {
+            ordering::order_moves(position, &mut root_moves);
         }
 
         let budget = time::budget(limits, position.side_to_move(), &self.time);
