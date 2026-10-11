@@ -44,6 +44,7 @@
 //!   `EvalParams::tuned()`.
 //! - [`tablebase`]: endgame tablebase probing through a trait (stage 18).
 //! - [`book`]: Polyglot opening books (stage 18).
+//! - [`levels`]: strength levels (stage 19).
 //! - [`time`]: time management: soft and hard limits per move (stage 6).
 //! - [`bench`](mod@bench): the fixed benchmark behind `cb2026 bench` and every commit's `Bench:` line.
 //!
@@ -72,6 +73,7 @@ pub mod book;
 mod book_keys;
 pub mod eval;
 pub mod hce;
+pub mod levels;
 pub mod ordering;
 pub mod search;
 pub mod see;
@@ -189,6 +191,8 @@ pub struct SearchInfo {
     pub hashfull: u32,
     /// Tablebase probes that gave a result (main thread).
     pub tbhits: u64,
+    /// Which line this is, from 1, when searching several (MultiPV).
+    pub multipv: u32,
 }
 
 /// The outcome of a search.
@@ -230,6 +234,14 @@ pub struct Engine {
     pub book: Option<Arc<OpeningBook>>,
     /// Play from the book when it has a move (the UCI `OwnBook` option; off by default).
     pub own_book: bool,
+    /// How many best lines to search and report (the UCI `MultiPV` option).
+    pub multipv: usize,
+    /// The strength level, 0 to [`levels::FULL_STRENGTH`] (the UCI `Skill Level`).
+    pub skill_level: u32,
+    /// Limit the strength to [`Engine::elo`] (the UCI `UCI_LimitStrength`).
+    pub limit_strength: bool,
+    /// The strength to play at when limited (the UCI `UCI_Elo`).
+    pub elo: u32,
 }
 
 impl Default for Engine {
@@ -247,6 +259,10 @@ impl Default for Engine {
             tablebase_loader: None,
             book: None,
             own_book: false,
+            multipv: 1,
+            skill_level: levels::FULL_STRENGTH,
+            limit_strength: false,
+            elo: levels::ELO_RANGE.1,
         }
     }
 }
@@ -277,6 +293,17 @@ impl Engine {
         let summary = format!("Tablebases for up to {} pieces", tb.max_pieces());
         self.tablebase = Some(tb);
         Ok(summary)
+    }
+
+    /// The level the engine plays at: [`Engine::skill_level`], or the level for
+    /// [`Engine::elo`] when the strength is limited, whichever is weaker.
+    pub fn level(&self) -> u32 {
+        let skill = self.skill_level.min(levels::FULL_STRENGTH);
+        if self.limit_strength {
+            skill.min(levels::level_for_elo(self.elo))
+        } else {
+            skill
+        }
     }
 
     /// Replaces the transposition table with an empty one of about `megabytes` MB.
@@ -361,6 +388,17 @@ impl Engine {
         }
         // ANCHOR_END: tb_root
 
+        // ANCHOR: level_limits
+        // A weaker level searches fewer nodes and several lines to choose from.
+        let level = levels::settings(self.level());
+        let mut level_limits = limits.clone();
+        if let Some(nodes) = level.nodes {
+            level_limits.nodes = Some(limits.nodes.map_or(nodes, |n| n.min(nodes)));
+        }
+        let limits = &level_limits;
+        let lines = self.multipv.max(level.candidates).max(1);
+        // ANCHOR_END: level_limits
+
         let budget = time::budget(limits, position.side_to_move(), &self.time);
         let unlimited = limits.depth.is_none()
             && limits.nodes.is_none()
@@ -377,6 +415,7 @@ impl Engine {
         let max_depth = max_depth.clamp(1, MAX_PLY);
 
         let deadline = budget.hard.map(|hard| start + hard);
+        let root_fallback = root_moves.first().copied();
         // Lazy SMP (stage 17): helper threads search the same position, sharing only the
         // transposition table. They stop when the main thread is done.
         let helpers_stop = AtomicBool::new(false);
@@ -390,9 +429,11 @@ impl Engine {
             threads,
             tablebase,
             tablebase_params,
+            multipv,
             ..
         } = self;
         let tablebase = tablebase.as_deref();
+        let self_multipv = (*multipv).max(1);
         let tablebase_params = *tablebase_params;
         let (params, techniques, search_params, tt) = (&*params, *techniques, *search_params, &*tt);
         thread::scope(|scope| {
@@ -446,11 +487,38 @@ impl Engine {
                     start,
                     soft: budget.soft,
                     helper_nodes: &helper_nodes,
+                    lines,
+                    reported: self_multipv,
                 },
                 on_info,
             );
             helpers_stop.store(true, Ordering::Relaxed);
-            result
+            // ANCHOR: level_choice
+            let Some(best) = result.first() else {
+                return SearchResult {
+                    best_move: root_fallback,
+                    ponder_move: None,
+                };
+            };
+            // At full strength, the best line; at a lower level, one of the candidates.
+            let candidates: Vec<(Move, i32)> = result
+                .iter()
+                .filter_map(|line| line.best_move.map(|mv| (mv, line.score)))
+                .collect();
+            let nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.subsec_nanos());
+            let random = (u64::from(nanos) ^ position.hash()).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+            let chosen = levels::choose(&candidates, &level, random).or(best.best_move);
+            let line = result
+                .iter()
+                .find(|line| line.best_move == chosen)
+                .unwrap_or(best);
+            SearchResult {
+                best_move: chosen.or(root_fallback),
+                ponder_move: line.pv.get(1).copied(),
+            }
+            // ANCHOR_END: level_choice
         })
     }
     // ANCHOR_END: search
@@ -464,16 +532,23 @@ struct MainSearch<'a> {
     start: Instant,
     soft: Option<Duration>,
     helper_nodes: &'a AtomicU64,
+    /// How many lines to search (MultiPV, or a level's candidates).
+    lines: usize,
+    /// How many of them to report.
+    reported: usize,
 }
 
 // ANCHOR: main_search
-/// The main thread's iterative deepening: it decides when to stop and which move to play,
-/// and reports progress.
+/// The main thread's iterative deepening: it decides when to stop, reports progress, and
+/// returns the best lines of the last depth it searched, best first.
+///
+/// With several lines (MultiPV), each depth searches the root once per line, leaving out the
+/// moves already chosen as better lines at that depth.
 fn main_search(
     mut searcher: Searcher<'_>,
     job: MainSearch<'_>,
     on_info: &mut dyn FnMut(&SearchInfo),
-) -> SearchResult {
+) -> Vec<RootResult> {
     let MainSearch {
         position,
         mut root_moves,
@@ -481,37 +556,65 @@ fn main_search(
         start,
         soft,
         helper_nodes,
+        lines: wanted,
+        reported,
     } = job;
-    let mut best: Option<RootResult> = None;
+    let wanted = wanted.min(root_moves.len()).max(1);
+    let mut lines: Vec<RootResult> = Vec::new();
     for depth in 1..=max_depth {
-        let previous = best.as_ref().map(|b| b.score);
-        let result = searcher.search_depth(position, &mut root_moves, depth, previous);
-        // A stopped iteration still counts if it finished at least one move: the first
-        // move searched is the previous best, so its result is at least as well-founded.
-        let usable = result.complete || result.score > -INFINITY;
-        if usable {
-            best = Some(result.clone());
+        let mut this_depth: Vec<RootResult> = Vec::new();
+        let mut complete = true;
+        for k in 0..wanted {
+            let mut moves: Vec<Move> = root_moves
+                .iter()
+                .copied()
+                .filter(|&mv| !this_depth.iter().any(|line| line.best_move == Some(mv)))
+                .collect();
+            let previous = lines.get(k).map(|line| line.score);
+            let result = searcher.search_depth(position, &mut moves, depth, previous);
+            // A stopped iteration still counts if it finished at least one move: the first
+            // move searched is the previous best, so its result is at least as well-founded.
+            if result.complete || result.score > -INFINITY {
+                this_depth.push(result.clone());
+            }
+            if !result.complete {
+                complete = false;
+                break;
+            }
+        }
+        // A later line can score higher than an earlier one (it is searched with its own
+        // window, and the transposition table has learned more by then), so the lines are
+        // sorted, best first, before they are reported. The sort is stable: equal scores keep
+        // the order they were found in.
+        this_depth.sort_by_key(|line| std::cmp::Reverse(line.score));
+        for (k, line) in this_depth.iter().enumerate().take(reported) {
             on_info(&SearchInfo {
                 depth,
-                seldepth: result.seldepth,
-                score: to_score(result.score),
-                nodes: result.nodes + helper_nodes.load(Ordering::Relaxed),
+                seldepth: line.seldepth,
+                score: to_score(line.score),
+                nodes: line.nodes + helper_nodes.load(Ordering::Relaxed),
                 time: start.elapsed(),
-                pv: result.pv.clone(),
+                pv: line.pv.clone(),
                 hashfull: searcher.hashfull(),
                 tbhits: searcher.tb_hits(),
+                multipv: k as u32 + 1,
             });
         }
-        if !result.complete {
+        if !this_depth.is_empty() {
+            lines = this_depth;
+        }
+        if !complete {
             break;
         }
-        // Next depth: try this depth's best move first.
-        if let Some(best_move) = result.best_move {
-            root_moves.retain(|&mv| mv != best_move);
-            root_moves.insert(0, best_move);
+        // Next depth: the lines' moves first, best first.
+        for line in lines.iter().rev() {
+            if let Some(mv) = line.best_move {
+                root_moves.retain(|&m| m != mv);
+                root_moves.insert(0, mv);
+            }
         }
         // A mate found at this depth can't be beaten by searching deeper.
-        if result.score.abs() >= MATE - depth as i32 {
+        if wanted == 1 && lines[0].score.abs() >= MATE - depth as i32 {
             break;
         }
         // Starting another depth now would probably not finish in time.
@@ -522,12 +625,7 @@ fn main_search(
             break;
         }
     }
-
-    let best = best.unwrap_or_default();
-    SearchResult {
-        best_move: best.best_move.or(root_moves.first().copied()),
-        ponder_move: best.pv.get(1).copied(),
-    }
+    lines
 }
 // ANCHOR_END: main_search
 
@@ -746,6 +844,61 @@ mod tests {
                 .unwrap();
         let result = engine.search(&after, &[], &Limits::depth(2), &stop, &mut |_| {});
         assert!(result.best_move.is_some());
+    }
+
+    #[test]
+    fn weak_levels_search_few_nodes_and_vary_their_moves() {
+        let mut engine = Engine::new();
+        engine.skill_level = 0;
+        let pos = Position::startpos();
+        let stop = AtomicBool::new(false);
+        let mut chosen = std::collections::HashSet::new();
+        for _ in 0..12 {
+            let mut nodes = 0;
+            let result = engine.search(&pos, &[], &Limits::default(), &stop, &mut |info| {
+                nodes = nodes.max(info.nodes)
+            });
+            assert!(nodes <= 400, "{nodes}");
+            chosen.insert(result.best_move.unwrap());
+            engine.new_game();
+        }
+        // Level 0 picks among four candidates with plenty of randomness.
+        assert!(chosen.len() > 1, "{chosen:?}");
+        // UCI_Elo maps onto a level, and never makes the engine stronger than Skill Level.
+        engine.skill_level = 20;
+        engine.limit_strength = true;
+        engine.elo = 1000;
+        assert_eq!(engine.level(), 0);
+        engine.elo = 2400;
+        engine.skill_level = 5;
+        assert_eq!(engine.level(), 5);
+    }
+
+    #[test]
+    fn multipv_lines_are_distinct_and_ordered() {
+        let mut engine = Engine::new();
+        engine.multipv = 3;
+        let stop = AtomicBool::new(false);
+        let mut infos = Vec::new();
+        engine.search(
+            &Position::startpos(),
+            &[],
+            &Limits::depth(5),
+            &stop,
+            &mut |info| infos.push(info.clone()),
+        );
+        let last: Vec<&SearchInfo> = infos.iter().filter(|i| i.depth == 5).collect();
+        assert_eq!(last.len(), 3);
+        let scores: Vec<i32> = last
+            .iter()
+            .map(|i| match i.score {
+                Score::Centipawns(cp) => cp,
+                Score::Mate(_) => panic!("no mates here"),
+            })
+            .collect();
+        assert!(scores.windows(2).all(|w| w[0] >= w[1]), "{scores:?}");
+        let firsts: std::collections::HashSet<Move> = last.iter().map(|i| i.pv[0]).collect();
+        assert_eq!(firsts.len(), 3);
     }
 
     #[test]
