@@ -14,6 +14,22 @@ cargo run --release -p cb2026-tools --bin perft-suite   # every perft depth, wit
 
 CI runs all of these on every pull request.
 
+## Fuzzing
+
+The parsers that read outside input (FEN, SAN and UCI moves, whole UCI sessions) are fuzzed
+with [cargo-fuzz](https://github.com/rust-fuzz/cargo-fuzz): random inputs, guided by coverage,
+looking for panics, hangs and broken round trips. It needs nightly Rust:
+
+```sh
+rustup toolchain install nightly
+cargo install cargo-fuzz
+cd fuzz
+cargo +nightly fuzz run fen -- -max_total_time=60      # also: moves, uci
+```
+
+The `Fuzz` workflow runs each target for five minutes every night. A crash leaves the input in
+`fuzz/artifacts/`; turn it into a regular test when fixing it.
+
 ## Strength: the `match` tool
 
 `match` plays two UCI engines against each other and reports the score, an Elo estimate with

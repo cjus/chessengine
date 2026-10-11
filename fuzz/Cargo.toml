@@ -1,0 +1,41 @@
+[package]
+name = "cb2026-fuzz"
+description = "Fuzz tests for cb2026's parsers (cargo fuzz; nightly Rust)."
+version = "0.0.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+cb2026-chess = { path = "../crates/chess" }
+cb2026-engine = { path = "../crates/engine" }
+cb2026-protocol = { path = "../crates/protocol" }
+
+# Not part of the main workspace: it needs nightly Rust and cargo-fuzz.
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "fen"
+path = "fuzz_targets/fen.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "moves"
+path = "fuzz_targets/moves.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "uci"
+path = "fuzz_targets/uci.rs"
+test = false
+doc = false
+bench = false
