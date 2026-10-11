@@ -141,6 +141,11 @@ pub(crate) const SWITCHES: &[Switch] = &[
         flag: |e| &mut e.techniques.iir,
     },
     Switch {
+        name: "improving",
+        description: "Adjust pruning when improving",
+        flag: |e| &mut e.techniques.improving,
+    },
+    Switch {
         name: "mobility",
         description: "Evaluation: mobility",
         flag: |e| &mut e.params.terms.use_mobility,

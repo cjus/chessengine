@@ -101,6 +101,15 @@
 //! a hash move, at full depth. (The older **internal iterative deepening** did a shallow search
 //! first just to find a move to order first; reducing turned out to be cheaper and as good.)
 //!
+//! ## Improving
+//!
+//! A side whose static evaluation is better than two plies ago, the last time it was to
+//! move, is **improving**: its moves are working, and its evaluation will probably keep rising.
+//! That cuts both ways. Reverse futility pruning, which bets that a node far above beta stays
+//! there, can bet with a margin one ply smaller. Late move pruning, which bets that late quiet
+//! moves are useless, tries twice as many before giving up, since in an improving position
+//! they're more often good. (Stockfish uses the same idea in many more places.)
+//!
 //! ## Tablebase probes (stage 18)
 //!
 //! With few pieces left, the search can ask the endgame tablebases for the exact result
@@ -295,6 +304,8 @@ pub struct Techniques {
     pub check_extension: bool,
     /// Internal iterative reductions: search nodes without a hash move a ply shallower.
     pub iir: bool,
+    /// Adjust pruning when the side to move is improving (better than two plies ago).
+    pub improving: bool,
 }
 
 impl Default for Techniques {
@@ -321,6 +332,7 @@ impl Default for Techniques {
             // Off by default: it didn't measure stronger (see the module documentation).
             check_extension: false,
             iir: true,
+            improving: true,
         }
     }
 }
@@ -343,6 +355,7 @@ impl Techniques {
             delta_pruning: false,
             check_extension: false,
             iir: false,
+            improving: false,
             ..Techniques::default()
         }
     }
@@ -402,6 +415,9 @@ pub(crate) struct Searcher<'a> {
     /// The moves from the root to the current position (for the countermove heuristic), with
     /// `None` for a null move.
     path: Vec<Option<Move>>,
+    /// The static evaluation at each ply of the current line (`-INFINITY` in check), for the
+    /// improving heuristic.
+    evals: Vec<i32>,
     /// Late move reductions by depth and move number (see [`lmr_table`]).
     lmr: Vec<[u8; LMR_TABLE_SIZE]>,
     /// A counter shared with other threads, which this search adds its nodes to.
@@ -476,6 +492,7 @@ impl<'a> Searcher<'a> {
             aborted: false,
             keys: history.to_vec(),
             path: Vec::new(),
+            evals: vec![-INFINITY; MAX_PLY as usize + 1],
             lmr: lmr_table(&search_params),
             shared_nodes: None,
             tablebase: None,
@@ -673,6 +690,15 @@ impl<'a> Searcher<'a> {
         } else {
             evaluate(pos, self.params)
         };
+        // ANCHOR: improving
+        // Improving: better than two plies ago, when this side last moved. Its evaluation will
+        // probably keep rising, which changes the bets the pruning techniques make.
+        self.evals[ply as usize] = static_eval;
+        let improving = self.techniques.improving
+            && !in_check
+            && ply >= 2
+            && static_eval > self.evals[ply as usize - 2];
+        // ANCHOR_END: improving
         // Selective pruning happens only off the principal variation and out of check.
         let selective = self.techniques.alpha_beta && !pv_node && !in_check;
 
@@ -681,7 +707,7 @@ impl<'a> Searcher<'a> {
         if self.techniques.reverse_futility
             && selective
             && depth <= p.rfp_max_depth
-            && static_eval - p.rfp_margin * depth as i32 >= beta
+            && static_eval - p.rfp_margin * (depth - u32::from(improving)) as i32 >= beta
         {
             self.note(Note::ReverseFutility);
             return static_eval;
@@ -781,7 +807,8 @@ impl<'a> Searcher<'a> {
                 && !pv_node
                 && depth <= p.lmp_max_depth
                 && best > -MATE + MAX_PLY as i32
-                && quiets_tried.len() as u32 >= p.lmp_base + depth * depth
+                && quiets_tried.len() as u32
+                    >= (p.lmp_base + depth * depth) * (1 + u32::from(improving))
             {
                 self.note(Note::LateMovePruning(mv));
                 continue;

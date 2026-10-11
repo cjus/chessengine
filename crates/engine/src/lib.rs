@@ -809,6 +809,22 @@ mod tests {
     }
 
     #[test]
+    fn the_improving_heuristic_changes_the_search_and_still_finds_mates() {
+        let nodes = |improving: bool| {
+            let mut engine = Engine::new();
+            engine.techniques.improving = improving;
+            search_with(&mut engine, KIWIPETE, 8).nodes
+        };
+        assert_ne!(nodes(true), nodes(false));
+        let mut engine = Engine::new();
+        let mate_in_two = "r2qkb1r/pp2nppp/3p4/2pNN1B1/2BnP3/3P4/PPP2PPP/R2bK2R w KQkq - 1 0";
+        assert_eq!(
+            search_with(&mut engine, mate_in_two, 6).score,
+            Score::Mate(2)
+        );
+    }
+
+    #[test]
     fn statistics_add_up_to_the_nodes_searched() {
         let pos = Position::from_fen(KIWIPETE).unwrap();
         let (result, reports) = search(&pos, &Limits::depth(6));
