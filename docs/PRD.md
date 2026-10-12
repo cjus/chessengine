@@ -534,6 +534,9 @@ release tags. Releases build binaries for every platform in the table above.
 | M5 · v1.0 release | Strength work towards 2600–2700, book finished, release binaries, robustness run | ≥2400 CCRL Blitz (goal 2600+); 10,000-game robustness run clean; book complete for stages 1–20 |
 | M6 · NNUE (stretch) | NNUE inference with SIMD, our own trainer, self-play data, HCE kept as a mode (stage 21) | Beats the HCE version by SPRT; book chapter done |
 
+**Gate results.** M0 passed on 2026-10-11: every perft suite exact (665,777,044 nodes, 0
+failures) at 278.8 million nodes/s on the M1 Max (cjus/chessengine#20).
+
 ## Risks
 
 | Risk | Impact | Mitigation |

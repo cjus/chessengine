@@ -87,12 +87,16 @@ needs a machine with more cores than the cloud sessions have, so it runs on the 
 | Test | Result |
 | --- | --- |
 | Stage 17 vs stage 16, 1 thread each, 8+0.08, test Mac | **+0.1 ± 4.1 Elo** over 15,188 games (+4196 −4192 =6800): no regression, SPRT [−5, 0] passed |
-| 4 threads vs 1 thread, 8+0.08, test Mac | Pending (cjus/chessengine#47) |
+| 4 threads vs 1 thread, 8+0.08, test Mac | **+191 ± 99 Elo** over 38 games (+22 −3 =13): a clear gain, SPRT [0, 25] passed |
 
 With one thread the search is unchanged except for the table's packing, so about 0 Elo is the
 expected result. Confirming it took 15,188 games, about 15 hours on the test Mac: the test has
 to tell 0 from −5 Elo, and when the truth sits right at one of the two hypotheses, the SPRT's
 evidence grows very slowly. Changes worth +100 Elo or more are decided in a few hundred games.
+
+The thread-scaling test is the opposite case. It only had to show that four threads clearly gain
+(bounds [0, 25]), and 38 games were enough. The size of the gain is rough, though: the 95%
+interval runs from about +90 to +290 Elo, and pinning it down would take many more games.
 
 ## Further reading
 
