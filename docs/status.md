@@ -35,7 +35,7 @@ it in every PR that changes the picture (a stage merged, a result in, a new bloc
 | Shell: `match`, `selfplay`, `uci`, `xboard` | #55 | 1207153 | Merged, no functional change |
 | M5: check extensions | #57 | 1207153 | Merged, off by default: −8.3 ± 17.7 after 840 games (no gain) |
 | M5: internal iterative reductions | #58 | 765380 | Merged: +19.2 ± 10.4, 2,337 games, [0, 5] passed (Mac) |
-| M5: improving heuristic | `claude/m5-improving` | 648634 | Not tested yet (test it against IIR) |
+| M5: improving heuristic | `claude/m5-improving` | 648634 | SPRT against `main` (with IIR) on the Mac |
 
 The last M5 branch still open, `claude/m5-improving`, is one commit on top of `main`.
 
