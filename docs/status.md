@@ -22,7 +22,7 @@ it in every PR that changes the picture (a stage merged, a result in, a new bloc
 | 17 Lazy SMP | Merged | #46 | 1207153 | One thread vs stage 16, [−5, 0]: +0.1 ± 4.1, 15,188 games, passed (Mac). 4 threads vs 1: pending (#47) |
 | 18 Syzygy, Chess960 starts | Merged | #49 | 1207153 | No functional change |
 | 18 Polyglot books | Merged | #50 | 1207153 | No functional change (book off by default) |
-| 19 Levels, MultiPV | Built, merging next | `claude/stage-19-levels` | 1207153 | No functional change at full strength; levels not yet calibrated (#36) |
+| 19 Levels, MultiPV | Merged | #51 | 1207153 | No functional change at full strength; levels not yet calibrated (#36) |
 | 20 XBoard, pondering, conformance tests, Lichess docs | Built, merging next | `claude/stage-20-xboard` | 1207153 | No functional change |
 | 21 NNUE | Not started | | | M6 stretch goal |
 
