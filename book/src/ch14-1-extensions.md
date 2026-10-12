@@ -3,12 +3,13 @@
 *Milestone M5, after stage 20 · on `main`, no stage tag · code in `crates/engine/src/search.rs`*
 
 Chapters 12 to 14 made the tree smaller by guessing which moves and positions don't need a full
-search. This chapter changes the depth itself: an **extension** searches a move *deeper* than
-its siblings.
+search. This chapter moves depth in both directions. An **extension** searches a move *deeper*
+than its siblings; a **reduction** searches a whole node *shallower* (chapter 13's late move
+reductions work on single moves).
 
-The technique in this chapter came after stage 20, as strength work towards version 1.0
-(milestone M5), so no stage tag contains it: read this chapter against `main`. Like everything
-before it, it can be switched off and on: `set checkext`.
+The techniques in this chapter came after stage 20, as strength work towards version 1.0
+(milestone M5), so no stage tag contains them: read this chapter against `main`. Like everything
+before them, each can be switched off and on: `set checkext` and `set iir`.
 
 ## Check extensions
 
@@ -43,16 +44,41 @@ extend more selectively, for example only checks that don't lose material, or on
 moves: a move that a reduced search, with that move left out, shows to be much better than every
 alternative. The switch stays, so the experiment can be repeated.
 
+## Internal iterative reductions
+
+The hash move, the best move the transposition table remembers from an earlier search of the
+position, is usually the best move, and searching it first is what makes alpha-beta fast
+(chapter 10). A node with no hash move has never been searched, every search of it failed low,
+or its entry has been replaced. Its move ordering will be poor, so a full-depth search of it is
+expensive. And nodes like that are rarely on the principal variation, which every iteration
+searches first and leaves in the table.
+
+**Internal iterative reduction** (IIR) searches such a node, from depth 4 on, one ply shallower:
+
+```rust,ignore
+{{#include ../../crates/engine/src/search.rs:iir}}
+```
+
+If the node does matter, little is lost: the next iteration of iterative deepening reaches it
+again, now with the move this search stored, and searches it at full depth.
+
+The older technique, **internal iterative deepening** (IID), did more work instead of less:
+before searching a node without a hash move, it ran a shallower search of the same node just to
+find a move to try first. IIR gets that move from the next iteration instead, and is cheaper and
+about as good. Stockfish (GPL-3.0) has replaced IID with it.
+
 ## What it saves
 
 The six positions of chapters 10 to 14 (the first six bench positions) at depth 8:
 
 | Setting | Nodes | vs defaults |
 | --- | ---: | ---: |
-| Defaults (check extension off) | 193,361 | — |
-| `set checkext on` | 207,017 | +7% |
+| Defaults (IIR on, check extension off) | 148,075 | — |
+| `set iir off` | 193,361 | +31% |
+| `set checkext on` | 146,051 | −1% |
 
-On the bench (14 positions at depth 10) the extension costs more: 24% more nodes.
+IIR takes almost a quarter off the tree. With it on, the check extension costs little on these
+positions, but a smaller or equal tree doesn't make it stronger: the games below decide.
 
 ## Pitfalls
 
@@ -62,15 +88,23 @@ On the bench (14 positions at depth 10) the extension costs more: 24% more nodes
 - **Overlap.** Every technique here works on top of all the others. The check extension found
   little because LMR already spares checks; turning a technique off shows only what it adds *on
   top of* the rest.
+- **Store what you searched.** IIR replaces `depth` for the rest of the node, so the table entry
+  records the reduced depth. Storing the original depth would let the table answer later, deeper
+  searches with a result it doesn't have.
+- **Nodes aren't Elo.** IIR saves nodes by searching some nodes less deeply. Whether that costs
+  more than it saves is for an SPRT to say, not a node count.
 
 ## What it's worth
 
 | Test | Result |
 | --- | --- |
 | Check extensions on vs off (stage 20), 8+0.08, cloud, SPRT [0, 5] | −8.3 ± 17.7 Elo over 840 games (+229 −249 =362), no verdict when the session's two-hour limit stopped it: no gain, so it is off by default |
+| IIR vs `main` without it, 8+0.08, test Mac, SPRT [0, 5] | **+19.2 ± 10.4 Elo** over 2,337 games (+705 −576 =1056): passed |
 
 ## Further reading
 
 - Chess Programming Wiki: [Extensions](https://www.chessprogramming.org/Extensions),
   [Check Extensions](https://www.chessprogramming.org/Check_Extensions),
-  [Singular Extensions](https://www.chessprogramming.org/Singular_Extensions).
+  [Singular Extensions](https://www.chessprogramming.org/Singular_Extensions),
+  [Internal Iterative Deepening](https://www.chessprogramming.org/Internal_Iterative_Deepening),
+  [Internal Iterative Reductions](https://www.chessprogramming.org/Internal_Iterative_Reductions).

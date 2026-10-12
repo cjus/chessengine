@@ -28,3 +28,4 @@ self-play unless noted, so it overstates gains against other engines.
 | 2026-10-11 | Stage 19: strength levels + MultiPV (levels not yet calibrated, #36) | cjus/chessengine#51 | None: no functional change | — | — | — | bench unchanged |
 | 2026-10-11 | Stage 20: XBoard/CECP, pondering, conformance tests, Lichess setup | cjus/chessengine#52 | None: no functional change | — | — | — | bench unchanged |
 | 2026-10-11 | M5: check extensions, switched on (vs stage 20; off by default) | cjus/chessengine#57 | SPRT | 8+0.08, cloud, 3 games at a time | 840 | +229 −249 =362, about −8.3 ± 17.7 | no verdict (LLR −0.66), [0, 5]; no gain, so off by default |
+| 2026-10-12 | M5: internal iterative reductions (vs `main` without it) | cjus/chessengine#58 | SPRT | 8+0.08, test Mac (M1 Max), 7 games at a time | 2337 | +705 −576 =1056, about +19.2 ± 10.4 | passed (2.96 ≥ 2.94), [0, 5] |

@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-12 (M5: the check extension merged, with chapter 14.1).*
+*Last updated 2026-10-12 (M5: the check extension and IIR merged, with chapter 14.1).*
 
 ## Stages
 
@@ -34,11 +34,10 @@ it in every PR that changes the picture (a stage merged, a result in, a new bloc
 | Shell: `redo`, clocks, `hint`, `resign`, `draw`, PGN save/load | #54 | 1207153 | Merged, no functional change |
 | Shell: `match`, `selfplay`, `uci`, `xboard` | #55 | 1207153 | Merged, no functional change |
 | M5: check extensions | #57 | 1207153 | Merged, off by default: −8.3 ± 17.7 after 840 games (no gain) |
-| M5: internal iterative reductions | `claude/m5-iir` | 765380 | SPRT vs stage 20: about +20 to +28 (± 29) after about 300 games when the cloud session ended, no verdict; **rerun it** |
+| M5: internal iterative reductions | #58 | 765380 | Merged: +19.2 ± 10.4, 2,337 games, [0, 5] passed (Mac) |
 | M5: improving heuristic | `claude/m5-improving` | 648634 | Not tested yet (test it against IIR) |
 
-The two M5 branches still open form a linear stack on `main`: `claude/m5-iir`, then
-`claude/m5-improving` on top of it.
+The last M5 branch still open, `claude/m5-improving`, is one commit on top of `main`.
 
 ## Milestones
 
@@ -72,7 +71,7 @@ Claude ran it on the idle Mac).
 
 ### Merging the stack
 
-For each branch in order (IIR, improving), once it has its SPRT result and its section of
+For each branch (now only improving), once it has its SPRT result and its section of
 chapter 14.1:
 
 1. Rebase the branch onto the latest `origin/main`. The commits below it are already in `main`,
@@ -97,7 +96,7 @@ Run the full test suite on every commit you replay, not only at the tip: each be
 
 ### Results still to record
 
-- **M5 techniques:** IIR and improving need SPRTs. Each adds its section to chapter 14.1,
+- **M5 techniques:** improving needs its SPRT. It adds its section to chapter 14.1,
   "Extensions and reductions", and its row to the ledger. (14.1 is a sub-chapter of chapter 14,
   so the book's chapter numbers still match the stage numbers.)
 
@@ -123,10 +122,13 @@ Run the full test suite on every commit you replay, not only at the tip: each be
 
 ### Next work, in PRD order
 
-1. M5: rerun IIR's SPRT on the Mac ([0, 5]), then test improving against IIR; merge each with its
-   section of chapter 14.1.
-2. Milestone gates, once #36 is answered: gauntlets for M2–M4, level calibration (the
+1. M5: test improving against `main` (which has IIR) on the Mac, and merge it with its section
+   of chapter 14.1.
+2. Time losses: IIR's SPRT had two in 2,337 games at 8+0.08, one for each engine, so not caused by
+   IIR (the referee allows 50 ms over the clock). Find the cause before the M5 robustness run,
+   which must be clean over 10,000 games.
+3. Milestone gates, once #36 is answered: gauntlets for M2–M4, level calibration (the
    calibration script is still to write, using `crates/tools/src/gauntlet.rs`).
-3. More M5 strength work, each change with an SPRT. Candidates: continuation history,
+4. More M5 strength work, each change with an SPRT. Candidates: continuation history,
    history-based LMR adjustment, singular extensions, time management.
-4. The v1.0 release (`docs/releasing.md`), then stage 21 (NNUE).
+5. The v1.0 release (`docs/releasing.md`), then stage 21 (NNUE).

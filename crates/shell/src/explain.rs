@@ -136,6 +136,11 @@ pub(crate) const SWITCHES: &[Switch] = &[
         flag: |e| &mut e.techniques.check_extension,
     },
     Switch {
+        name: "iir",
+        description: "Internal iterative reductions",
+        flag: |e| &mut e.techniques.iir,
+    },
+    Switch {
         name: "mobility",
         description: "Evaluation: mobility",
         flag: |e| &mut e.params.terms.use_mobility,
