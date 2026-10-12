@@ -77,7 +77,7 @@ A side whose static evaluation is higher than two plies ago, the last time it wa
 {{#include ../../crates/engine/src/search.rs:improving}}
 ```
 
-That changes the bets two pruning techniques make.
+That changes the bet reverse futility pruning makes.
 
 **Reverse futility pruning** (chapter 14) bets that a node far above beta stays there. If the
 side to move is improving, the bet is safer, so the margin shrinks by half a ply's worth
@@ -87,30 +87,33 @@ side to move is improving, the bet is safer, so the margin shrinks by half a ply
 {{#include ../../crates/engine/src/search.rs:reverse_futility}}
 ```
 
-**Late move pruning** (chapter 13) bets that once enough quiet moves have failed, the rest will
-too. In an improving position quiet moves are more often good, so it tries twice as many before
-giving up:
+**Late move pruning** (chapter 13) could use it too. In an improving position quiet moves are
+more often good, so it could try more of them before giving up. That is the parameter
+`lmp_improving`, and it is 1: no change.
 
 ```rust,ignore
 {{#include ../../crates/engine/src/search.rs:lmp}}
 ```
 
-The first change prunes more and the second less.
+This is the third version. **The first failed.** It shrank the margin by a whole ply, as
+Stockfish 11 (GPL-3.0) did. At depth 1 that left no margin at all: the node was cut off whenever
+its static evaluation alone reached beta, and cb2026's evaluation, unlike Stockfish's, knows
+nothing about pieces under attack. In an SPRT against the same engine without it, cb2026 lost
+about 32 Elo (see "What it's worth"). **The second failed too**, by about 18 Elo. It took half a
+ply off the margin, as here, so at depth 1 a node still needs 40 centipawns to spare. Both also
+doubled late move pruning's threshold when improving (`lmp_improving` = 2). The version above
+leaves that out, so it tests the margin on its own.
 
-**The first version failed.** It shrank the margin by a whole ply, as Stockfish 11 (GPL-3.0)
-did. At depth 1 that left no margin at all: the node was cut off whenever its static evaluation
-alone reached beta, and cb2026's evaluation, unlike Stockfish's, knows nothing about pieces
-under attack. That version made the tree almost a third smaller on the six test positions and
-the engine weaker: in an SPRT against the same engine without it, cb2026 lost about 32 Elo (see
-"What it's worth"). The version above takes half a ply off instead, so at depth 1 a node still
-needs 40 centipawns to spare. It saves far fewer nodes (below).
+**The third version failed as well**, by about 33 Elo, so **cb2026 ships with improving off**.
+Taken together, the three results point at reverse futility pruning: with the margin alone
+smaller, the engine lost more than with the same margin and late move pruning doubled, so the
+late move pruning part seems to have made up some of the loss. Testing the parts one at a time
+is what showed that. The switch and both parameters stay, so either part can be tried again.
 
-**The second version failed too**, by about 18 Elo, so **cb2026 ships with improving off**.
-Both versions also change late move pruning, so the cost may lie there; neither part has been
-tested on its own yet. Both tests also ran with a bug, found afterwards: the root is searched by its own
-function, which didn't store its static evaluation, so every node two plies down compared its
-evaluation with `-INFINITY` and counted as improving. Fixing it changed the six test positions'
-tree by 31 nodes, so it is probably not why improving lost.
+Both tests also ran with a bug, found afterwards: the root is searched by its own function,
+which didn't store its static evaluation, so every node two plies down compared its evaluation
+with `-INFINITY` and counted as improving. Fixing it changed the six test positions' tree by 31
+nodes, so it is probably not why improving lost.
 
 ## What it saves
 
@@ -120,12 +123,12 @@ The six positions of chapters 10 to 14 (the first six bench positions) at depth 
 | --- | ---: | ---: |
 | Defaults (IIR on; improving and the check extension off) | 148,075 | — |
 | `set iir off` | 193,361 | +31% |
-| `set improving on` | 137,110 | −7% |
+| `set improving on` | 115,438 | −22% |
 | `set checkext on` | 146,051 | −1% |
 
-IIR takes almost a quarter off the tree, and improving another 7%; its first version took off
-31%. Both versions of improving made the tree smaller and the engine weaker: the games below
-decide, not the node counts.
+IIR takes almost a quarter off the tree. Improving takes off over a fifth more; its second
+version, which also made late move pruning wait longer, took off 7%, and its first 31%. All
+three made the engine weaker: the games below decide, not the node counts.
 
 ## Pitfalls
 
@@ -161,7 +164,8 @@ decide, not the node counts.
 | Check extensions on vs off (stage 20), 8+0.08, cloud, SPRT [0, 5] | −8.3 ± 17.7 Elo over 840 games (+229 −249 =362), no verdict when the session's two-hour limit stopped it: no gain, so it is off by default |
 | IIR vs `main` without it, 8+0.08, test Mac, SPRT [0, 5] | **+19.2 ± 10.4 Elo** over 2,337 games (+705 −576 =1056): passed |
 | Improving, first version (a whole ply off the margin), vs `main` without it (with IIR), 8+0.08, test Mac (M1 Max), SPRT [0, 5] | **−32.0 ± 15.1 Elo** over 1,142 games (+267 −372 =503): failed (LLR −2.96) |
-| Improving, half a ply off the margin, vs `main` without it (with IIR), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−17.7 ± 11.5 Elo** over 1,691 games (+362 −448 =881): failed (LLR −2.97), so improving is off by default |
+| Improving, half a ply off the margin, late move pruning doubled, vs `main` without it (with IIR), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−17.7 ± 11.5 Elo** over 1,691 games (+362 −448 =881): failed (LLR −2.97) |
+| Improving, half a ply off the margin only, vs `main` without it (with IIR), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−33.0 ± 15.3 Elo** over 1,036 games (+221 −319 =496): failed (LLR −2.96), so improving is off by default |
 
 ## Further reading
 

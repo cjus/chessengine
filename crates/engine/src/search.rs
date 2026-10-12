@@ -105,11 +105,11 @@
 //!
 //! A side whose static evaluation is better than two plies ago, the last time it was to
 //! move, is **improving**: its moves are working, and its evaluation will probably keep rising.
-//! That cuts both ways. Reverse futility pruning, which bets that a node far above beta stays
-//! there, can bet with a smaller margin: half a ply's worth smaller. Late move pruning, which
-//! bets that late quiet moves are useless, tries twice as many before giving up, since in an
-//! improving position they're more often good. (Stockfish uses the same idea in many more
-//! places.)
+//! Reverse futility pruning, which bets that a node far above beta stays there, can then bet
+//! with a smaller margin: half a ply's worth smaller. (Stockfish uses the same idea in many more
+//! places.) Late move pruning can use it too, trying more quiet moves before giving up in an
+//! improving position, where they're more often good; that is the parameter `lmp_improving`,
+//! 1 (no change) by default.
 //!
 //! **The margin never reaches zero.** The first version shrank the reverse futility margin by a
 //! whole ply, as Stockfish 11 (GPL-3.0) did. At depth 1 that left no margin at all: the node was
@@ -117,12 +117,17 @@
 //! about pieces under attack. That version made the search almost a third smaller and the
 //! engine weaker: −32 ± 15 Elo after 1,142 games at 8+0.08 (cjus/chessengine#60).
 //!
-//! **Off by default.** The second version, half a ply off the margin, also measured weaker:
-//! −18 ± 12 Elo after 1,691 games (cjus/chessengine#63). Both versions also change late move
-//! pruning, so the cost may lie there; that isn't tested yet. Both tests also ran with a bug,
-//! found afterwards and now fixed: the root didn't store its evaluation, so every node two plies
-//! down counted as improving. That affected only nodes near the root, mostly in early
-//! iterations, so it is probably not the whole story. The switch stays.
+//! **Late move pruning is left alone.** The second version, half a ply off the margin, also
+//! measured weaker: −18 ± 12 Elo after 1,691 games (cjus/chessengine#63). Both versions also
+//! doubled late move pruning's threshold when improving (`lmp_improving` = 2), so the cost may
+//! have been there; the third version changed reverse futility pruning only. Both tests also ran
+//! with a bug, found afterwards and fixed in #63: the root didn't store its evaluation, so every
+//! node two plies down counted as improving.
+//!
+//! **Off by default.** The third version measured worse still: −33 ± 15 Elo after 1,036 games
+//! (cjus/chessengine#65). So the cost is in reverse futility pruning: a smaller margin when
+//! improving loses here, and the doubled late move pruning of the second version seems to have
+//! made up some of it. The switch and both parameters stay, so the parts can be tested again.
 //!
 //! ## Tablebase probes (stage 18)
 //!
@@ -208,8 +213,10 @@ pub struct SearchParams {
     pub lmr_divisor: u32,
     /// Late move pruning applies up to this depth...
     pub lmp_max_depth: u32,
-    /// ...once `lmp_base + depth²` quiet moves have been tried.
+    /// ...once `lmp_base + depth²` quiet moves have been tried...
     pub lmp_base: u32,
+    /// ...times this when the side to move is improving (1: no change).
+    pub lmp_improving: u32,
     /// Reverse futility pruning applies up to this depth...
     pub rfp_max_depth: u32,
     /// ...when the static evaluation beats beta by this much per ply of depth...
@@ -255,6 +262,8 @@ impl Default for SearchParams {
             lmr_divisor: 225,
             lmp_max_depth: 3,
             lmp_base: 3,
+            // Doubling it when improving was part of both failed versions (#60, #63).
+            lmp_improving: 1,
             rfp_max_depth: 7,
             rfp_margin: 80,
             rfp_improving: 40,
@@ -350,7 +359,7 @@ impl Default for Techniques {
             // Off by default: it didn't measure stronger (see the module documentation).
             check_extension: false,
             iir: true,
-            // Off by default: neither version measured stronger (see the module documentation).
+            // Off by default: three versions measured weaker (see the module documentation).
             improving: false,
         }
     }
@@ -829,7 +838,7 @@ impl<'a> Searcher<'a> {
                 && depth <= p.lmp_max_depth
                 && best > -MATE + MAX_PLY as i32
                 && quiets_tried.len() as u32
-                    >= (p.lmp_base + depth * depth) * (1 + u32::from(improving))
+                    >= (p.lmp_base + depth * depth) * if improving { p.lmp_improving } else { 1 }
             {
                 self.note(Note::LateMovePruning(mv));
                 continue;
