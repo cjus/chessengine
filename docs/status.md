@@ -5,7 +5,7 @@ is blocked on whom, and how to carry on. **Claude: read this first in a new sess
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
 *Last updated 2026-10-12 (M5: the check extension, IIR and two versions of improving merged,
-with chapter 14.1; improving is off by default; the M3 Max is the test machine, #62).*
+with chapter 14.1; a third version of improving, #65, waits for its SPRT on the M3 Max).*
 
 ## Stages
 
@@ -38,8 +38,10 @@ with chapter 14.1; improving is off by default; the M3 Max is the test machine, 
 | M5: internal iterative reductions | #58 | 765380 | Merged: +19.2 ± 10.4, 2,337 games, [0, 5] passed (Mac) |
 | M5: improving heuristic | #60 | 765380 | Merged, off by default: −32.0 ± 15.1, 1,142 games, [0, 5] failed (Mac) |
 | M5: improving, half a ply off the margin; root evaluation fix | #63 | 765380 | Merged, off by default: −17.7 ± 11.5, 1,691 games, [0, 5] failed (M3 Max) |
+| M5: improving, the reverse futility margin only (on by default) | #65 | 643051 | Built; SPRT on the M3 Max to run |
 
-Every M5 branch so far is merged; no branch is waiting.
+One M5 branch is open: `claude/m5-improving-rfp` (#65), one commit on top of `main`, waiting
+for its SPRT on the M3 Max.
 
 ## Milestones
 
@@ -128,11 +130,11 @@ Run the full test suite on every commit you replay, not only at the tip: each be
 
 ### Next work, in PRD order
 
-1. Improving failed twice (#60: −32 Elo; #63, half a ply off the margin: −18), and is off by
-   default. Both versions also doubled late move pruning's threshold when improving, so that
-   may be the cost; neither part has been tested on its own. Both tests also ran with a bug
-   (the root didn't store its evaluation), fixed in #63; it changed the test tree by 31 nodes.
-   Carlos decides whether to test one part on its own or set improving aside.
+1. Improving failed twice (#60: −32 Elo; #63, half a ply off the margin: −18). Both versions
+   also doubled late move pruning's threshold when improving. #65 tests the margin on its own
+   (late move pruning unchanged), on the M3 Max: `scripts/mac-sprt.sh 65`. If it passes, record
+   the result in chapter 14.1 and the ledger and merge it. If it fails, switch improving off
+   again and set it aside (Carlos, 2026-10-12).
 2. Time losses: IIR's SPRT had two in 2,337 games at 8+0.08, one for each engine, so not caused by
    IIR (the referee allows 50 ms over the clock); improving's 1,142 games had none. Find the
    cause before the M5 robustness run, which must be clean over 10,000 games.

@@ -160,7 +160,7 @@ Commands:
   set seeorder on|off  Search captures that lose material (by SEE) after quiet moves
   set checkext on|off  Check extensions: search checking moves one ply deeper (default off)
   set iir on|off       Internal iterative reductions (no hash move: a ply shallower)
-  set improving on|off Adjust pruning when the side to move is improving (default off)
+  set improving on|off Adjust pruning when the side to move is improving
   set pst on|off       Piece-square tables (off: material only)
   set eval hand|tuned  Hand-set evaluation values (default) or stage 16's tuned ones
   set tapered on|off   Blend middlegame and endgame values by phase (off: middlegame only)
