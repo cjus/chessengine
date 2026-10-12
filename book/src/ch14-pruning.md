@@ -43,6 +43,8 @@ straight away. This is also called the **static null move**: it is null-move pru
 {{#include ../../crates/engine/src/search.rs:reverse_futility}}
 ```
 
+The `improving` part of the margin came later, in chapter 14.1.
+
 ## Razoring
 
 The mirror image: at depth 1 or 2, if the static evaluation is far *below* alpha (300

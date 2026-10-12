@@ -80,7 +80,8 @@ A side whose static evaluation is higher than two plies ago, the last time it wa
 That changes the bets two pruning techniques make.
 
 **Reverse futility pruning** (chapter 14) bets that a node far above beta stays there. If the
-side to move is improving, the bet is safer, so the margin shrinks by one ply's worth:
+side to move is improving, the bet is safer, so the margin shrinks by half a ply's worth
+(`rfp_improving`, 40 centipawns):
 
 ```rust,ignore
 {{#include ../../crates/engine/src/search.rs:reverse_futility}}
@@ -94,16 +95,15 @@ giving up:
 {{#include ../../crates/engine/src/search.rs:lmp}}
 ```
 
-The first change prunes more and the second less. Together they made the tree almost a third
-smaller on the six test positions (below), and the engine weaker: in an SPRT against the same
-engine without them, cb2026 lost about 32 Elo (see "What it's worth").
+The first change prunes more and the second less.
 
-**cb2026 ships with it off.** The likely cause, not yet tested, is the first change at depth 1.
-There the margin becomes zero, so the node is cut off whenever its static evaluation alone
-reaches beta, and the static evaluation knows nothing about pieces under attack. Stockfish
-(GPL-3.0) uses the improving idea in many more of its pruning and reduction decisions, so the
-idea can work; this version of it didn't. The switch stays, so a gentler version can be tried:
-one that changes only late move pruning, or never lets the margin reach zero.
+**The first version failed.** It shrank the margin by a whole ply, as Stockfish 11 (GPL-3.0)
+did. At depth 1 that left no margin at all: the node was cut off whenever its static evaluation
+alone reached beta, and cb2026's evaluation, unlike Stockfish's, knows nothing about pieces
+under attack. That version made the tree almost a third smaller on the six test positions and
+the engine weaker: in an SPRT against the same engine without it, cb2026 lost about 32 Elo (see
+"What it's worth"). The version above takes half a ply off instead, so at depth 1 a node still
+needs 40 centipawns to spare. It saves far fewer nodes (below).
 
 ## What it saves
 
@@ -111,13 +111,13 @@ The six positions of chapters 10 to 14 (the first six bench positions) at depth 
 
 | Setting | Nodes | vs defaults |
 | --- | ---: | ---: |
-| Defaults (IIR on; improving and the check extension off) | 148,075 | — |
-| `set iir off` | 193,361 | +31% |
-| `set improving on` | 101,865 | −31% |
-| `set checkext on` | 146,051 | −1% |
+| Defaults (IIR and improving on, check extension off) | 137,141 | — |
+| `set improving off` | 148,075 | +8% |
+| `set iir off` | 196,895 | +44% |
+| `set checkext on` | 161,149 | +18% |
 
-IIR takes almost a quarter off the tree, and turning improving on takes almost a third off what
-is left. Only IIR made the engine stronger: the games below decide that, not the node counts.
+IIR takes almost a third off the tree, and improving another 7%. The first version of improving
+took off 31%, and lost 32 Elo: the games below decide, not the node counts.
 
 ## Pitfalls
 
@@ -133,10 +133,11 @@ is left. Only IIR made the engine stronger: the games below decide that, not the
 - **Nodes aren't Elo.** IIR saves nodes by searching some nodes less deeply. Whether that costs
   more than it saves is for an SPRT to say, not a node count.
 - **A margin that reaches zero.** A margin scaled down by a flag can disappear altogether: at
-  depth 1, improving took reverse futility pruning's margin to zero. Make sure every margin
-  stays positive at the smallest depth it applies to.
-- **Nodes aren't Elo, again.** Improving made the tree almost a third smaller and lost 32 Elo. A
-  big node saving is a reason to run an SPRT, not a result.
+  depth 1, the first version of improving took reverse futility pruning's margin to zero. Make
+  sure every margin stays positive at the smallest depth it applies to; a unit test now checks
+  that `rfp_improving` stays below `rfp_margin`.
+- **Nodes aren't Elo, again.** The first version of improving made the tree almost a third
+  smaller and lost 32 Elo. A big node saving is a reason to run an SPRT, not a result.
 - **Two plies back may be a check.** In check, cb2026 computes no static evaluation (it is
   recorded as `-INFINITY`), so a side that was in check two plies ago always counts as
   improving. Some engines look four plies back in that case.
@@ -147,7 +148,8 @@ is left. Only IIR made the engine stronger: the games below decide that, not the
 | --- | --- |
 | Check extensions on vs off (stage 20), 8+0.08, cloud, SPRT [0, 5] | −8.3 ± 17.7 Elo over 840 games (+229 −249 =362), no verdict when the session's two-hour limit stopped it: no gain, so it is off by default |
 | IIR vs `main` without it, 8+0.08, test Mac, SPRT [0, 5] | **+19.2 ± 10.4 Elo** over 2,337 games (+705 −576 =1056): passed |
-| Improving vs `main` without it (with IIR), 8+0.08, test Mac, SPRT [0, 5] | **−32.0 ± 15.1 Elo** over 1,142 games (+267 −372 =503): failed (LLR −2.96), so it is off by default |
+| Improving, first version (a whole ply off the margin), vs `main` without it (with IIR), 8+0.08, test Mac (M1 Max), SPRT [0, 5] | **−32.0 ± 15.1 Elo** over 1,142 games (+267 −372 =503): failed (LLR −2.96) |
+| Improving, half a ply off the margin, vs `main` without it (with IIR), 8+0.08, test Mac (M3), SPRT [0, 5] | Pending: SPRT on the test Mac |
 
 ## Further reading
 

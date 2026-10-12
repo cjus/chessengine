@@ -142,7 +142,7 @@ pub(crate) const SWITCHES: &[Switch] = &[
     },
     Switch {
         name: "improving",
-        description: "Adjust pruning when improving (off by default)",
+        description: "Adjust pruning when improving",
         flag: |e| &mut e.techniques.improving,
     },
     Switch {

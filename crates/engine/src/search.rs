@@ -106,16 +106,16 @@
 //! A side whose static evaluation is better than two plies ago, the last time it was to
 //! move, is **improving**: its moves are working, and its evaluation will probably keep rising.
 //! That cuts both ways. Reverse futility pruning, which bets that a node far above beta stays
-//! there, can bet with a margin one ply smaller. Late move pruning, which bets that late quiet
-//! moves are useless, tries twice as many before giving up, since in an improving position
-//! they're more often good. (Stockfish uses the same idea in many more places.)
+//! there, can bet with a smaller margin: half a ply's worth smaller. Late move pruning, which
+//! bets that late quiet moves are useless, tries twice as many before giving up, since in an
+//! improving position they're more often good. (Stockfish uses the same idea in many more
+//! places.)
 //!
-//! **Off by default.** It made the search almost a third smaller and the engine weaker: an SPRT
-//! against the same engine without it (both with IIR) scored −32 ± 15 Elo after 1,142 games at
-//! 8+0.08. The likely cause, not yet tested, is reverse futility pruning at depth 1, where the
-//! margin becomes zero: the node is cut off whenever its static evaluation reaches beta, and the
-//! static evaluation knows nothing about pieces under attack. The switch stays, so a gentler
-//! version can be tried.
+//! **The margin never reaches zero.** The first version shrank the reverse futility margin by a
+//! whole ply, as Stockfish 11 (GPL-3.0) did. At depth 1 that left no margin at all: the node was
+//! cut off whenever its static evaluation reached beta, and cb2026's evaluation knows nothing
+//! about pieces under attack. That version made the search almost a third smaller and the
+//! engine weaker: −32 ± 15 Elo after 1,142 games at 8+0.08 (cjus/chessengine#60).
 //!
 //! ## Tablebase probes (stage 18)
 //!
@@ -205,8 +205,11 @@ pub struct SearchParams {
     pub lmp_base: u32,
     /// Reverse futility pruning applies up to this depth...
     pub rfp_max_depth: u32,
-    /// ...when the static evaluation beats beta by this much per ply of depth.
+    /// ...when the static evaluation beats beta by this much per ply of depth...
     pub rfp_margin: i32,
+    /// ...less this much when the side to move is improving. Keep it below `rfp_margin`, so
+    /// the margin never reaches zero.
+    pub rfp_improving: i32,
     /// Razoring applies up to this depth...
     pub razor_max_depth: u32,
     /// ...when the static evaluation is below alpha by this much per ply of depth.
@@ -247,6 +250,7 @@ impl Default for SearchParams {
             lmp_base: 3,
             rfp_max_depth: 7,
             rfp_margin: 80,
+            rfp_improving: 40,
             razor_max_depth: 2,
             razor_margin: 300,
             futility_max_depth: 6,
@@ -339,8 +343,7 @@ impl Default for Techniques {
             // Off by default: it didn't measure stronger (see the module documentation).
             check_extension: false,
             iir: true,
-            // Off by default: it measured weaker (see the module documentation).
-            improving: false,
+            improving: true,
         }
     }
 }
@@ -712,10 +715,12 @@ impl<'a> Searcher<'a> {
 
         // ANCHOR: reverse_futility
         // Reverse futility pruning: far enough above beta, assume a search would stay there.
+        // An improving side gets a smaller margin, but never none at all.
+        let rfp_margin = p.rfp_margin * depth as i32 - if improving { p.rfp_improving } else { 0 };
         if self.techniques.reverse_futility
             && selective
             && depth <= p.rfp_max_depth
-            && static_eval - p.rfp_margin * (depth - u32::from(improving)) as i32 >= beta
+            && static_eval - rfp_margin >= beta
         {
             self.note(Note::ReverseFutility);
             return static_eval;
@@ -1535,6 +1540,16 @@ mod tests {
         );
         assert_eq!(with.nodes, without.nodes);
         assert_eq!(with.score, without.score);
+    }
+
+    #[test]
+    fn the_reverse_futility_margin_never_reaches_zero() {
+        // When improving, the margin at depth 1 is `rfp_margin - rfp_improving`. With no margin
+        // at all, a static evaluation that only just reaches beta would cut the node off
+        // (cjus/chessengine#60 measured that: −32 Elo).
+        let p = SearchParams::default();
+        assert!(p.rfp_improving >= 0);
+        assert!(p.rfp_improving < p.rfp_margin);
     }
 
     #[test]
