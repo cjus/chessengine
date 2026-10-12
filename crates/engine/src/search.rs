@@ -117,6 +117,13 @@
 //! about pieces under attack. That version made the search almost a third smaller and the
 //! engine weaker: −32 ± 15 Elo after 1,142 games at 8+0.08 (cjus/chessengine#60).
 //!
+//! **Off by default.** The second version, half a ply off the margin, also measured weaker:
+//! −18 ± 12 Elo after 1,691 games (cjus/chessengine#63). Both versions also change late move
+//! pruning, so the cost may lie there; that isn't tested yet. Both tests also ran with a bug,
+//! found afterwards and now fixed: the root didn't store its evaluation, so every node two plies
+//! down counted as improving. That affected only nodes near the root, mostly in early
+//! iterations, so it is probably not the whole story. The switch stays.
+//!
 //! ## Tablebase probes (stage 18)
 //!
 //! With few pieces left, the search can ask the endgame tablebases for the exact result
@@ -343,7 +350,8 @@ impl Default for Techniques {
             // Off by default: it didn't measure stronger (see the module documentation).
             check_extension: false,
             iir: true,
-            improving: true,
+            // Off by default: neither version measured stronger (see the module documentation).
+            improving: false,
         }
     }
 }
@@ -1130,6 +1138,13 @@ impl<'a> Searcher<'a> {
         mut alpha: i32,
         beta: i32,
     ) -> RootResult {
+        // The root's static evaluation, for the improving heuristic two plies down. `negamax`
+        // stores its own, but the root is searched here.
+        self.evals[0] = if pos.in_check() {
+            -INFINITY
+        } else {
+            evaluate(pos, self.params)
+        };
         let mut result = RootResult {
             best_move: root_moves.first().copied(),
             score: -INFINITY,
@@ -1540,6 +1555,36 @@ mod tests {
         );
         assert_eq!(with.nodes, without.nodes);
         assert_eq!(with.score, without.score);
+    }
+
+    #[test]
+    fn the_root_stores_its_static_evaluation_for_improving() {
+        // Nodes two plies down compare their evaluation with the root's. cjus/chessengine#60
+        // and #63 ran without it, so every one of them counted as improving.
+        let pos = Position::from_fen(
+            "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+        )
+        .unwrap();
+        let params = EvalParams::default();
+        let stop = AtomicBool::new(false);
+        let tt = TranspositionTable::new(1);
+        let mut ordering = OrderingTables::default();
+        let mut searcher = Searcher::new(
+            &params,
+            SearchParams::default(),
+            &tt,
+            &mut ordering,
+            Techniques::default(),
+            StopConditions {
+                stop: &stop,
+                deadline: None,
+                max_nodes: None,
+            },
+            &[],
+        );
+        let mut moves: Vec<Move> = pos.legal_moves().iter().copied().collect();
+        searcher.search_depth(&pos, &mut moves, 2, None);
+        assert_eq!(searcher.evals[0], evaluate(&pos, &params));
     }
 
     #[test]

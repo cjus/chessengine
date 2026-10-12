@@ -4,8 +4,8 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-12 (M5: the check extension, IIR and improving merged, with chapter
-14.1; the M3 Max is the test machine, #62, and runs #63's SPRT).*
+*Last updated 2026-10-12 (M5: the check extension, IIR and two versions of improving merged,
+with chapter 14.1; improving is off by default; the M3 Max is the test machine, #62).*
 
 ## Stages
 
@@ -37,10 +37,9 @@ it in every PR that changes the picture (a stage merged, a result in, a new bloc
 | M5: check extensions | #57 | 1207153 | Merged, off by default: −8.3 ± 17.7 after 840 games (no gain) |
 | M5: internal iterative reductions | #58 | 765380 | Merged: +19.2 ± 10.4, 2,337 games, [0, 5] passed (Mac) |
 | M5: improving heuristic | #60 | 765380 | Merged, off by default: −32.0 ± 15.1, 1,142 games, [0, 5] failed (Mac) |
-| M5: improving, half a ply off the margin (on by default) | #63 | 667875 | SPRT running on the M3 Max (started 2026-10-12) |
+| M5: improving, half a ply off the margin; root evaluation fix | #63 | 765380 | Merged, off by default: −17.7 ± 11.5, 1,691 games, [0, 5] failed (M3 Max) |
 
-One M5 branch is open: `claude/m5-improving-gentle` (#63), one commit on top of `main`. Its
-SPRT is running on the M3 Max.
+Every M5 branch so far is merged; no branch is waiting.
 
 ## Milestones
 
@@ -129,9 +128,11 @@ Run the full test suite on every commit you replay, not only at the tip: each be
 
 ### Next work, in PRD order
 
-1. #63, the gentler improving heuristic: its SPRT is running on the M3 Max and posts to #63. If
-   it passes, record the result in chapter 14.1 and the ledger and merge it; if not, switch
-   improving back off as in #60 and try improving in late move pruning only.
+1. Improving failed twice (#60: −32 Elo; #63, half a ply off the margin: −18), and is off by
+   default. Both versions also doubled late move pruning's threshold when improving, so that
+   may be the cost; neither part has been tested on its own. Both tests also ran with a bug
+   (the root didn't store its evaluation), fixed in #63; it changed the test tree by 31 nodes.
+   Carlos decides whether to test one part on its own or set improving aside.
 2. Time losses: IIR's SPRT had two in 2,337 games at 8+0.08, one for each engine, so not caused by
    IIR (the referee allows 50 ms over the clock); improving's 1,142 games had none. Find the
    cause before the M5 robustness run, which must be clean over 10,000 games.

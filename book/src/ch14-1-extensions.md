@@ -105,19 +105,27 @@ the engine weaker: in an SPRT against the same engine without it, cb2026 lost ab
 "What it's worth"). The version above takes half a ply off instead, so at depth 1 a node still
 needs 40 centipawns to spare. It saves far fewer nodes (below).
 
+**The second version failed too**, by about 18 Elo, so **cb2026 ships with improving off**.
+Both versions also change late move pruning, so the cost may lie there; neither part has been
+tested on its own yet. Both tests also ran with a bug, found afterwards: the root is searched by its own
+function, which didn't store its static evaluation, so every node two plies down compared its
+evaluation with `-INFINITY` and counted as improving. Fixing it changed the six test positions'
+tree by 31 nodes, so it is probably not why improving lost.
+
 ## What it saves
 
 The six positions of chapters 10 to 14 (the first six bench positions) at depth 8:
 
 | Setting | Nodes | vs defaults |
 | --- | ---: | ---: |
-| Defaults (IIR and improving on, check extension off) | 137,141 | — |
-| `set improving off` | 148,075 | +8% |
-| `set iir off` | 196,895 | +44% |
-| `set checkext on` | 161,149 | +18% |
+| Defaults (IIR on; improving and the check extension off) | 148,075 | — |
+| `set iir off` | 193,361 | +31% |
+| `set improving on` | 137,110 | −7% |
+| `set checkext on` | 146,051 | −1% |
 
-IIR takes almost a third off the tree, and improving another 7%. The first version of improving
-took off 31%, and lost 32 Elo: the games below decide, not the node counts.
+IIR takes almost a quarter off the tree, and improving another 7%; its first version took off
+31%. Both versions of improving made the tree smaller and the engine weaker: the games below
+decide, not the node counts.
 
 ## Pitfalls
 
@@ -138,6 +146,10 @@ took off 31%, and lost 32 Elo: the games below decide, not the node counts.
   that `rfp_improving` stays below `rfp_margin`.
 - **Nodes aren't Elo, again.** The first version of improving made the tree almost a third
   smaller and lost 32 Elo. A big node saving is a reason to run an SPRT, not a result.
+- **Every ply stores its evaluation, the root included.** A heuristic that looks back two plies
+  reads what earlier nodes stored. A node searched by a different function, like the root here,
+  is easy to miss, and nothing fails: the comparison just gives the wrong answer. A unit test
+  now checks the root's entry.
 - **Two plies back may be a check.** In check, cb2026 computes no static evaluation (it is
   recorded as `-INFINITY`), so a side that was in check two plies ago always counts as
   improving. Some engines look four plies back in that case.
@@ -149,7 +161,7 @@ took off 31%, and lost 32 Elo: the games below decide, not the node counts.
 | Check extensions on vs off (stage 20), 8+0.08, cloud, SPRT [0, 5] | −8.3 ± 17.7 Elo over 840 games (+229 −249 =362), no verdict when the session's two-hour limit stopped it: no gain, so it is off by default |
 | IIR vs `main` without it, 8+0.08, test Mac, SPRT [0, 5] | **+19.2 ± 10.4 Elo** over 2,337 games (+705 −576 =1056): passed |
 | Improving, first version (a whole ply off the margin), vs `main` without it (with IIR), 8+0.08, test Mac (M1 Max), SPRT [0, 5] | **−32.0 ± 15.1 Elo** over 1,142 games (+267 −372 =503): failed (LLR −2.96) |
-| Improving, half a ply off the margin, vs `main` without it (with IIR), 8+0.08, test Mac (M3), SPRT [0, 5] | Pending: SPRT on the test Mac |
+| Improving, half a ply off the margin, vs `main` without it (with IIR), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−17.7 ± 11.5 Elo** over 1,691 games (+362 −448 =881): failed (LLR −2.97), so improving is off by default |
 
 ## Further reading
 
