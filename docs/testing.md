@@ -92,12 +92,14 @@ scale (maximum likelihood with the reference ratings held fixed, see
 milestone gate (see `docs/PRD.md`, "Testing and strength measurement").
 
 ```sh
-scripts/mac-smp.sh <PR number> [threads] [time control]
+scripts/mac-smp.sh <PR number> [threads] [time control] [elo0 elo1]
 ```
 
 From stage 17: plays the PR's build with N threads (default 4) against the same build with
 one thread (`match --first-option Threads=N`), one game at a time, and posts the result. Run it
-on its own: it needs N + 1 free performance cores.
+on its own: it needs N + 1 free performance cores. Its bounds default to [0, 25], not [0, 5]:
+the question is whether more threads clearly gain, and at one game at a time [0, 5] would take
+3–6 hours to confirm a gain of +50 to +100 Elo.
 
 ## Bench
 

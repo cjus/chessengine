@@ -86,8 +86,13 @@ needs a machine with more cores than the cloud sessions have, so it runs on the 
 
 | Test | Result |
 | --- | --- |
-| Stage 17 vs stage 16, 1 thread each, 8+0.08 | Non-regression only: with one thread the search is unchanged except for the table's packing |
-| 4 threads vs 1 thread (test Mac) | SMP_RESULT |
+| Stage 17 vs stage 16, 1 thread each, 8+0.08, test Mac | **+0.1 ± 4.1 Elo** over 15,188 games (+4196 −4192 =6800): no regression, SPRT [−5, 0] passed |
+| 4 threads vs 1 thread, 8+0.08, test Mac | Pending (cjus/chessengine#47) |
+
+With one thread the search is unchanged except for the table's packing, so about 0 Elo is the
+expected result. Confirming it took 15,188 games, about 15 hours on the test Mac: the test has
+to tell 0 from −5 Elo, and when the truth sits right at one of the two hypotheses, the SPRT's
+evidence grows very slowly. Changes worth +100 Elo or more are decided in a few hundred games.
 
 ## Further reading
 
