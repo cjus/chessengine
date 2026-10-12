@@ -106,6 +106,17 @@ impl Move {
     }
     // ANCHOR_END: move
 
+    /// The move's 16-bit encoding, for compact storage (the transposition table).
+    pub const fn to_bits(self) -> u16 {
+        self.0
+    }
+
+    /// The move with encoding `bits`, as made by [`Move::to_bits`]. Any value decodes to some
+    /// move, so callers must check it is legal before playing it.
+    pub const fn from_bits(bits: u16) -> Move {
+        Move(bits)
+    }
+
     /// The square the moving piece starts on (the king's square for castling).
     pub const fn from(self) -> Square {
         match Square::from_index((self.0 & 63) as usize) {

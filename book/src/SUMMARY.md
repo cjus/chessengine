@@ -30,7 +30,7 @@
 
 # Part IV: A complete engine
 
-- [Lazy SMP]()
+- [Lazy SMP](ch17-smp.md)
 - [Tablebases, opening books and Chess960]()
 - [Strength levels]()
 - [XBoard and playing on Lichess]()

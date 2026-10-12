@@ -77,12 +77,14 @@ pub mod tuned;
 pub mod tuning;
 
 use std::fmt;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::thread;
 use std::time::{Duration, Instant};
 
 use cb2026_chess::{Move, Position};
 
 use eval::EvalParams;
+use ordering::OrderingTables;
 use search::{
     DEFAULT_DEPTH, INFINITY, MATE, MAX_PLY, RootResult, SearchParams, Searcher, StopConditions,
     Techniques, to_score,
@@ -188,8 +190,11 @@ pub struct SearchResult {
     pub ponder_move: Option<Move>,
 }
 
+/// The most search threads the engine accepts (the UCI `Threads` option's maximum).
+pub const MAX_THREADS: usize = 256;
+
 /// The engine: its settings and everything it remembers between searches.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct Engine {
     /// The evaluation's numbers.
     pub params: EvalParams,
@@ -202,7 +207,23 @@ pub struct Engine {
     /// The transposition table, kept from one search to the next.
     pub tt: TranspositionTable,
     /// Killer moves, countermoves and history, for ordering quiet moves.
-    pub ordering: ordering::OrderingTables,
+    pub ordering: OrderingTables,
+    /// Search threads (Lazy SMP, stage 17): 1 means a single-threaded search.
+    pub threads: usize,
+}
+
+impl Default for Engine {
+    fn default() -> Engine {
+        Engine {
+            params: EvalParams::default(),
+            techniques: Techniques::default(),
+            time: TimeParams::default(),
+            search_params: SearchParams::default(),
+            tt: TranspositionTable::default(),
+            ordering: OrderingTables::default(),
+            threads: 1,
+        }
+    }
 }
 
 impl Engine {
@@ -278,67 +299,175 @@ impl Engine {
         }
         let max_depth = max_depth.clamp(1, MAX_PLY);
 
-        let mut searcher = Searcher::new(
-            &self.params,
-            self.search_params,
-            &mut self.tt,
-            &mut self.ordering,
-            self.techniques,
-            StopConditions {
-                stop,
-                deadline: budget.hard.map(|hard| start + hard),
-                max_nodes: limits.nodes,
-            },
-            history,
-        );
-        let mut best: Option<RootResult> = None;
-        for depth in 1..=max_depth {
-            let previous = best.as_ref().map(|b| b.score);
-            let result = searcher.search_depth(position, &mut root_moves, depth, previous);
-            // A stopped iteration still counts if it finished at least one move: the first
-            // move searched is the previous best, so its result is at least as well-founded.
-            let usable = result.complete || result.score > -INFINITY;
-            if usable {
-                best = Some(result.clone());
-                on_info(&SearchInfo {
-                    depth,
-                    seldepth: result.seldepth,
-                    score: to_score(result.score),
-                    nodes: result.nodes,
-                    time: start.elapsed(),
-                    pv: result.pv.clone(),
-                    hashfull: searcher.hashfull(),
+        let deadline = budget.hard.map(|hard| start + hard);
+        // Lazy SMP (stage 17): helper threads search the same position, sharing only the
+        // transposition table. They stop when the main thread is done.
+        let helpers_stop = AtomicBool::new(false);
+        let helper_nodes = AtomicU64::new(0);
+        let Engine {
+            params,
+            techniques,
+            search_params,
+            tt,
+            ordering,
+            threads,
+            ..
+        } = self;
+        let (params, techniques, search_params, tt) = (&*params, *techniques, *search_params, &*tt);
+        thread::scope(|scope| {
+            for helper in 1..*threads {
+                let root_moves = root_moves.clone();
+                let (helpers_stop, helper_nodes) = (&helpers_stop, &helper_nodes);
+                scope.spawn(move || {
+                    let mut ordering = OrderingTables::default();
+                    let mut searcher = Searcher::new(
+                        params,
+                        search_params,
+                        tt,
+                        &mut ordering,
+                        techniques,
+                        StopConditions {
+                            stop: helpers_stop,
+                            deadline,
+                            max_nodes: None,
+                        },
+                        history,
+                    );
+                    searcher.count_nodes_in(helper_nodes);
+                    run_helper(&mut searcher, position, root_moves, max_depth, helper);
                 });
             }
-            if !result.complete {
-                break;
-            }
-            // Next depth: try this depth's best move first.
-            if let Some(best_move) = result.best_move {
-                root_moves.retain(|&mv| mv != best_move);
-                root_moves.insert(0, best_move);
-            }
-            // A mate found at this depth can't be beaten by searching deeper.
-            if result.score.abs() >= MATE - depth as i32 {
-                break;
-            }
-            // Starting another depth now would probably not finish in time.
-            if budget.soft.is_some_and(|soft| start.elapsed() >= soft) {
-                break;
-            }
-            if searcher.aborted() {
-                break;
-            }
-        }
-
-        let best = best.unwrap_or_default();
-        SearchResult {
-            best_move: best.best_move.or(root_moves.first().copied()),
-            ponder_move: best.pv.get(1).copied(),
-        }
+            let result = main_search(
+                Searcher::new(
+                    params,
+                    search_params,
+                    tt,
+                    ordering,
+                    techniques,
+                    StopConditions {
+                        stop,
+                        deadline,
+                        max_nodes: limits.nodes,
+                    },
+                    history,
+                ),
+                MainSearch {
+                    position,
+                    root_moves,
+                    max_depth,
+                    start,
+                    soft: budget.soft,
+                    helper_nodes: &helper_nodes,
+                },
+                on_info,
+            );
+            helpers_stop.store(true, Ordering::Relaxed);
+            result
+        })
     }
     // ANCHOR_END: search
 }
+
+/// What the main search thread needs besides its [`Searcher`].
+struct MainSearch<'a> {
+    position: &'a Position,
+    root_moves: Vec<Move>,
+    max_depth: u32,
+    start: Instant,
+    soft: Option<Duration>,
+    helper_nodes: &'a AtomicU64,
+}
+
+// ANCHOR: main_search
+/// The main thread's iterative deepening: it decides when to stop and which move to play,
+/// and reports progress.
+fn main_search(
+    mut searcher: Searcher<'_>,
+    job: MainSearch<'_>,
+    on_info: &mut dyn FnMut(&SearchInfo),
+) -> SearchResult {
+    let MainSearch {
+        position,
+        mut root_moves,
+        max_depth,
+        start,
+        soft,
+        helper_nodes,
+    } = job;
+    let mut best: Option<RootResult> = None;
+    for depth in 1..=max_depth {
+        let previous = best.as_ref().map(|b| b.score);
+        let result = searcher.search_depth(position, &mut root_moves, depth, previous);
+        // A stopped iteration still counts if it finished at least one move: the first
+        // move searched is the previous best, so its result is at least as well-founded.
+        let usable = result.complete || result.score > -INFINITY;
+        if usable {
+            best = Some(result.clone());
+            on_info(&SearchInfo {
+                depth,
+                seldepth: result.seldepth,
+                score: to_score(result.score),
+                nodes: result.nodes + helper_nodes.load(Ordering::Relaxed),
+                time: start.elapsed(),
+                pv: result.pv.clone(),
+                hashfull: searcher.hashfull(),
+            });
+        }
+        if !result.complete {
+            break;
+        }
+        // Next depth: try this depth's best move first.
+        if let Some(best_move) = result.best_move {
+            root_moves.retain(|&mv| mv != best_move);
+            root_moves.insert(0, best_move);
+        }
+        // A mate found at this depth can't be beaten by searching deeper.
+        if result.score.abs() >= MATE - depth as i32 {
+            break;
+        }
+        // Starting another depth now would probably not finish in time.
+        if soft.is_some_and(|soft| start.elapsed() >= soft) {
+            break;
+        }
+        if searcher.aborted() {
+            break;
+        }
+    }
+
+    let best = best.unwrap_or_default();
+    SearchResult {
+        best_move: best.best_move.or(root_moves.first().copied()),
+        ponder_move: best.pv.get(1).copied(),
+    }
+}
+// ANCHOR_END: main_search
+
+// ANCHOR: helper
+/// A helper thread's search: iterative deepening on the same position until told to stop.
+/// Its results are only used through the transposition table. Odd-numbered helpers start
+/// one ply deeper, so the threads are less often searching the same depth at the same time.
+fn run_helper(
+    searcher: &mut Searcher<'_>,
+    position: &Position,
+    mut root_moves: Vec<Move>,
+    max_depth: u32,
+    helper: usize,
+) {
+    let mut previous = None;
+    let first = 1 + (helper % 2) as u32;
+    for depth in first..=max_depth {
+        let result = searcher.search_depth(position, &mut root_moves, depth, previous);
+        if !result.complete {
+            break;
+        }
+        previous = Some(result.score);
+        if let Some(best_move) = result.best_move {
+            root_moves.retain(|&mv| mv != best_move);
+            root_moves.insert(0, best_move);
+        }
+    }
+}
+// ANCHOR_END: helper
 
 #[cfg(test)]
 mod tests {
@@ -414,6 +543,40 @@ mod tests {
         for _ in 0..2 {
             assert_eq!(search_with(&mut engine, fen, 6).score, Score::Mate(2));
         }
+    }
+
+    #[test]
+    fn lazy_smp_finds_the_same_mate_and_counts_every_thread() {
+        let mut engine = Engine::new();
+        engine.threads = 4;
+        let pos = Position::from_fen("2r3k1/5ppp/8/8/8/8/3R1PPP/3R2K1 w - - 0 1").unwrap();
+        let info = search_with(&mut engine, &pos.to_fen(), 6);
+        assert_eq!(info.score, Score::Mate(2));
+        // A deeper search: the helpers' nodes show up in the total.
+        let mut single = Engine::new();
+        let one = search_with(&mut single, KIWIPETE, 8);
+        let four = search_with(&mut engine, KIWIPETE, 8);
+        assert!(!one.pv.is_empty() && !four.pv.is_empty());
+        assert!(four.nodes > 0);
+    }
+
+    #[test]
+    fn helpers_stop_when_the_main_thread_does() {
+        let mut engine = Engine::new();
+        engine.threads = 3;
+        let limits = Limits {
+            movetime: Some(Duration::from_millis(150)),
+            ..Limits::default()
+        };
+        let stop = AtomicBool::new(false);
+        let start = Instant::now();
+        let result = engine.search(&Position::startpos(), &[], &limits, &stop, &mut |_| {});
+        assert!(result.best_move.is_some());
+        assert!(
+            start.elapsed() < Duration::from_millis(500),
+            "{:?}",
+            start.elapsed()
+        );
     }
 
     #[test]

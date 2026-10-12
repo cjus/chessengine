@@ -39,6 +39,7 @@
 //! along.
 //!
 //! Each slot keeps the full 64-bit key, so two positions that share a slot are told apart.
+//! From stage 17 the slots are atomics shared by all search threads (see `Slot`).
 //! Two different positions with the *same* key are possible in theory, but with 64-bit keys
 //! the chance is negligible; the stored move is still checked for legality before use.
 //!
@@ -52,6 +53,8 @@
 //!
 //! See the Chess Programming Wiki, [Transposition Table](https://www.chessprogramming.org/Transposition_Table)
 //! and [Replacement Strategies](https://www.chessprogramming.org/Replacement_Strategies).
+
+use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 
 use cb2026_chess::Move;
 
@@ -92,11 +95,44 @@ pub struct Entry {
 }
 // ANCHOR_END: entry
 
-/// The transposition table.
-#[derive(Clone)]
+// ANCHOR: slot
+/// One slot of the table: an entry packed into two 64-bit words that threads can read and
+/// write without locks.
+///
+/// With several search threads (Lazy SMP, stage 17), two threads can write the same slot at
+/// once, and a reader can see half of one write and half of the other: a "torn" entry. The
+/// trick, from Robert Hyatt and Timothy Mann's "A lock-less transposition table
+/// implementation for parallel search chess engines" (ICGA Journal, 2002): store the key
+/// XORed with the data. A reader XORs the two words it loaded; it only gets the right key back
+/// if both words come from the same write, so a torn entry simply looks like a miss.
+#[derive(Debug, Default)]
+struct Slot {
+    key_xor_data: AtomicU64,
+    data: AtomicU64,
+}
+// ANCHOR_END: slot
+
+/// The transposition table. It is shared between search threads by reference: all its
+/// methods take `&self`, and every slot is made of atomics.
 pub struct TranspositionTable {
-    slots: Vec<Option<Entry>>,
-    generation: u8,
+    slots: Vec<Slot>,
+    generation: AtomicU8,
+}
+
+impl Clone for TranspositionTable {
+    fn clone(&self) -> TranspositionTable {
+        TranspositionTable {
+            slots: self
+                .slots
+                .iter()
+                .map(|slot| Slot {
+                    key_xor_data: AtomicU64::new(slot.key_xor_data.load(Ordering::Relaxed)),
+                    data: AtomicU64::new(slot.data.load(Ordering::Relaxed)),
+                })
+                .collect(),
+            generation: AtomicU8::new(self.generation.load(Ordering::Relaxed)),
+        }
+    }
 }
 
 impl std::fmt::Debug for TranspositionTable {
@@ -104,7 +140,7 @@ impl std::fmt::Debug for TranspositionTable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TranspositionTable")
             .field("slots", &self.slots.len())
-            .field("generation", &self.generation)
+            .field("generation", &self.generation.load(Ordering::Relaxed))
             .finish()
     }
 }
@@ -115,20 +151,58 @@ impl Default for TranspositionTable {
     }
 }
 
+// ANCHOR: pack
+/// Packs everything but the key into one word:
+/// move (16 bits) | score (16) | depth (8) | bound (2) | generation (8).
+/// A bound of 0 marks an empty slot.
+fn pack(best_move: Option<Move>, score: i32, depth: u8, bound: Bound, generation: u8) -> u64 {
+    let bound_bits: u64 = match bound {
+        Bound::Exact => 1,
+        Bound::Lower => 2,
+        Bound::Upper => 3,
+    };
+    u64::from(best_move.map_or(0, Move::to_bits))
+        | u64::from(score as i16 as u16) << 16
+        | u64::from(depth) << 32
+        | bound_bits << 40
+        | u64::from(generation) << 42
+}
+
+/// Unpacks a word made by [`pack`] (`None` for an empty slot).
+fn unpack(key: u64, data: u64) -> Option<Entry> {
+    let bound = match (data >> 40) & 3 {
+        1 => Bound::Exact,
+        2 => Bound::Lower,
+        3 => Bound::Upper,
+        _ => return None,
+    };
+    let move_bits = data as u16;
+    Some(Entry {
+        key,
+        // Move 0 (a1 to a1) is never legal, so it stands for "no move".
+        best_move: (move_bits != 0).then(|| Move::from_bits(move_bits)),
+        score: i32::from((data >> 16) as u16 as i16),
+        depth: (data >> 32) as u8,
+        bound,
+        generation: (data >> 42) as u8,
+    })
+}
+// ANCHOR_END: pack
+
 impl TranspositionTable {
     /// A table using about `megabytes` of memory (at least one slot).
     pub fn new(megabytes: usize) -> TranspositionTable {
-        let slot_size = std::mem::size_of::<Option<Entry>>();
+        let slot_size = std::mem::size_of::<Slot>();
         let count = (megabytes * 1024 * 1024 / slot_size).max(1);
         TranspositionTable {
-            slots: vec![None; count],
-            generation: 0,
+            slots: (0..count).map(|_| Slot::default()).collect(),
+            generation: AtomicU8::new(0),
         }
     }
 
     /// The table's size in megabytes, rounded to the nearest.
     pub fn megabytes(&self) -> usize {
-        let bytes = self.slots.len() * std::mem::size_of::<Option<Entry>>();
+        let bytes = self.slots.len() * std::mem::size_of::<Slot>();
         (bytes + 512 * 1024) / (1024 * 1024)
     }
 
@@ -143,14 +217,17 @@ impl TranspositionTable {
     }
 
     /// Empties the table (a new game, or the UCI `Clear Hash` button).
-    pub fn clear(&mut self) {
-        self.slots.fill(None);
-        self.generation = 0;
+    pub fn clear(&self) {
+        for slot in &self.slots {
+            slot.key_xor_data.store(0, Ordering::Relaxed);
+            slot.data.store(0, Ordering::Relaxed);
+        }
+        self.generation.store(0, Ordering::Relaxed);
     }
 
     /// Marks the start of a new search, so older entries are replaced first.
-    pub fn new_search(&mut self) {
-        self.generation = self.generation.wrapping_add(1);
+    pub fn new_search(&self) {
+        self.generation.fetch_add(1, Ordering::Relaxed);
     }
 
     /// The slot for `key`.
@@ -164,42 +241,39 @@ impl TranspositionTable {
         ((key as u128 * self.slots.len() as u128) >> 64) as usize
     }
 
-    /// The entry stored for `key`, if there is one.
+    /// The entry stored for `key`, if there is one (and it wasn't torn by a concurrent write).
     pub fn probe(&self, key: u64) -> Option<Entry> {
-        self.slots[self.index(key)].filter(|entry| entry.key == key)
+        let slot = &self.slots[self.index(key)];
+        let data = slot.data.load(Ordering::Relaxed);
+        let key_xor_data = slot.key_xor_data.load(Ordering::Relaxed);
+        if key_xor_data ^ data != key {
+            return None;
+        }
+        unpack(key, data)
     }
 
     // ANCHOR: store
     /// Stores a search result for the position with `key`.
-    pub fn store(
-        &mut self,
-        key: u64,
-        best_move: Option<Move>,
-        score: i32,
-        depth: u32,
-        bound: Bound,
-    ) {
-        let index = self.index(key);
+    pub fn store(&self, key: u64, best_move: Option<Move>, score: i32, depth: u32, bound: Bound) {
+        let slot = &self.slots[self.index(key)];
+        let generation = self.generation.load(Ordering::Relaxed);
         let depth = depth.min(u8::MAX as u32) as u8;
-        let replace = match self.slots[index] {
+        let old_data = slot.data.load(Ordering::Relaxed);
+        let old_key = slot.key_xor_data.load(Ordering::Relaxed) ^ old_data;
+        let old = unpack(old_key, old_data);
+        let replace = match old {
             None => true,
-            Some(old) => old.key == key || old.generation != self.generation || depth >= old.depth,
+            Some(old) => old.key == key || old.generation != generation || depth >= old.depth,
         };
         if replace {
             // A fail-low result has no best move; keep the one already known for this position.
             let best_move = best_move.or_else(|| {
-                self.slots[index]
-                    .filter(|old| old.key == key)
+                old.filter(|old| old.key == key)
                     .and_then(|old| old.best_move)
             });
-            self.slots[index] = Some(Entry {
-                key,
-                best_move,
-                score,
-                depth,
-                bound,
-                generation: self.generation,
-            });
+            let data = pack(best_move, score, depth, bound, generation);
+            slot.data.store(data, Ordering::Relaxed);
+            slot.key_xor_data.store(key ^ data, Ordering::Relaxed);
         }
     }
     // ANCHOR_END: store
@@ -207,10 +281,14 @@ impl TranspositionTable {
     /// How full the table is, in permille, estimated from the first thousand slots (UCI
     /// `info hashfull`). Only entries from the current search count.
     pub fn hashfull(&self) -> u32 {
+        let generation = self.generation.load(Ordering::Relaxed);
         let sample = self.slots.len().min(1000);
         let used = self.slots[..sample]
             .iter()
-            .filter(|slot| slot.is_some_and(|e| e.generation == self.generation))
+            .filter(|slot| {
+                unpack(0, slot.data.load(Ordering::Relaxed))
+                    .is_some_and(|e| e.generation == generation)
+            })
             .count();
         (used * 1000 / sample.max(1)) as u32
     }
@@ -246,7 +324,7 @@ mod tests {
 
     #[test]
     fn stores_and_finds_entries() {
-        let mut tt = TranspositionTable::new(1);
+        let tt = TranspositionTable::new(1);
         let pos = Position::startpos();
         let mv = pos.parse_uci_move("e2e4").unwrap();
         assert_eq!(tt.probe(pos.hash()), None);
@@ -266,7 +344,7 @@ mod tests {
     #[test]
     fn keeps_deeper_results_from_the_same_search() {
         // One slot, so every key collides.
-        let mut tt = TranspositionTable::new(0);
+        let tt = TranspositionTable::new(0);
         assert_eq!(tt.len(), 1);
         tt.store(1, None, 10, 8, Bound::Exact);
         tt.store(2, None, 20, 3, Bound::Exact);
@@ -279,7 +357,7 @@ mod tests {
 
     #[test]
     fn a_fail_low_keeps_the_known_best_move() {
-        let mut tt = TranspositionTable::new(1);
+        let tt = TranspositionTable::new(1);
         let pos = Position::startpos();
         let mv = pos.parse_uci_move("d2d4").unwrap();
         tt.store(pos.hash(), Some(mv), 20, 4, Bound::Exact);
@@ -313,7 +391,7 @@ mod tests {
 
     #[test]
     fn hashfull_counts_this_search_only() {
-        let mut tt = TranspositionTable::new(0);
+        let tt = TranspositionTable::new(0);
         assert_eq!(tt.hashfull(), 0);
         tt.store(5, None, 0, 1, Bound::Exact);
         assert_eq!(tt.hashfull(), 1000);

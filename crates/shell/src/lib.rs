@@ -34,6 +34,7 @@
 //! | `set alphabeta on\|off` | Switch alpha-beta off to compare with plain minimax |
 //! | `set quiescence on\|off`, `set mvvlva on\|off`, `set tt on\|off` | Switch the quiescence search, MVV-LVA move ordering or the transposition table off |
 //! | `set hash <MB>` | Transposition table size |
+//! | `set threads <N>` | Search threads (Lazy SMP) |
 //! | `set killers\|countermoves\|history on\|off` | Switch a quiet-move ordering heuristic off |
 //! | `set pvs on\|off`, `set aspiration on\|off` | Principal variation search; aspiration windows |
 //! | `set nullmove on\|off` | Null-move pruning |
@@ -77,7 +78,7 @@ use cb2026_chess::{Bitboard, Color, Move, Piece, PieceType, Position, Square};
 use std::time::Duration;
 
 use cb2026_engine::tt::MAX_HASH_MB;
-use cb2026_engine::{Engine, Limits, NAME, Score, SearchInfo, bench, eval, search};
+use cb2026_engine::{Engine, Limits, MAX_THREADS, NAME, Score, SearchInfo, bench, eval, search};
 pub use render::Style;
 
 /// The help text for the `help` command.
@@ -114,6 +115,7 @@ Commands:
   set mvvlva on|off    Search captures first, biggest victim first
   set tt on|off        The transposition table: reuse results for positions seen before
   set hash <MB>        Transposition table size in megabytes (default 16)
+  set threads <N>      Search threads (Lazy SMP, default 1)
   set killers|countermoves|history on|off
                        Quiet-move ordering heuristics
   set pvs on|off       Principal variation search (null windows after the first move)
@@ -784,6 +786,10 @@ impl Shell {
             (Some("tt"), value) if on_off(value).is_some() => {
                 self.engine.techniques.tt = on_off(value).unwrap_or(true);
             }
+            (Some("threads"), Some(n)) => match n.parse::<usize>() {
+                Ok(n) if (1..=MAX_THREADS).contains(&n) => self.engine.threads = n,
+                _ => return Response::text(format!("Usage: set threads <1-{MAX_THREADS}>")),
+            },
             (Some("hash"), Some(mb)) => match mb.parse::<usize>() {
                 Ok(mb) if (1..=MAX_HASH_MB).contains(&mb) => self.engine.set_hash_size(mb),
                 _ => return Response::text(format!("Usage: set hash <1-{MAX_HASH_MB}>")),
@@ -792,7 +798,7 @@ impl Shell {
             _ => return Response::text(SET_USAGE),
         }
         Response::text(format!(
-            "Sliding attacks: {}\nEngine moves: {}\nAlpha-beta pruning: {}\nQuiescence search: {}\nMVV-LVA ordering: {}\nTransposition table: {} ({} MB)\nPiece-square tables: {}\nTapered evaluation: {}\nMobility, pawns, pieces, king safety, tempo: {}, {}, {}, {}, {}\nKillers, countermoves, history: {}, {}, {}\nPVS, aspiration windows: {}, {}\nNull-move pruning: {}\nLate move reductions, pruning: {}, {}\nReverse futility, razoring, futility: {}, {}, {}\nSEE pruning, delta pruning, SEE ordering: {}, {}, {}",
+            "Sliding attacks: {}\nEngine moves: {}\nAlpha-beta pruning: {}\nQuiescence search: {}\nMVV-LVA ordering: {}\nTransposition table: {} ({} MB)\nThreads: {}\nPiece-square tables: {}\nTapered evaluation: {}\nMobility, pawns, pieces, king safety, tempo: {}, {}, {}, {}, {}\nKillers, countermoves, history: {}, {}, {}\nPVS, aspiration windows: {}, {}\nNull-move pruning: {}\nLate move reductions, pruning: {}, {}\nReverse futility, razoring, futility: {}, {}, {}\nSEE pruning, delta pruning, SEE ordering: {}, {}, {}",
             match slider_method() {
                 SliderMethod::Rays => "walking rays",
                 SliderMethod::Magics => "magic bitboards",
@@ -810,6 +816,7 @@ impl Shell {
             on_off_text(self.engine.techniques.mvv_lva),
             on_off_text(self.engine.techniques.tt),
             self.engine.tt.megabytes(),
+            self.engine.threads,
             on_off_text(self.engine.params.use_pst),
             on_off_text(self.engine.params.tapered),
             on_off_text(self.engine.params.terms.use_mobility),
@@ -890,7 +897,7 @@ fn parse_move(pos: &Position, text: &str) -> Option<Move> {
 }
 
 /// Usage for the `set` command.
-const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set eval hand|tuned | set alphabeta|quiescence|mvvlva|tt|killers|countermoves|history|pvs|aspiration|nullmove|lmr|lmp|rfp|razoring|futility|seeprune|delta|seeorder|pst|tapered|mobility|pawns|pieces|kingsafety|tempo on|off";
+const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set threads <N> | set eval hand|tuned | set alphabeta|quiescence|mvvlva|tt|killers|countermoves|history|pvs|aspiration|nullmove|lmr|lmp|rfp|razoring|futility|seeprune|delta|seeorder|pst|tapered|mobility|pawns|pieces|kingsafety|tempo on|off";
 
 /// How long the engine thinks per move by default in the shell.
 const DEFAULT_MOVETIME_MS: u64 = 1000;
@@ -1207,6 +1214,8 @@ mod tests {
                 .contains("Transposition table: off")
         );
         assert!(shell.execute("set hash 0").output.starts_with("Usage"));
+        assert!(shell.execute("set threads 4").output.contains("Threads: 4"));
+        assert!(shell.execute("set threads 0").output.starts_with("Usage"));
         assert!(shell.execute("set depth 0").output.starts_with("Usage"));
         assert!(shell.execute("set colour blue").output.starts_with("Usage"));
     }
