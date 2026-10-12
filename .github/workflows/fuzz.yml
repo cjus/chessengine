@@ -30,7 +30,11 @@ jobs:
       - name: Fuzz ${{ matrix.target }} for 5 minutes
         working-directory: fuzz
         # `+nightly`: the repository pins stable Rust (rust-toolchain.toml); fuzzing needs nightly.
-        run: cargo +nightly fuzz run ${{ matrix.target }} -- -max_total_time=300 -timeout=10
+        # `--target`: cargo-fuzz defaults to the platform it was itself built for, and the
+        # prebuilt cargo-fuzz installed above is a static musl build. Fuzzing for musl fails
+        # (no std for it on nightly, and AddressSanitizer can't use a statically linked libc),
+        # so name the runner's own target.
+        run: cargo +nightly fuzz run --target x86_64-unknown-linux-gnu ${{ matrix.target }} -- -max_total_time=300 -timeout=10
       - name: Keep the crashing input
         if: failure()
         uses: actions/upload-artifact@v4
