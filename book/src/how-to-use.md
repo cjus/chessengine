@@ -74,3 +74,22 @@ Na6  depth 3 [+0.32, +0.33] (beta cutoff by Na3 (move 1)) -> +0.55
 Read that as (in the position after 1. d3): after 1...Na6, the null move (`(pass)`) didn't
 cut off, but White's first real move, Na3, did. Below it, late move pruning skipped most of
 Black's quiet replies.
+
+## Quick matches
+
+`match <engine> <games> [time control]` plays cb2026, exactly as you've set it up in the shell
+(level, techniques switched off, hash size), against another UCI engine: an older stage's
+binary, or any engine you have. `selfplay <games>` plays it against a copy of cb2026 at
+default settings, which is a quick way to see what switching a technique off costs in games:
+
+```text
+> set nullmove off
+> selfplay 6 nodes=20000
+...
+Match over: cb2026 0.1.0 (shell) scored 1.5/6 against cb2026 0.1.0 (default) (+1 -4 =1).
+Elo difference: -191 ± 1219 (95%). A few games say little: the margin shows how little.
+```
+
+Six games, or even a hundred, can't tell a 30 Elo change from noise; the `match` tool's SPRT
+(see `docs/testing.md`) decides when enough games have been played. Games are saved as PGN
+(`cb2026-match.pgn` unless you give `pgn <file>`).

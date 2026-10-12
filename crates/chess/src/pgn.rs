@@ -264,6 +264,30 @@ impl PgnGame {
     }
 }
 
+/// Splits a PGN file into its games' texts (a game starts with a tag line after the previous
+/// game's moves).
+pub fn split_games(text: &str) -> Vec<&str> {
+    let mut games = Vec::new();
+    let mut start = 0;
+    let mut seen_moves = false;
+    let mut offset = 0;
+    for line in text.split_inclusive('\n') {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') && seen_moves {
+            games.push(&text[start..offset]);
+            start = offset;
+            seen_moves = false;
+        } else if !trimmed.is_empty() && !trimmed.starts_with('[') && !trimmed.starts_with('%') {
+            seen_moves = true;
+        }
+        offset += line.len();
+    }
+    if !text[start..].trim().is_empty() {
+        games.push(&text[start..]);
+    }
+    games
+}
+
 /// Reads a tag pair line, `[Name "Value"]`.
 fn parse_tag(line: &str) -> Result<(String, String), String> {
     let inner = line
@@ -385,6 +409,15 @@ mod tests {
             pos.to_fen(),
             "r1bqkbnr/1ppp1ppp/p1n5/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 0 4"
         );
+    }
+
+    #[test]
+    fn splits_files_into_games() {
+        let text = "[Event \"a\"]\n\n1. e4 *\n\n[Event \"b\"]\n[Round \"2\"]\n1. d4 d5\n2. c4 *\n";
+        let games = split_games(text);
+        assert_eq!(games.len(), 2);
+        assert_eq!(PgnGame::parse(games[1]).unwrap().moves.len(), 3);
+        assert!(split_games("").is_empty());
     }
 
     #[test]

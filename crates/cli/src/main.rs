@@ -145,11 +145,31 @@ fn run_shell(first_line: Option<String>) -> ExitCode {
     };
     let mut shell = Shell::with_engine(style, new_engine());
     // A line already read while detecting the mode runs first, then the rest of the input.
-    let input = io::Cursor::new(first_line.unwrap_or_default()).chain(stdin.lock());
-    match cb2026_shell::run(&mut shell, input, io::stdout().lock(), interactive) {
-        Ok(()) => ExitCode::SUCCESS,
+    let mut input = io::Cursor::new(first_line.unwrap_or_default()).chain(stdin.lock());
+    let switch = match cb2026_shell::run(&mut shell, &mut input, io::stdout().lock(), interactive) {
+        Ok(switch) => switch,
         // A closed pipe (for example `cb2026 < script | head`) is a normal way to stop.
-        Err(e) if e.kind() == io::ErrorKind::BrokenPipe => ExitCode::SUCCESS,
+        Err(e) if e.kind() == io::ErrorKind::BrokenPipe => return ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("cb2026: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    // `uci` or `xboard` typed in the shell: carry on in that protocol, with the shell's engine
+    // and the rest of the input, as if the session had started with that command.
+    let engine = shell.into_engine();
+    let output = Box::new(io::stdout());
+    let result = match switch {
+        None => return ExitCode::SUCCESS,
+        Some(Protocol::Uci) => {
+            cb2026_protocol::uci::run_with_engine(input, output, Some("uci".to_string()), engine)
+        }
+        Some(Protocol::Xboard) => {
+            cb2026_protocol::xboard::run(input, output, Some("xboard".to_string()), engine)
+        }
+    };
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("cb2026: {e}");
             ExitCode::FAILURE
