@@ -110,6 +110,13 @@
 //! moves are useless, tries twice as many before giving up, since in an improving position
 //! they're more often good. (Stockfish uses the same idea in many more places.)
 //!
+//! **Off by default.** It made the search almost a third smaller and the engine weaker: an SPRT
+//! against the same engine without it (both with IIR) scored −32 ± 15 Elo after 1,142 games at
+//! 8+0.08. The likely cause, not yet tested, is reverse futility pruning at depth 1, where the
+//! margin becomes zero: the node is cut off whenever its static evaluation reaches beta, and the
+//! static evaluation knows nothing about pieces under attack. The switch stays, so a gentler
+//! version can be tried.
+//!
 //! ## Tablebase probes (stage 18)
 //!
 //! With few pieces left, the search can ask the endgame tablebases for the exact result
@@ -332,7 +339,8 @@ impl Default for Techniques {
             // Off by default: it didn't measure stronger (see the module documentation).
             check_extension: false,
             iir: true,
-            improving: true,
+            // Off by default: it measured weaker (see the module documentation).
+            improving: false,
         }
     }
 }

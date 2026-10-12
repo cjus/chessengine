@@ -436,17 +436,22 @@ testing only and are never included in the repo.
 ### Test machine
 
 Decided 2026-10-10: long tests run on Carlos's Apple Silicon Mac, short ones in Claude's cloud
-sessions.
+sessions. Changed 2026-10-12: long tests run on an Apple M3 Mac on Carlos's network
+(cjus/chessengine#62). The M1 Max that ran them until then is Carlos's working machine, where
+Claude Code runs, and is no longer used for tests.
 
-**The test machine:** Apple M1 Max, 10 cores (8 performance, 2 efficiency), 64 GB RAM. This gives:
-- **SPRTs and gauntlets:** 7 games at once, single-threaded engines, 16 MB hash each
-  (at most 14 engine processes, well within memory).
-- **Lazy SMP tests:** up to 8 threads on one engine against one opponent, run on their own, not
-  mixed with other tests.
+**The test machine:** an Apple M3 Mac (model, cores and memory to be recorded from
+cjus/chessengine#62). Until 2026-10-12 it was an Apple M1 Max, 10 cores (8 performance, 2
+efficiency), 64 GB RAM. This gives:
+- **SPRTs and gauntlets:** one game per performance core minus one (7 on the M1 Max),
+  single-threaded engines, 16 MB hash each (two engine processes per game, well within memory).
+- **Lazy SMP tests:** up to one thread per performance core on one engine against one opponent,
+  run on their own, not mixed with other tests.
 - **Tablebases:** the full 3-4-5-piece Syzygy set (about 1 GB) fits easily; the 6-piece set
   (about 150 GB on disk) works only with an external drive and is not needed for v1.
-- **Speed baseline:** the ≥100 Mnps perft gate and all `bench` speed figures are measured on
-  this machine.
+- **Speed baseline:** speed figures name the machine they were measured on. The ≥100 Mnps perft
+  gate (278.8 Mnps) and the `bench` speeds up to 2026-10-12 are from the M1 Max; later ones are
+  from the M3.
 
 - **`scripts/mac-sprt.sh <PR>`** (Claude writes it, Carlos runs it): builds the PR branch and
   `main` in release mode, runs the SPRT with the `match` tool, and posts the result to the PR as a
@@ -463,8 +468,10 @@ sessions.
   games: one or more nights on the Mac.
 - **If the queue backs up** (likely during M5 strength work): set up OpenBench, the open-source
   distributed testing framework, with the Mac as one worker plus a rented multi-core Linux server.
+  An AWS Batch setup in the PNX Studios account (Graviton spot instances, about $0.08 per 1,000
+  games) was proposed in cjus/chessengine#61 and is on hold.
 - x86-64 builds are tested for correctness in CI and for speed in cloud sessions; strength is
-  measured on the Mac.
+  measured on the test Mac.
 
 **Robustness requirements**
 - Zero illegal moves and zero crashes over 10,000+ games of testing per milestone.
@@ -541,7 +548,7 @@ failures) at 278.8 million nodes/s on the M1 Max (cjus/chessengine#20).
 
 | Risk | Impact | Mitigation |
 | --- | --- | --- |
-| Not enough test compute for SPRT | Changes are guessed, not measured; strength stalls | Short tests in cloud sessions; long tests on the Mac overnight; OpenBench with a rented Linux worker if the queue backs up |
+| Not enough test compute for SPRT | Changes are guessed, not measured; strength stalls | Short tests in cloud sessions; long tests on the test Mac (the M3) overnight; OpenBench or AWS Batch (#61, on hold) if the queue backs up |
 | Subtle move generation or hashing bugs | Wrong moves, crashes, weird draws | Perft suites, property tests, fuzzing, hash checks in debug builds |
 | Time losses in particular GUIs | Bad experience, rating list exclusion | `Move Overhead`, conformance tests, very short time controls in tests, GUI matrix |
 | Book and code drift apart | Learners get confused | Code included into the book from source with anchors; book built in CI; chapter per tag |
@@ -629,6 +636,8 @@ these with measured figures from the first real SPRT runs.
 - [x] Test machine: Carlos's Apple M1 Max (8 performance + 2 efficiency cores, 64 GB) for long
       SPRTs and gauntlets at 7 games at once, via scripts that post results to the PR; cloud
       sessions for short tests; OpenBench later if needed (2026-10-10).
+- [x] Test machine moves to an Apple M3 Mac on Carlos's network; the M1 Max is no longer used for
+      tests. Running them on AWS Batch is on hold (cjus/chessengine#61, #62, 2026-10-12).
 - [x] GUI testing is Mac-first and open-source-first: En Croissant and Cute Chess as the primary
       GUIs, plus Scid and XBoard (2026-10-10). Commercial GUIs: HIARCS Chess Explorer on the
       Mac and ChessBase on Windows; ChessBase for Mac and Shredder are not planned

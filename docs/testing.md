@@ -81,6 +81,17 @@ quick looks, not decisions: they have no SPRT.
 
 ## Long tests on the test Mac
 
+The test Mac is the Apple M3 on Carlos's network (from 2026-10-12; the M1 Max ran the tests
+before). Setting it up once is in cjus/chessengine#62: Rust, `gh auth login` and
+`gh auth setup-git`, and a clone of the repo. Start each test with `nohup`, so that it keeps
+running when the terminal or SSH session closes:
+
+```sh
+git checkout main && git pull
+nohup scripts/mac-sprt.sh <PR> > ~/sprt-<PR>.log 2>&1 &
+tail -f ~/sprt-<PR>.log
+```
+
 ```sh
 scripts/mac-sprt.sh <PR number> [elo0 elo1] [time control]
 ```
