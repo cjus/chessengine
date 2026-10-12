@@ -16,6 +16,12 @@ path = "src/main.rs"
 cb2026-engine.workspace = true
 cb2026-protocol.workspace = true
 cb2026-shell.workspace = true
+cb2026-syzygy = { workspace = true, optional = true }
+
+[features]
+default = ["syzygy"]
+# Syzygy endgame tablebases (the `SyzygyPath` option), through the cb2026-syzygy crate.
+syzygy = ["dep:cb2026-syzygy"]
 
 [lints]
 workspace = true

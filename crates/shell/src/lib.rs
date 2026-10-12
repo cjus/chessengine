@@ -35,6 +35,8 @@
 //! | `set quiescence on\|off`, `set mvvlva on\|off`, `set tt on\|off` | Switch the quiescence search, MVV-LVA move ordering or the transposition table off |
 //! | `set hash <MB>` | Transposition table size |
 //! | `set threads <N>` | Search threads (Lazy SMP) |
+//! | `new960 [n]` | Chess960 starting position `n` (0–959; random if left out) |
+//! | `set syzygy <path>`, `tb` | Load Syzygy tablebases; show the tablebase result for the position |
 //! | `set killers\|countermoves\|history on\|off` | Switch a quiet-move ordering heuristic off |
 //! | `set pvs on\|off`, `set aspiration on\|off` | Principal variation search; aspiration windows |
 //! | `set nullmove on\|off` | Null-move pruning |
@@ -77,6 +79,7 @@ use std::sync::atomic::AtomicBool;
 use cb2026_chess::{Bitboard, Color, Move, Piece, PieceType, Position, Square};
 use std::time::Duration;
 
+use cb2026_engine::tablebase::{self, TbWdl};
 use cb2026_engine::tt::MAX_HASH_MB;
 use cb2026_engine::{Engine, Limits, MAX_THREADS, NAME, Score, SearchInfo, bench, eval, search};
 pub use render::Style;
@@ -116,6 +119,10 @@ Commands:
   set tt on|off        The transposition table: reuse results for positions seen before
   set hash <MB>        Transposition table size in megabytes (default 16)
   set threads <N>      Search threads (Lazy SMP, default 1)
+  new960 [n]           Chess960 starting position n (0-959, 518 is the standard one;
+                       random without n)
+  set syzygy <path>    Load Syzygy endgame tablebases from a directory (none: unload)
+  tb                   The tablebase result and best move for this position
   set killers|countermoves|history on|off
                        Quiet-move ordering heuristics
   set pvs on|off       Principal variation search (null windows after the first move)
@@ -141,7 +148,7 @@ Commands:
   help                 This list
   quit, exit           Leave the shell
 
-The engine searches with alpha-beta and counts material; stages 6 and up make it stronger.";
+Every search and evaluation technique can be switched off with `set`, to see what it's worth.";
 
 /// The result of running one command.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -218,6 +225,24 @@ impl Shell {
             "new" | "startpos" => {
                 self.set_position(Position::startpos());
                 self.show()
+            }
+            "new960" => {
+                let number = if args.is_empty() {
+                    // Any number will do: the clock's nanoseconds are random enough here.
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map_or(518, |d| d.subsec_nanos() % 960)
+                } else {
+                    match args.parse::<u32>() {
+                        Ok(n) if n < 960 => n,
+                        _ => return Response::text("Usage: new960 [0-959]"),
+                    }
+                };
+                let position = Position::chess960(number).expect("number checked");
+                self.set_position(position);
+                let mut response = self.show();
+                response.output = format!("Chess960 position {number}\n{}", response.output);
+                response
             }
             "fen" if args.is_empty() => Response::text(self.position.to_fen()),
             "fen" => match Position::from_fen(args) {
@@ -301,6 +326,7 @@ impl Shell {
             },
             "zobrist" => self.zobrist(),
             "eval" => self.eval(),
+            "tb" => self.tablebase(),
             // Anything else that is a legal move is played.
             other if parse_move(&self.position, other).is_some() => self.play(line),
             other => Response::text(format!(
@@ -583,6 +609,39 @@ impl Shell {
     }
 
     /// Lists every part of the position's Zobrist key, then their XOR.
+    /// `tb`: what the endgame tablebases say about the position.
+    fn tablebase(&self) -> Response {
+        let Some(tb) = &self.engine.tablebase else {
+            return Response::text("No tablebases loaded (set syzygy <path>).");
+        };
+        let pos = &self.position;
+        if !tablebase::covers(tb.as_ref(), &self.engine.tablebase_params, pos) {
+            return Response::text(format!(
+                "Not in the tablebases: they cover up to {} pieces without castling rights.",
+                tb.max_pieces()
+                    .min(self.engine.tablebase_params.probe_limit)
+            ));
+        }
+        let side = pos.side_to_move();
+        Response::text(match tb.probe_root(pos) {
+            Some((wdl, mv)) => {
+                let verdict = match wdl {
+                    TbWdl::Win => format!("{side} to move wins"),
+                    TbWdl::CursedWin => format!(
+                        "{side} to move can force mate, but not before the fifty-move rule: a draw"
+                    ),
+                    TbWdl::Draw => "a draw".to_string(),
+                    TbWdl::BlessedLoss => format!(
+                        "{side} to move is lost, but the fifty-move rule saves the game: a draw"
+                    ),
+                    TbWdl::Loss => format!("{side} to move loses"),
+                };
+                format!("Tablebase: {verdict}. Best move: {}", pos.to_san(mv))
+            }
+            None => "The tablebases have no answer for this position.".to_string(),
+        })
+    }
+
     /// `eval`: the static evaluation, term by term, for both sides.
     fn eval(&self) -> Response {
         let params = &self.engine.params;
@@ -785,6 +844,13 @@ impl Shell {
             }
             (Some("tt"), value) if on_off(value).is_some() => {
                 self.engine.techniques.tt = on_off(value).unwrap_or(true);
+            }
+            (Some("syzygy"), path) => {
+                let path = path.unwrap_or("");
+                return Response::text(match self.engine.load_tablebases(path) {
+                    Ok(summary) => summary,
+                    Err(e) => format!("Tablebases not loaded: {e}"),
+                });
             }
             (Some("threads"), Some(n)) => match n.parse::<usize>() {
                 Ok(n) if (1..=MAX_THREADS).contains(&n) => self.engine.threads = n,
@@ -1216,6 +1282,25 @@ mod tests {
         assert!(shell.execute("set hash 0").output.starts_with("Usage"));
         assert!(shell.execute("set threads 4").output.contains("Threads: 4"));
         assert!(shell.execute("set threads 0").output.starts_with("Usage"));
+        assert!(
+            shell
+                .execute("new960 0")
+                .output
+                .starts_with("Chess960 position 0")
+        );
+        assert!(shell.execute("fen").output.starts_with("bbqnnrkr/"));
+        assert!(shell.execute("new960 960").output.starts_with("Usage"));
+        shell.execute("new");
+        assert_eq!(
+            shell.execute("tb").output,
+            "No tablebases loaded (set syzygy <path>)."
+        );
+        assert!(
+            shell
+                .execute("set syzygy /tables")
+                .output
+                .contains("no tablebase support")
+        );
         assert!(shell.execute("set depth 0").output.starts_with("Usage"));
         assert!(shell.execute("set colour blue").output.starts_with("Usage"));
     }

@@ -1,0 +1,19 @@
+[package]
+name = "cb2026-syzygy"
+description = "Syzygy endgame tablebase probing for cb2026, through shakmaty-syzygy (stage 18)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+cb2026-chess.workspace = true
+cb2026-engine.workspace = true
+# The one exception to "no chess crates": see docs/PRD.md, "Tablebase probing".
+shakmaty = "0.30.2"
+shakmaty-syzygy = "0.28.1"
+
+[lints]
+workspace = true

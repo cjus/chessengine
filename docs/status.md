@@ -20,7 +20,7 @@ it in every PR that changes the picture (a stage merged, a result in, a new bloc
 | 15 Full HCE | Merged | #44 | 1200673 | +192 ± 45 |
 | 16 Texel tuning | Merged | #45 | 1200673 | Tuned values −1 ± 21 (no verdict): **not adopted**, hand-set values stay the default |
 | 17 Lazy SMP | Merged | #46 | 1207153 | One thread vs stage 16, [−5, 0]: +0.1 ± 4.1, 15,188 games, passed (Mac). 4 threads vs 1: pending (#47) |
-| 18 Syzygy, Chess960 starts | Built, merging next | `claude/stage-18-syzygy` | 1207153 | No functional change |
+| 18 Syzygy, Chess960 starts | Merged | #49 | 1207153 | No functional change |
 | 18 Polyglot books | Built, merging next | `claude/stage-18-book` | 1207153 | No functional change (book off by default) |
 | 19 Levels, MultiPV | Built, merging next | `claude/stage-19-levels` | 1207153 | No functional change at full strength; levels not yet calibrated (#36) |
 | 20 XBoard, pondering, conformance tests, Lichess docs | Built, merging next | `claude/stage-20-xboard` | 1207153 | No functional change |

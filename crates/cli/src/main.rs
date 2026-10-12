@@ -12,6 +12,7 @@ use std::io::{self, BufRead, IsTerminal, Read};
 use std::process::ExitCode;
 
 use args::{Command, Mode, USAGE};
+use cb2026_engine::Engine;
 use cb2026_protocol::Protocol;
 use cb2026_shell::{Shell, Style};
 
@@ -94,13 +95,28 @@ fn detect_mode() -> (Mode, Option<String>) {
 /// Speaks UCI on standard input and output until `quit`.
 fn run_uci(first_line: Option<String>) -> ExitCode {
     let stdin = io::stdin();
-    match cb2026_protocol::uci::run(stdin.lock(), Box::new(io::stdout()), first_line) {
+    match cb2026_protocol::uci::run_with_engine(
+        stdin.lock(),
+        Box::new(io::stdout()),
+        first_line,
+        new_engine(),
+    ) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("cb2026: {e}");
             ExitCode::FAILURE
         }
     }
+}
+
+/// A new engine, able to open tablebases if this build includes them.
+fn new_engine() -> Engine {
+    let mut engine = Engine::new();
+    #[cfg(feature = "syzygy")]
+    {
+        engine.tablebase_loader = Some(cb2026_syzygy::load);
+    }
+    engine
 }
 
 /// Runs the interactive shell (or a script of shell commands piped in).
@@ -112,7 +128,7 @@ fn run_shell(first_line: Option<String>) -> ExitCode {
         color: io::stdout().is_terminal() && !no_color_requested() && !dumb_terminal(),
         flipped: false,
     };
-    let mut shell = Shell::new(style);
+    let mut shell = Shell::with_engine(style, new_engine());
     // A line already read while detecting the mode runs first, then the rest of the input.
     let input = io::Cursor::new(first_line.unwrap_or_default()).chain(stdin.lock());
     match cb2026_shell::run(&mut shell, input, io::stdout().lock(), interactive) {

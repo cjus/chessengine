@@ -58,7 +58,8 @@ use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 
 use cb2026_chess::Move;
 
-use crate::search::{MATE, MAX_PLY};
+use crate::search::MAX_PLY;
+use crate::tablebase::TB_WIN;
 
 /// The table size when nothing else is asked for, in megabytes.
 pub const DEFAULT_HASH_MB: usize = 16;
@@ -297,9 +298,9 @@ impl TranspositionTable {
 /// Converts a score at `ply` from the root to the form stored in the table: mate scores count
 /// plies from the stored position instead of from the root.
 pub fn score_to_tt(score: i32, ply: u32) -> i32 {
-    if score >= MATE - MAX_PLY as i32 {
+    if score >= DISTANCE_SCORES {
         score + ply as i32
-    } else if score <= -MATE + MAX_PLY as i32 {
+    } else if score <= -DISTANCE_SCORES {
         score - ply as i32
     } else {
         score
@@ -308,14 +309,18 @@ pub fn score_to_tt(score: i32, ply: u32) -> i32 {
 
 /// Converts a stored score back to a score at `ply` from the root.
 pub fn score_from_tt(score: i32, ply: u32) -> i32 {
-    if score >= MATE - MAX_PLY as i32 {
+    if score >= DISTANCE_SCORES {
         score - ply as i32
-    } else if score <= -MATE + MAX_PLY as i32 {
+    } else if score <= -DISTANCE_SCORES {
         score + ply as i32
     } else {
         score
     }
 }
+
+/// Scores at least this large count distance from the root: mates, and from stage 18
+/// tablebase wins (see [`crate::tablebase::TB_WIN`]).
+const DISTANCE_SCORES: i32 = TB_WIN - MAX_PLY as i32;
 
 #[cfg(test)]
 mod tests {
@@ -365,6 +370,16 @@ mod tests {
         let entry = tt.probe(pos.hash()).unwrap();
         assert_eq!(entry.best_move, Some(mv));
         assert_eq!(entry.bound, Bound::Upper);
+    }
+
+    use crate::search::MATE;
+
+    #[test]
+    fn tablebase_scores_are_stored_relative_to_the_position_too() {
+        let win_at_root = TB_WIN - 9;
+        assert_eq!(score_from_tt(score_to_tt(win_at_root, 4), 4), win_at_root);
+        assert_eq!(score_to_tt(win_at_root, 4), TB_WIN - 5);
+        assert_eq!(score_to_tt(2500, 4), 2500);
     }
 
     #[test]

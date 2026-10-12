@@ -67,6 +67,71 @@ impl Position {
         Position::from_fen(crate::fen::STARTING_FEN).expect("the starting FEN is valid")
     }
 
+    // ANCHOR: chess960
+    /// Chess960 starting position number `n` (0–959, Scharnagl's numbering; 518 is the standard
+    /// starting position), or `None` if `n` is out of range.
+    ///
+    /// The back rank is built from `n` in mixed-radix steps: the light-squared bishop (4
+    /// choices), the dark-squared bishop (4), the queen on one of the 6 empty squares, the two
+    /// knights on 2 of the 5 left (10 ways), and the rooks and king, in that order, on the last
+    /// three, so the king always stands between its rooks.
+    pub fn chess960(n: u32) -> Option<Position> {
+        if n >= 960 {
+            return None;
+        }
+        let mut rank = [None; 8];
+        let mut n = n as usize;
+        rank[2 * (n % 4) + 1] = Some('B');
+        n /= 4;
+        rank[2 * (n % 4)] = Some('B');
+        n /= 4;
+        let empty = |rank: &[Option<char>; 8]| -> Vec<usize> {
+            (0..8).filter(|&i| rank[i].is_none()).collect()
+        };
+        rank[empty(&rank)[n % 6]] = Some('Q');
+        n /= 6;
+        const KNIGHTS: [(usize, usize); 10] = [
+            (0, 1),
+            (0, 2),
+            (0, 3),
+            (0, 4),
+            (1, 2),
+            (1, 3),
+            (1, 4),
+            (2, 3),
+            (2, 4),
+            (3, 4),
+        ];
+        let (first, second) = KNIGHTS[n];
+        let free = empty(&rank);
+        rank[free[first]] = Some('N');
+        rank[free[second]] = Some('N');
+        for (square, piece) in empty(&rank).into_iter().zip(['R', 'K', 'R']) {
+            rank[square] = Some(piece);
+        }
+        let white: String = rank
+            .iter()
+            .map(|p| p.expect("every square filled"))
+            .collect();
+        // Shredder-FEN castling: the files of the rooks.
+        let rook_files: Vec<char> = (0..8)
+            .filter(|&i| rank[i] == Some('R'))
+            .map(|i| (b'A' + i as u8) as char)
+            .collect();
+        let castling: String = rook_files
+            .iter()
+            .rev()
+            .copied()
+            .chain(rook_files.iter().rev().map(|c| c.to_ascii_lowercase()))
+            .collect();
+        let fen = format!(
+            "{}/pppppppp/8/8/8/8/PPPPPPPP/{white} w {castling} - 0 1",
+            white.to_ascii_lowercase()
+        );
+        Position::from_fen(&fen).ok()
+    }
+    // ANCHOR_END: chess960
+
     /// A board with no pieces, White to move, no castling rights. Not a legal position on its
     /// own; FEN parsing fills it in.
     pub(crate) fn empty() -> Position {
@@ -300,6 +365,44 @@ impl fmt::Display for Position {
 impl fmt::Debug for Position {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Position({})", self.to_fen())
+    }
+}
+
+#[cfg(test)]
+mod chess960_tests {
+    use super::*;
+
+    #[test]
+    fn number_518_is_the_standard_position() {
+        let pos = Position::chess960(518).unwrap();
+        assert_eq!(pos.occupied(), Position::startpos().occupied());
+        assert_eq!(pos.hash(), Position::startpos().hash());
+    }
+
+    #[test]
+    fn known_numbers_and_the_rules() {
+        // Scharnagl's table: 0 is BBQNNRKR.
+        let zero = Position::chess960(0).unwrap();
+        assert!(
+            zero.to_fen()
+                .starts_with("bbqnnrkr/pppppppp/8/8/8/8/PPPPPPPP/BBQNNRKR w ")
+        );
+        assert!(Position::chess960(960).is_none());
+        let mut seen = std::collections::HashSet::new();
+        for n in 0..960 {
+            let pos = Position::chess960(n).unwrap();
+            assert!(pos.is_consistent(), "{n}");
+            // Distinct, with bishops on opposite colours and the king between the rooks.
+            assert!(seen.insert(pos.to_fen()), "{n}");
+            let back = pos.to_fen().split('/').next_back().unwrap()[..8].to_string();
+            let bishops: Vec<usize> = back.match_indices('B').map(|(i, _)| i).collect();
+            assert_ne!(bishops[0] % 2, bishops[1] % 2, "{n}: {back}");
+            let king = back.find('K').unwrap();
+            assert!(
+                back[..king].contains('R') && back[king..].contains('R'),
+                "{n}: {back}"
+            );
+        }
     }
 }
 

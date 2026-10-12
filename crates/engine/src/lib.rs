@@ -42,6 +42,7 @@
 //! - [`tuning`]: the evaluation as features times parameters, for tuning (stage 16).
 //! - [`tuned`]: the parameter values found by Texel tuning (stage 16, generated), available as
 //!   `EvalParams::tuned()`.
+//! - [`tablebase`]: endgame tablebase probing through a trait (stage 18).
 //! - [`time`]: time management: soft and hard limits per move (stage 6).
 //! - [`bench`](mod@bench): the fixed benchmark behind `cb2026 bench` and every commit's `Bench:` line.
 //!
@@ -71,12 +72,14 @@ pub mod hce;
 pub mod ordering;
 pub mod search;
 pub mod see;
+pub mod tablebase;
 pub mod time;
 pub mod tt;
 pub mod tuned;
 pub mod tuning;
 
 use std::fmt;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -89,6 +92,7 @@ use search::{
     DEFAULT_DEPTH, INFINITY, MATE, MAX_PLY, RootResult, SearchParams, Searcher, StopConditions,
     Techniques, to_score,
 };
+use tablebase::{Tablebase, TablebaseLoader, TablebaseParams};
 use time::TimeParams;
 use tt::TranspositionTable;
 
@@ -179,6 +183,8 @@ pub struct SearchInfo {
     pub pv: Vec<Move>,
     /// How full the transposition table is, in permille.
     pub hashfull: u32,
+    /// Tablebase probes that gave a result (main thread).
+    pub tbhits: u64,
 }
 
 /// The outcome of a search.
@@ -210,6 +216,12 @@ pub struct Engine {
     pub ordering: OrderingTables,
     /// Search threads (Lazy SMP, stage 17): 1 means a single-threaded search.
     pub threads: usize,
+    /// Endgame tablebases, if any are loaded (stage 18).
+    pub tablebase: Option<Arc<dyn Tablebase>>,
+    /// When to probe them.
+    pub tablebase_params: TablebaseParams,
+    /// How to open tablebase files, if the program embedding the engine supports it.
+    pub tablebase_loader: Option<TablebaseLoader>,
 }
 
 impl Default for Engine {
@@ -222,6 +234,9 @@ impl Default for Engine {
             tt: TranspositionTable::default(),
             ordering: OrderingTables::default(),
             threads: 1,
+            tablebase: None,
+            tablebase_params: TablebaseParams::default(),
+            tablebase_loader: None,
         }
     }
 }
@@ -236,6 +251,22 @@ impl Engine {
     pub fn new_game(&mut self) {
         self.tt.clear();
         self.ordering.clear();
+    }
+
+    /// Opens the tablebases found at `path` (the UCI `SyzygyPath`): directories separated by
+    /// `;` (or `:` outside Windows). An empty path unloads them. Returns a summary.
+    pub fn load_tablebases(&mut self, path: &str) -> Result<String, String> {
+        if path.trim().is_empty() || path == "<empty>" {
+            self.tablebase = None;
+            return Ok("No tablebases".to_string());
+        }
+        let loader = self
+            .tablebase_loader
+            .ok_or("this build has no tablebase support")?;
+        let tb = loader(path)?;
+        let summary = format!("Tablebases for up to {} pieces", tb.max_pieces());
+        self.tablebase = Some(tb);
+        Ok(summary)
     }
 
     /// Replaces the transposition table with an empty one of about `megabytes` MB.
@@ -284,6 +315,19 @@ impl Engine {
             root_moves[..=at].rotate_right(1);
         }
 
+        // ANCHOR: tb_root
+        // In a tablebase position, keep only the move the tables recommend: it keeps the best
+        // result and makes progress under the fifty-move rule. The search still runs (and
+        // reports), but can only choose that move.
+        if let Some(tb) = &self.tablebase
+            && tablebase::covers(tb.as_ref(), &self.tablebase_params, position)
+            && let Some((_, mv)) = tb.probe_root(position)
+            && root_moves.contains(&mv)
+        {
+            root_moves = vec![mv];
+        }
+        // ANCHOR_END: tb_root
+
         let budget = time::budget(limits, position.side_to_move(), &self.time);
         let unlimited = limits.depth.is_none()
             && limits.nodes.is_none()
@@ -311,8 +355,12 @@ impl Engine {
             tt,
             ordering,
             threads,
+            tablebase,
+            tablebase_params,
             ..
         } = self;
+        let tablebase = tablebase.as_deref();
+        let tablebase_params = *tablebase_params;
         let (params, techniques, search_params, tt) = (&*params, *techniques, *search_params, &*tt);
         thread::scope(|scope| {
             for helper in 1..*threads {
@@ -334,23 +382,30 @@ impl Engine {
                         history,
                     );
                     searcher.count_nodes_in(helper_nodes);
+                    if let Some(tb) = tablebase {
+                        searcher.use_tablebase(tb, tablebase_params);
+                    }
                     run_helper(&mut searcher, position, root_moves, max_depth, helper);
                 });
             }
+            let mut searcher = Searcher::new(
+                params,
+                search_params,
+                tt,
+                ordering,
+                techniques,
+                StopConditions {
+                    stop,
+                    deadline,
+                    max_nodes: limits.nodes,
+                },
+                history,
+            );
+            if let Some(tb) = tablebase {
+                searcher.use_tablebase(tb, tablebase_params);
+            }
             let result = main_search(
-                Searcher::new(
-                    params,
-                    search_params,
-                    tt,
-                    ordering,
-                    techniques,
-                    StopConditions {
-                        stop,
-                        deadline,
-                        max_nodes: limits.nodes,
-                    },
-                    history,
-                ),
+                searcher,
                 MainSearch {
                     position,
                     root_moves,
@@ -411,6 +466,7 @@ fn main_search(
                 time: start.elapsed(),
                 pv: result.pv.clone(),
                 hashfull: searcher.hashfull(),
+                tbhits: searcher.tb_hits(),
             });
         }
         if !result.complete {
@@ -577,6 +633,56 @@ mod tests {
             "{:?}",
             start.elapsed()
         );
+    }
+
+    #[test]
+    fn tablebase_results_are_used_in_the_search() {
+        use crate::tablebase::{TB_WIN, tests::ToyTablebase};
+        // Taking the rook (Kxe2 or Qxe2) leaves king and queen against king: a tablebase win.
+        let fen = "4k3/8/8/8/8/8/4r3/3QK3 w - - 0 1";
+        let mut engine = Engine::new();
+        engine.tablebase = Some(Arc::new(ToyTablebase));
+        let info = search_with(&mut engine, fen, 4);
+        assert!(info.tbhits > 0);
+        let first = info.pv.first().unwrap().to_string();
+        assert!(first == "e1e2" || first == "d1e2", "{first}");
+        match info.score {
+            Score::Centipawns(cp) => assert!(cp > TB_WIN - MAX_PLY as i32, "{cp}"),
+            other => panic!("{other:?}"),
+        }
+        // Without tablebases: no hits.
+        assert_eq!(search_with(&mut Engine::new(), fen, 4).tbhits, 0);
+    }
+
+    #[test]
+    fn root_in_a_tablebase_position_plays_the_table_move() {
+        use crate::tablebase::tests::ToyTablebase;
+        let fen = "8/8/8/4k3/8/8/8/3QK3 w - - 0 1";
+        let pos = Position::from_fen(fen).unwrap();
+        let mut engine = Engine::new();
+        engine.tablebase = Some(Arc::new(ToyTablebase));
+        let stop = AtomicBool::new(false);
+        let result = engine.search(&pos, &[], &Limits::depth(3), &stop, &mut |_| {});
+        // The toy's "best move" is the first legal move.
+        assert_eq!(result.best_move, pos.legal_moves().first().copied());
+    }
+
+    #[test]
+    fn loading_tablebases_needs_a_loader() {
+        let mut engine = Engine::new();
+        assert!(engine.load_tablebases("/some/path").is_err());
+        assert!(engine.load_tablebases("").is_ok());
+        fn toy(_: &str) -> Result<Arc<dyn Tablebase>, String> {
+            Ok(Arc::new(crate::tablebase::tests::ToyTablebase))
+        }
+        engine.tablebase_loader = Some(toy);
+        assert_eq!(
+            engine.load_tablebases("/tables").unwrap(),
+            "Tablebases for up to 3 pieces"
+        );
+        assert!(engine.tablebase.is_some());
+        engine.load_tablebases("<empty>").unwrap();
+        assert!(engine.tablebase.is_none());
     }
 
     #[test]

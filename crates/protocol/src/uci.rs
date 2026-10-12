@@ -9,6 +9,9 @@
 //! < option name Hash type spin default 16 min 1 max 65536
 //! < option name Clear Hash type button
 //! < option name Threads type spin default 1 min 1 max 256
+//! < option name SyzygyPath type string default <empty>
+//! < option name SyzygyProbeDepth type spin default 1 min 1 max 100
+//! < option name SyzygyProbeLimit type spin default 7 min 0 max 7
 //! < option name Move Overhead type spin default 30 min 0 max 5000
 //! < option name UCI_Chess960 type check default false
 //! < uciok
@@ -36,6 +39,7 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use cb2026_chess::{Move, Position};
+use cb2026_engine::tablebase::TablebaseLoader;
 use cb2026_engine::tt::{DEFAULT_HASH_MB, MAX_HASH_MB};
 use cb2026_engine::{AUTHOR, Engine, Limits, MAX_THREADS, SearchInfo, id_name};
 
@@ -70,6 +74,8 @@ struct Session {
     output: Output,
     /// The engine, when it isn't busy searching (a running search owns it until it ends).
     engine: Option<Engine>,
+    /// How the engine opens tablebases (kept to rebuild the engine if a search thread fails).
+    tablebase_loader: Option<TablebaseLoader>,
     search: Option<RunningSearch>,
     position: Position,
     /// Hash keys of the positions before `position` in the game, for repetition detection.
@@ -98,6 +104,7 @@ pub fn run_with_engine<R: BufRead>(
 ) -> io::Result<()> {
     let mut session = Session {
         output: Arc::new(Mutex::new(output)),
+        tablebase_loader: engine.tablebase_loader,
         engine: Some(engine),
         search: None,
         position: Position::startpos(),
@@ -136,6 +143,18 @@ impl Session {
                 send(
                     &self.output,
                     &format!("option name Threads type spin default 1 min 1 max {MAX_THREADS}"),
+                );
+                send(
+                    &self.output,
+                    "option name SyzygyPath type string default <empty>",
+                );
+                send(
+                    &self.output,
+                    "option name SyzygyProbeDepth type spin default 1 min 1 max 100",
+                );
+                send(
+                    &self.output,
+                    "option name SyzygyProbeLimit type spin default 7 min 0 max 7",
                 );
                 send(
                     &self.output,
@@ -213,6 +232,37 @@ impl Session {
                 _ => send(
                     &self.output,
                     &format!("info string Threads must be 1-{MAX_THREADS}, not '{value}'"),
+                ),
+            },
+            "syzygypath" => {
+                if let Some(engine) = self.engine.as_mut() {
+                    let message = match engine.load_tablebases(value) {
+                        Ok(summary) => summary,
+                        Err(e) => format!("tablebases not loaded: {e}"),
+                    };
+                    send(&self.output, &format!("info string {message}"));
+                }
+            }
+            "syzygyprobedepth" => match value.parse::<u32>() {
+                Ok(depth) if (1..=100).contains(&depth) => {
+                    if let Some(engine) = self.engine.as_mut() {
+                        engine.tablebase_params.probe_depth = depth;
+                    }
+                }
+                _ => send(
+                    &self.output,
+                    &format!("info string SyzygyProbeDepth must be 1-100, not '{value}'"),
+                ),
+            },
+            "syzygyprobelimit" => match value.parse::<u32>() {
+                Ok(limit) if limit <= 7 => {
+                    if let Some(engine) = self.engine.as_mut() {
+                        engine.tablebase_params.probe_limit = limit;
+                    }
+                }
+                _ => send(
+                    &self.output,
+                    &format!("info string SyzygyProbeLimit must be 0-7, not '{value}'"),
                 ),
             },
             "clear hash" => {
@@ -309,7 +359,9 @@ impl Session {
                 Ok(engine) => self.engine = Some(engine),
                 Err(_) => {
                     send(&self.output, "info string the search thread failed");
-                    self.engine = Some(Engine::new());
+                    let mut engine = Engine::new();
+                    engine.tablebase_loader = self.tablebase_loader;
+                    self.engine = Some(engine);
                 }
             }
         }
@@ -362,12 +414,13 @@ fn info_line(info: &SearchInfo, chess960: bool) -> String {
     let ms = info.time.as_millis();
     let nps = info.nodes as u128 * 1000 / ms.max(1);
     format!(
-        "info depth {} seldepth {} score {} nodes {} nps {nps} time {ms} hashfull {} pv {}",
+        "info depth {} seldepth {} score {} nodes {} nps {nps} time {ms} hashfull {} tbhits {} pv {}",
         info.depth,
         info.seldepth,
         info.score,
         info.nodes,
         info.hashfull,
+        info.tbhits,
         pv.join(" ")
     )
 }
@@ -538,6 +591,30 @@ mod tests {
         assert!(!lines.iter().any(|l| l.starts_with("info string")));
         let bad = session("setoption name Hash value 0\nisready\n");
         assert!(bad.iter().any(|l| l.contains("Hash must be 1-65536")));
+    }
+
+    #[test]
+    fn syzygy_options() {
+        let lines = session(
+            "uci\nsetoption name SyzygyPath value /no/tables\nsetoption name SyzygyProbeLimit value 5\nsetoption name SyzygyProbeDepth value 0\nisready\n",
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|l| l == "option name SyzygyPath type string default <empty>")
+        );
+        // The test engine has no tablebase loader, like a build without the syzygy feature.
+        assert!(
+            lines
+                .iter()
+                .any(|l| l.contains("tablebases not loaded: this build has no tablebase support"))
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|l| l.contains("SyzygyProbeDepth must be 1-100"))
+        );
+        assert!(!lines.iter().any(|l| l.contains("SyzygyProbeLimit must")));
     }
 
     #[test]

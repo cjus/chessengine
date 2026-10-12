@@ -8,6 +8,9 @@
 //!     [--sprt 0 5] [--option Name=Value ...] [--first-option Name=Value ...] [--pgn games.pgn]
 //! ```
 //!
+//! `--chess960` plays from Chess960 starting positions (and sets `UCI_Chess960` in both
+//! engines) instead of the opening file.
+//!
 //! `--option` is sent to both engines, `--first-option` only to the first (for example
 //! `--first-option Threads=4` to measure how the engine scales against one thread).
 //!
@@ -23,13 +26,14 @@ use std::fs::File;
 use std::io::Write;
 use std::process::ExitCode;
 
+use cb2026_chess::Position;
 use cb2026_tools::game::{Termination, TimeControl};
 use cb2026_tools::match_runner::{MatchSettings, parse_openings, run_match};
 use cb2026_tools::sprt::{Sprt, Verdict};
 
 const USAGE: &str = "Usage: match --engine A --engine B [--tc 8+0.08|40/60|nodes=N|depth=N] \
 [--games N] [--concurrency N] [--openings FILE] [--sprt ELO0 ELO1] [--option Name=Value] \
-[--first-option Name=Value] [--pgn FILE]";
+[--first-option Name=Value] [--chess960] [--pgn FILE]";
 
 fn main() -> ExitCode {
     match run() {
@@ -47,6 +51,7 @@ fn run() -> Result<ExitCode, String> {
     let mut games = 1000;
     let mut concurrency = 1;
     let mut openings_path = "tests/data/openings.epd".to_string();
+    let mut chess960 = false;
     let mut sprt = None;
     let mut options = Vec::new();
     let mut first_options = Vec::new();
@@ -68,6 +73,7 @@ fn run() -> Result<ExitCode, String> {
                     .map_err(|e| format!("--concurrency: {e}"))?
             }
             "--openings" => openings_path = value()?,
+            "--chess960" => chess960 = true,
             "--sprt" => {
                 let elo0: f64 = value()?.parse().map_err(|e| format!("--sprt: {e}"))?;
                 let elo1: f64 = args
@@ -103,14 +109,28 @@ fn run() -> Result<ExitCode, String> {
     let engines: [String; 2] = engines
         .try_into()
         .map_err(|_| "give exactly two --engine paths".to_string())?;
-    let text =
-        std::fs::read_to_string(&openings_path).map_err(|e| format!("{openings_path}: {e}"))?;
+    let openings = if chess960 {
+        // Chess960 start positions, spread over the 960 (389 is coprime with 960, so the
+        // first 960 games use each position once).
+        options.push(("UCI_Chess960".to_string(), "true".to_string()));
+        (0..960u32)
+            .map(|k| {
+                Position::chess960(k * 389 % 960)
+                    .expect("valid number")
+                    .to_fen()
+            })
+            .collect()
+    } else {
+        let text =
+            std::fs::read_to_string(&openings_path).map_err(|e| format!("{openings_path}: {e}"))?;
+        parse_openings(&text)
+    };
     let settings = MatchSettings {
         engines,
         options,
         first_options,
         time_control: tc,
-        openings: parse_openings(&text),
+        openings,
         max_games: games,
         concurrency,
         sprt,
