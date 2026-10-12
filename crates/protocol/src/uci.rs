@@ -12,6 +12,8 @@
 //! < option name SyzygyPath type string default <empty>
 //! < option name SyzygyProbeDepth type spin default 1 min 1 max 100
 //! < option name SyzygyProbeLimit type spin default 7 min 0 max 7
+//! < option name OwnBook type check default false
+//! < option name BookFile type string default <empty>
 //! < option name Move Overhead type spin default 30 min 0 max 5000
 //! < option name UCI_Chess960 type check default false
 //! < uciok
@@ -39,6 +41,7 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use cb2026_chess::{Move, Position};
+use cb2026_engine::book::OpeningBook;
 use cb2026_engine::tablebase::TablebaseLoader;
 use cb2026_engine::tt::{DEFAULT_HASH_MB, MAX_HASH_MB};
 use cb2026_engine::{AUTHOR, Engine, Limits, MAX_THREADS, SearchInfo, id_name};
@@ -156,6 +159,11 @@ impl Session {
                     &self.output,
                     "option name SyzygyProbeLimit type spin default 7 min 0 max 7",
                 );
+                send(&self.output, "option name OwnBook type check default false");
+                send(
+                    &self.output,
+                    "option name BookFile type string default <empty>",
+                );
                 send(
                     &self.output,
                     "option name Move Overhead type spin default 30 min 0 max 5000",
@@ -254,6 +262,28 @@ impl Session {
                     &format!("info string SyzygyProbeDepth must be 1-100, not '{value}'"),
                 ),
             },
+            "ownbook" => {
+                if let Some(engine) = self.engine.as_mut() {
+                    engine.own_book = value.eq_ignore_ascii_case("true");
+                }
+            }
+            "bookfile" => {
+                if let Some(engine) = self.engine.as_mut() {
+                    let message = match load_book(value) {
+                        Ok(Some(book)) => {
+                            let message = format!("opening book with {} entries", book.len());
+                            engine.book = Some(Arc::new(book));
+                            message
+                        }
+                        Ok(None) => {
+                            engine.book = None;
+                            "no opening book".to_string()
+                        }
+                        Err(e) => format!("opening book not loaded: {e}"),
+                    };
+                    send(&self.output, &format!("info string {message}"));
+                }
+            }
             "syzygyprobelimit" => match value.parse::<u32>() {
                 Ok(limit) if limit <= 7 => {
                     if let Some(engine) = self.engine.as_mut() {
@@ -402,6 +432,15 @@ fn parse_go(position: &Position, args: &[&str]) -> Limits {
         i += 1;
     }
     limits
+}
+
+/// Reads a Polyglot book from `path` (`None` for an empty path or `<empty>`).
+fn load_book(path: &str) -> Result<Option<OpeningBook>, String> {
+    if path.trim().is_empty() || path == "<empty>" {
+        return Ok(None);
+    }
+    let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
+    OpeningBook::from_bytes(&bytes).map(Some)
 }
 
 /// Formats progress as a UCI `info` line.
@@ -615,6 +654,26 @@ mod tests {
                 .any(|l| l.contains("SyzygyProbeDepth must be 1-100"))
         );
         assert!(!lines.iter().any(|l| l.contains("SyzygyProbeLimit must")));
+    }
+
+    #[test]
+    fn book_options() {
+        let lines = session(
+            "uci\nsetoption name BookFile value /no/such/book.bin\nsetoption name OwnBook value true\nposition startpos\ngo depth 2\nisready\n",
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|l| l == "option name OwnBook type check default false")
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|l| l.contains("opening book not loaded: /no/such/book.bin"))
+        );
+        // No book loaded: it searches as usual.
+        assert!(lines.iter().any(|l| l.starts_with("info depth 2")));
+        assert!(lines.iter().any(|l| l.starts_with("bestmove ")));
     }
 
     #[test]
