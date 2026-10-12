@@ -22,6 +22,7 @@
 - [Null-move pruning](ch12-nullmove.md)
 - [Late move reductions and pruning](ch13-lmr.md)
 - [Futility, razoring and SEE pruning](ch14-pruning.md)
+    - [Extensions and reductions](ch14-1-extensions.md)
 
 # Part III: Evaluation
 
