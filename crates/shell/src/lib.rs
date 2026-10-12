@@ -36,6 +36,7 @@
 //! | `set hash <MB>` | Transposition table size |
 //! | `set threads <N>` | Search threads (Lazy SMP) |
 //! | `new960 [n]` | Chess960 starting position `n` (0–959; random if left out) |
+//! | `level <0-20>`, `elo <n>\|off`, `set multipv <N>` | Strength level; limit to an Elo; show several lines |
 //! | `set syzygy <path>`, `tb` | Load Syzygy tablebases; show the tablebase result for the position |
 //! | `set book <path>`, `set ownbook on\|off`, `book` | Load a Polyglot opening book; play from it; show its moves here |
 //! | `set killers\|countermoves\|history on\|off` | Switch a quiet-move ordering heuristic off |
@@ -81,6 +82,7 @@ use cb2026_chess::{Bitboard, Color, Move, Piece, PieceType, Position, Square};
 use std::time::Duration;
 
 use cb2026_engine::book::OpeningBook;
+use cb2026_engine::levels;
 use cb2026_engine::tablebase::{self, TbWdl};
 use cb2026_engine::tt::MAX_HASH_MB;
 use cb2026_engine::{Engine, Limits, MAX_THREADS, NAME, Score, SearchInfo, bench, eval, search};
@@ -123,6 +125,9 @@ Commands:
   set threads <N>      Search threads (Lazy SMP, default 1)
   new960 [n]           Chess960 starting position n (0-959, 518 is the standard one;
                        random without n)
+  level <0-20>         The engine's strength level (20 = full strength)
+  elo <n>|off          Limit the engine's strength to about n Elo (1000-2400), or not
+  set multipv <N>      Search and show the N best lines
   set syzygy <path>    Load Syzygy endgame tablebases from a directory (none: unload)
   tb                   The tablebase result and best move for this position
   set book <path>      Load a Polyglot opening book (.bin; none: unload)
@@ -332,6 +337,27 @@ impl Shell {
             "zobrist" => self.zobrist(),
             "eval" => self.eval(),
             "tb" => self.tablebase(),
+            "level" => match args.parse::<u32>() {
+                Ok(level) if level <= levels::FULL_STRENGTH => {
+                    self.engine.skill_level = level;
+                    Response::text(self.strength_text())
+                }
+                _ => Response::text("Usage: level <0-20>"),
+            },
+            "elo" => match args {
+                "off" => {
+                    self.engine.limit_strength = false;
+                    Response::text(self.strength_text())
+                }
+                _ => match args.parse::<u32>() {
+                    Ok(elo) if (levels::ELO_RANGE.0..=levels::ELO_RANGE.1).contains(&elo) => {
+                        self.engine.limit_strength = true;
+                        self.engine.elo = elo;
+                        Response::text(self.strength_text())
+                    }
+                    _ => Response::text("Usage: elo <1000-2400>|off"),
+                },
+            },
             "book" => self.book_moves(),
             // Anything else that is a legal move is played.
             other if parse_move(&self.position, other).is_some() => self.play(line),
@@ -404,8 +430,13 @@ impl Shell {
         let mut text = String::new();
         if self.think {
             for info in &infos {
+                let line = if self.engine.multipv > 1 {
+                    format!(" #{}", info.multipv)
+                } else {
+                    String::new()
+                };
                 text.push_str(&format!(
-                    "  depth {:>2}  {:>7}  {:>10} nodes  {:>6} ms  {}\n",
+                    "  depth {:>2}{line}  {:>7}  {:>10} nodes  {:>6} ms  {}\n",
                     info.depth,
                     score_text(info.score),
                     info.nodes,
@@ -415,7 +446,8 @@ impl Shell {
             }
         }
         let san = self.position.to_san(mv);
-        match infos.last() {
+        // The summary describes the main line (a weaker level may still play another move).
+        match infos.iter().rev().find(|info| info.multipv == 1) {
             Some(info) => text.push_str(&format!(
                 "{NAME} plays {san}   (depth {}, {}, {} nodes, {} ms)",
                 info.depth,
@@ -615,6 +647,25 @@ impl Shell {
     }
 
     /// Lists every part of the position's Zobrist key, then their XOR.
+    /// The engine's strength setting, in words.
+    fn strength_text(&self) -> String {
+        let level = self.engine.level();
+        if level >= levels::FULL_STRENGTH {
+            return "Strength: full".to_string();
+        }
+        let settings = levels::settings(level);
+        let elo = if self.engine.limit_strength {
+            format!(", about {} Elo (provisional)", self.engine.elo)
+        } else {
+            String::new()
+        };
+        format!(
+            "Strength: level {level}{elo}: {} nodes per move, choosing among the best {} moves",
+            settings.nodes.unwrap_or_default(),
+            settings.candidates
+        )
+    }
+
     /// `book`: the opening book's moves for the position.
     fn book_moves(&self) -> Response {
         let Some(book) = &self.engine.book else {
@@ -908,6 +959,10 @@ impl Shell {
                     Err(e) => format!("Tablebases not loaded: {e}"),
                 });
             }
+            (Some("multipv"), Some(n)) => match n.parse::<usize>() {
+                Ok(n) if (1..=256).contains(&n) => self.engine.multipv = n,
+                _ => return Response::text("Usage: set multipv <1-256>"),
+            },
             (Some("threads"), Some(n)) => match n.parse::<usize>() {
                 Ok(n) if (1..=MAX_THREADS).contains(&n) => self.engine.threads = n,
                 _ => return Response::text(format!("Usage: set threads <1-{MAX_THREADS}>")),
@@ -1346,6 +1401,25 @@ mod tests {
         );
         assert!(shell.execute("fen").output.starts_with("bbqnnrkr/"));
         assert!(shell.execute("new960 960").output.starts_with("Usage"));
+        assert_eq!(shell.execute("level 20").output, "Strength: full");
+        assert!(
+            shell
+                .execute("level 5")
+                .output
+                .starts_with("Strength: level 5: 3037 nodes")
+        );
+        assert!(shell.execute("elo 1300").output.contains("about 1300 Elo"));
+        assert!(shell.execute("elo 900").output.starts_with("Usage"));
+        assert!(shell.execute("level 21").output.starts_with("Usage"));
+        shell.execute("elo off");
+        shell.execute("level 20");
+        shell.execute("set multipv 2");
+        shell.execute("new");
+        shell.execute("set depth 2");
+        shell.execute("think on");
+        let out = shell.execute("go").output;
+        assert!(out.contains("depth  2 #2"), "{out}");
+        shell.execute("set multipv 1");
         shell.execute("new");
         assert_eq!(
             shell.execute("book").output,

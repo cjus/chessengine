@@ -14,6 +14,10 @@
 //! < option name SyzygyProbeLimit type spin default 7 min 0 max 7
 //! < option name OwnBook type check default false
 //! < option name BookFile type string default <empty>
+//! < option name MultiPV type spin default 1 min 1 max 256
+//! < option name Skill Level type spin default 20 min 0 max 20
+//! < option name UCI_LimitStrength type check default false
+//! < option name UCI_Elo type spin default 2400 min 1000 max 2400
 //! < option name Move Overhead type spin default 30 min 0 max 5000
 //! < option name UCI_Chess960 type check default false
 //! < uciok
@@ -42,6 +46,7 @@ use std::time::Duration;
 
 use cb2026_chess::{Move, Position};
 use cb2026_engine::book::OpeningBook;
+use cb2026_engine::levels::{ELO_RANGE, FULL_STRENGTH};
 use cb2026_engine::tablebase::TablebaseLoader;
 use cb2026_engine::tt::{DEFAULT_HASH_MB, MAX_HASH_MB};
 use cb2026_engine::{AUTHOR, Engine, Limits, MAX_THREADS, SearchInfo, id_name};
@@ -166,6 +171,27 @@ impl Session {
                 );
                 send(
                     &self.output,
+                    "option name MultiPV type spin default 1 min 1 max 256",
+                );
+                send(
+                    &self.output,
+                    &format!(
+                        "option name Skill Level type spin default {FULL_STRENGTH} min 0 max {FULL_STRENGTH}"
+                    ),
+                );
+                send(
+                    &self.output,
+                    "option name UCI_LimitStrength type check default false",
+                );
+                send(
+                    &self.output,
+                    &format!(
+                        "option name UCI_Elo type spin default {} min {} max {}",
+                        ELO_RANGE.1, ELO_RANGE.0, ELO_RANGE.1
+                    ),
+                );
+                send(
+                    &self.output,
                     "option name Move Overhead type spin default 30 min 0 max 5000",
                 );
                 send(
@@ -260,6 +286,47 @@ impl Session {
                 _ => send(
                     &self.output,
                     &format!("info string SyzygyProbeDepth must be 1-100, not '{value}'"),
+                ),
+            },
+            "multipv" => match value.parse::<usize>() {
+                Ok(n) if (1..=256).contains(&n) => {
+                    if let Some(engine) = self.engine.as_mut() {
+                        engine.multipv = n;
+                    }
+                }
+                _ => send(
+                    &self.output,
+                    &format!("info string MultiPV must be 1-256, not '{value}'"),
+                ),
+            },
+            "skill level" => match value.parse::<u32>() {
+                Ok(level) if level <= FULL_STRENGTH => {
+                    if let Some(engine) = self.engine.as_mut() {
+                        engine.skill_level = level;
+                    }
+                }
+                _ => send(
+                    &self.output,
+                    &format!("info string Skill Level must be 0-{FULL_STRENGTH}, not '{value}'"),
+                ),
+            },
+            "uci_limitstrength" => {
+                if let Some(engine) = self.engine.as_mut() {
+                    engine.limit_strength = value.eq_ignore_ascii_case("true");
+                }
+            }
+            "uci_elo" => match value.parse::<u32>() {
+                Ok(elo) if (ELO_RANGE.0..=ELO_RANGE.1).contains(&elo) => {
+                    if let Some(engine) = self.engine.as_mut() {
+                        engine.elo = elo;
+                    }
+                }
+                _ => send(
+                    &self.output,
+                    &format!(
+                        "info string UCI_Elo must be {}-{}, not '{value}'",
+                        ELO_RANGE.0, ELO_RANGE.1
+                    ),
                 ),
             },
             "ownbook" => {
@@ -453,9 +520,10 @@ fn info_line(info: &SearchInfo, chess960: bool) -> String {
     let ms = info.time.as_millis();
     let nps = info.nodes as u128 * 1000 / ms.max(1);
     format!(
-        "info depth {} seldepth {} score {} nodes {} nps {nps} time {ms} hashfull {} tbhits {} pv {}",
+        "info depth {} seldepth {} multipv {} score {} nodes {} nps {nps} time {ms} hashfull {} tbhits {} pv {}",
         info.depth,
         info.seldepth,
+        info.multipv,
         info.score,
         info.nodes,
         info.hashfull,
@@ -674,6 +742,42 @@ mod tests {
         // No book loaded: it searches as usual.
         assert!(lines.iter().any(|l| l.starts_with("info depth 2")));
         assert!(lines.iter().any(|l| l.starts_with("bestmove ")));
+    }
+
+    #[test]
+    fn multipv_reports_several_lines() {
+        let lines =
+            session("setoption name MultiPV value 3\nposition startpos\ngo depth 4\nisready\n");
+        let depth2: Vec<&String> = lines
+            .iter()
+            .filter(|l| l.starts_with("info depth 2 "))
+            .collect();
+        assert_eq!(depth2.len(), 3, "{lines:?}");
+        for (k, line) in depth2.iter().enumerate() {
+            assert!(line.contains(&format!(" multipv {} ", k + 1)), "{line}");
+        }
+        // Three different first moves.
+        let firsts: std::collections::HashSet<&str> = depth2
+            .iter()
+            .map(|l| l.split(" pv ").nth(1).unwrap().split(' ').next().unwrap())
+            .collect();
+        assert_eq!(firsts.len(), 3);
+    }
+
+    #[test]
+    fn strength_options() {
+        let lines = session(
+            "setoption name Skill Level value 3\nsetoption name UCI_LimitStrength value true\nsetoption name UCI_Elo value 1500\nposition startpos\ngo movetime 200\nisready\n",
+        );
+        assert!(!lines.iter().any(|l| l.starts_with("info string")));
+        assert!(lines.iter().any(|l| l.starts_with("bestmove ")));
+        // Weak levels report one line, though they search several to choose from.
+        assert!(!lines.iter().any(|l| l.contains(" multipv 2 ")));
+        let bad = session(
+            "setoption name UCI_Elo value 3000\nsetoption name Skill Level value 21\nisready\n",
+        );
+        assert!(bad.iter().any(|l| l.contains("UCI_Elo must be 1000-2400")));
+        assert!(bad.iter().any(|l| l.contains("Skill Level must be 0-20")));
     }
 
     #[test]

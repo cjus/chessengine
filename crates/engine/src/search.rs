@@ -457,16 +457,23 @@ impl<'a> Searcher<'a> {
         self.shared_nodes = Some(counter);
     }
 
-    /// Whether the search must end now (stop flag, time or node limit). Checked every
-    /// [`CHECK_INTERVAL`] nodes, since reading the clock isn't free.
+    /// Whether the search must end now (stop flag, time or node limit). The stop flag and
+    /// the clock are checked every [`CHECK_INTERVAL`] nodes, since reading the clock isn't
+    /// free.
     fn should_stop(&mut self) -> bool {
-        if !self.aborted && self.nodes.is_multiple_of(CHECK_INTERVAL) {
+        if self.aborted {
+            return true;
+        }
+        // The node limit is checked at every node: it's free, and strength levels use small
+        // limits (a few hundred nodes) that must be exact.
+        if self.max_nodes.is_some_and(|n| self.nodes >= n) {
+            self.aborted = true;
+        } else if self.nodes.is_multiple_of(CHECK_INTERVAL) {
             if let Some(counter) = self.shared_nodes {
                 counter.fetch_add(CHECK_INTERVAL, Ordering::Relaxed);
             }
             self.aborted = self.stop.load(Ordering::Relaxed)
-                || self.deadline.is_some_and(|d| Instant::now() >= d)
-                || self.max_nodes.is_some_and(|n| self.nodes >= n);
+                || self.deadline.is_some_and(|d| Instant::now() >= d);
         }
         self.aborted
     }

@@ -24,3 +24,4 @@ self-play unless noted, so it overstates gains against other engines.
 | 2026-10-11 | Stage 17: Lazy SMP with a lock-free transposition table, one thread each (vs stage 16; non-regression) | cjus/chessengine#46 | SPRT | 8+0.08, test Mac (M1 Max), 7 games at a time | 15188 | +4196 −4192 =6800, about +0.1 ± 4.1 | passed (2.95 ≥ 2.94), [−5, 0] |
 | 2026-10-11 | Stage 18, part 1: Syzygy tablebases + Chess960 start positions | cjus/chessengine#49 | None: no functional change | — | — | — | bench unchanged |
 | 2026-10-11 | Stage 18, part 2: Polyglot opening books | cjus/chessengine#50 | None: no functional change | — | — | — | bench unchanged |
+| 2026-10-11 | Stage 19: strength levels + MultiPV (levels not yet calibrated, #36) | cjus/chessengine#51 | None: no functional change | — | — | — | bench unchanged |
