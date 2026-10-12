@@ -31,7 +31,7 @@ it in every PR that changes the picture (a stage merged, a result in, a new bloc
 | Work | Branch | Bench | State |
 | --- | --- | --- | --- |
 | Shell: `stats`, `tree`, `explain`, `eval diff`, `see`, `techniques`, `ab` | #53 | 1207153 | Merged, no functional change |
-| Shell: `redo`, clocks, `hint`, `resign`, `draw`, PGN save/load | `claude/shell-play` | 1207153 | Done, no functional change |
+| Shell: `redo`, clocks, `hint`, `resign`, `draw`, PGN save/load | #54 | 1207153 | Merged, no functional change |
 | Shell: `match`, `selfplay`, `uci`, `xboard` | `claude/shell-match` | 1207153 | Done, no functional change |
 | M5: check extensions | `claude/m5-check-extension` | 1207153 | Off by default: −8.3 ± 17.7 after 840 games (no gain) |
 | M5: internal iterative reductions | `claude/m5-iir` | 765380 | SPRT vs stage 20: about +20 ± 29 after 280 games when the cloud session ended; **rerun it** |

@@ -20,7 +20,10 @@
 //! | `board unicode\|ascii` | Chess symbols or letters |
 //! | `color on\|off` | Coloured squares |
 //! | `e4`, `Nf3`, `e2e4`, `move e4 e5 Nf3 ...` | Play moves (algebraic or UCI notation) |
-//! | `undo` | Take back the last move |
+//! | `undo`, `redo` | Take back the last move; play it again |
+//! | `time 5+3`, `time off` | Play with clocks; the engine plays to its clock |
+//! | `hint`, `resign`, `draw` | The engine's suggestion; resign; offer a draw |
+//! | `pgn`, `pgn save\|load <file>` | The game as PGN; save it or load one |
 //! | `go [depth N\|nodes N\|movetime MS]` | The engine moves now and explains its choice |
 //! | `play white\|black\|both\|none` | Which sides the engine plays |
 //! | `legal`, `moves` | List the legal moves |
@@ -65,6 +68,7 @@
 #![forbid(unsafe_code)]
 
 mod explain;
+mod game;
 pub mod render;
 
 use std::io::{self, BufRead, Write};
@@ -89,6 +93,7 @@ use cb2026_engine::stats::SearchStats;
 use cb2026_engine::tablebase::{self, TbWdl};
 use cb2026_engine::tt::MAX_HASH_MB;
 use cb2026_engine::{Engine, Limits, MAX_THREADS, NAME, Score, SearchInfo, bench, eval, search};
+use game::{Clock, Outcome, Played};
 pub use render::Style;
 
 /// The help text for the `help` command.
@@ -102,7 +107,12 @@ Commands:
   color on|off         Coloured squares
   e4, Nf3, O-O, e2e4   Play a move (algebraic or UCI notation)
   move <m1> <m2> ...   Play several moves
-  undo                 Take back the last move
+  undo, redo           Take back the last move; play it again
+  time <min>+<sec>     Play with clocks (like 5+3; `time off` to stop, `time` to show them)
+  hint                 The engine's suggestion for the side to move
+  resign, draw         Resign, or offer a draw (the engine accepts if it isn't better)
+  pgn                  Show the game as PGN, with the engine's score/depth as comments
+  pgn save|load <file> Save the game to a PGN file, or load the first game from one
   go [depth N|nodes N|movetime MS]
                        The engine makes a move now and explains its choice
   play white|black|both|none
@@ -193,8 +203,14 @@ impl Response {
 #[derive(Clone, Debug)]
 pub struct Shell {
     position: Position,
-    /// Earlier positions and the moves played from them (in SAN), for `undo` and display.
-    history: Vec<(Position, String)>,
+    /// The moves played so far, for `undo`, the display and PGN.
+    history: Vec<Played>,
+    /// Moves taken back with `undo`, most recent last, for `redo`.
+    future: Vec<Move>,
+    /// How the game ended, if it ended by resignation, agreement or time.
+    outcome: Option<Outcome>,
+    /// The chess clocks, if the game has them.
+    clock: Option<Clock>,
     style: Style,
     engine: Engine,
     /// Which sides the engine plays, indexed by [`Color::index`].
@@ -218,6 +234,9 @@ impl Shell {
         Shell {
             position: Position::startpos(),
             history: Vec::new(),
+            future: Vec::new(),
+            outcome: None,
+            clock: None,
             style,
             engine,
             engine_plays: [false, false],
@@ -311,12 +330,20 @@ impl Shell {
             },
             "move" | "m" => self.play(args),
             "undo" => match self.history.pop() {
-                Some((previous, _)) => {
-                    self.position = previous;
+                Some(played) => {
+                    self.position = played.before;
+                    self.future.push(played.mv);
+                    self.outcome = None;
                     self.show()
                 }
                 None => Response::text("Nothing to undo."),
             },
+            "redo" => self.redo(),
+            "time" => self.time_control(args),
+            "hint" => self.hint(),
+            "resign" => self.resign(),
+            "draw" => self.draw(),
+            "pgn" => self.pgn(args),
             "legal" | "moves" => self.legal(),
             "perft" | "divide" => match args.parse::<u32>() {
                 Ok(depth) if (1..=10).contains(&depth) => self.perft(depth, command == "divide"),
@@ -392,20 +419,30 @@ impl Shell {
     }
 
     fn show(&self) -> Response {
-        let last = self.history.last().map(|(before, san)| {
-            let number = before.fullmove_number();
-            match before.side_to_move() {
-                Color::White => format!("{number}. {san}"),
-                Color::Black => format!("{number}... {san}"),
+        let last = self.history.last().map(|played| {
+            let number = played.before.fullmove_number();
+            match played.before.side_to_move() {
+                Color::White => format!("{number}. {}", played.san),
+                Color::Black => format!("{number}... {}", played.san),
             }
         });
-        Response::text(render::board(&self.position, self.style, last.as_deref()))
+        let mut board = render::board(&self.position, self.style, last.as_deref());
+        if let Some(clocks) = self.clock_line() {
+            board.push_str(&clocks);
+            board.push('\n');
+        }
+        Response::text(board)
     }
 
     /// Starts over from `position`, forgetting the move history.
     fn set_position(&mut self, position: Position) {
         self.position = position;
         self.history.clear();
+        self.future.clear();
+        self.outcome = None;
+        if let Some(clock) = self.clock.as_mut() {
+            clock.restart();
+        }
     }
 
     /// Plays the space-separated moves in `moves`, stopping at the first one that isn't legal,
@@ -425,22 +462,35 @@ impl Shell {
                 ));
                 return response;
             };
-            self.make_move(mv);
+            self.make_move(mv, None);
         }
         self.engine_replies(String::new())
     }
 
-    /// Plays `mv`, recording it for `undo` and the move display.
-    fn make_move(&mut self, mv: Move) {
+    /// Plays `mv` (with a comment for PGN), stopping the mover's clock and recording it for
+    /// `undo` and the move display.
+    fn make_move(&mut self, mv: Move, comment: Option<String>) {
+        self.run_clock();
+        // Replaying the move `undo` took back keeps the rest of the `redo` list.
+        if self.future.last() == Some(&mv) {
+            self.future.pop();
+        } else {
+            self.future.clear();
+        }
         let san = self.position.to_san(mv);
-        self.history.push((self.position.clone(), san));
+        self.history.push(Played {
+            before: self.position.clone(),
+            mv,
+            san,
+            comment,
+        });
         self.position.make_move(mv);
     }
 
     /// The engine's choice in the current position, with its thinking (one line per depth,
     /// if `think` is on) and a summary.
-    fn engine_move(&mut self, limits: &Limits) -> Option<(Move, String)> {
-        let hashes: Vec<u64> = self.history.iter().map(|(pos, _)| pos.hash()).collect();
+    fn engine_move(&mut self, limits: &Limits) -> Option<(Move, String, Option<String>)> {
+        let hashes: Vec<u64> = self.history.iter().map(|p| p.before.hash()).collect();
         let stop = AtomicBool::new(false);
         let mut infos: Vec<SearchInfo> = Vec::new();
         let result = self.engine.search(
@@ -472,7 +522,9 @@ impl Shell {
         }
         let san = self.position.to_san(mv);
         // The summary describes the main line (a weaker level may still play another move).
-        match infos.iter().rev().find(|info| info.multipv == 1) {
+        let main = infos.iter().rev().find(|info| info.multipv == 1);
+        let comment = main.map(|info| format!("{}/{}", score_text(info.score), info.depth));
+        match main {
             Some(info) => text.push_str(&format!(
                 "{NAME} plays {san}   (depth {}, {}, {} nodes, {} ms)",
                 info.depth,
@@ -482,11 +534,15 @@ impl Shell {
             )),
             None => text.push_str(&format!("{NAME} plays {san}")),
         }
-        Some((mv, text))
+        Some((mv, text, comment))
     }
 
-    /// The limits for the engine's own moves (`set depth` or `set movetime`).
+    /// The limits for the engine's own moves: the clock if the game has one, else
+    /// `set depth` or `set movetime`.
     fn default_limits(&self) -> Limits {
+        if let Some(limits) = self.clock_limits() {
+            return limits;
+        }
         match self.engine_limit {
             EngineLimit::Depth(depth) => Limits::depth(depth),
             EngineLimit::Movetime(ms) => Limits {
@@ -502,12 +558,12 @@ impl Shell {
         while self.game_over().is_none() && self.engine_plays[self.position.side_to_move().index()]
         {
             let limits = self.default_limits();
-            let Some((mv, summary)) = self.engine_move(&limits) else {
+            let Some((mv, summary, comment)) = self.engine_move(&limits) else {
                 break;
             };
             log.push_str(&summary);
             log.push('\n');
-            self.make_move(mv);
+            self.make_move(mv, comment);
         }
         let mut response = self.show();
         response.output.insert_str(0, &log);
@@ -541,10 +597,10 @@ impl Shell {
                 _ => return Response::text("Usage: go [depth N] [nodes N] [movetime MS]"),
             }
         }
-        let Some((mv, summary)) = self.engine_move(&limits) else {
+        let Some((mv, summary, comment)) = self.engine_move(&limits) else {
             return Response::text("No legal moves.");
         };
-        self.make_move(mv);
+        self.make_move(mv, comment);
         self.engine_replies(format!("{summary}\n"))
     }
 
@@ -562,6 +618,9 @@ impl Shell {
 
     /// Why the game is over in the current position, if it is.
     fn game_over(&self) -> Option<String> {
+        if let Some(outcome) = &self.outcome {
+            return Some(outcome.reason.clone());
+        }
         let pos = &self.position;
         if pos.legal_moves().is_empty() {
             return Some(if pos.in_check() {
@@ -579,7 +638,7 @@ impl Shell {
         let repetitions = self
             .history
             .iter()
-            .filter(|(earlier, _)| earlier.hash() == pos.hash())
+            .filter(|played| played.before.hash() == pos.hash())
             .count();
         if repetitions >= 2 {
             return Some("Draw by threefold repetition.".to_string());
@@ -1135,6 +1194,106 @@ mod tests {
             },
             Engine::new(),
         )
+    }
+
+    #[test]
+    fn undo_and_redo() {
+        let mut shell = ascii_shell();
+        shell.execute("e4 e5 Nf3");
+        shell.execute("undo");
+        shell.execute("undo");
+        assert_eq!(shell.history.len(), 1);
+        shell.execute("redo");
+        shell.execute("redo");
+        assert_eq!(shell.history.len(), 3);
+        assert_eq!(shell.execute("redo").output, "Nothing to redo.");
+        // A different move forgets the moves taken back.
+        shell.execute("undo");
+        shell.execute("Nc3");
+        assert_eq!(shell.execute("redo").output, "Nothing to redo.");
+    }
+
+    #[test]
+    fn resigning_and_draws_end_the_game() {
+        let mut shell = ascii_shell();
+        shell.execute("e4");
+        assert_eq!(
+            shell.execute("resign").output,
+            "Black resigned: White wins."
+        );
+        assert!(shell.execute("e5").output.starts_with("The game is over"));
+        assert_eq!(shell.result_code(), "1-0");
+        shell.execute("undo");
+        assert_eq!(shell.result_code(), "*");
+        // Between two people, a draw offer is accepted.
+        assert_eq!(shell.execute("draw").output, "Draw agreed.");
+        assert_eq!(shell.result_code(), "1/2-1/2");
+        // The engine, a queen up, declines.
+        shell.execute("fen 4k3/8/8/8/8/8/8/3QK3 b - - 0 1");
+        shell.execute("set depth 3");
+        shell.engine_plays = [true, false];
+        let out = shell.execute("draw").output;
+        assert!(out.contains("declines"), "{out}");
+    }
+
+    #[test]
+    fn hints_suggest_without_playing() {
+        let mut shell = ascii_shell();
+        shell.execute("fen 6k1/5ppp/8/8/8/8/8/4R1K1 w - - 0 1");
+        shell.execute("set depth 3");
+        let hint = shell.execute("hint").output;
+        assert!(hint.starts_with("Hint: Re8#"), "{hint}");
+        assert!(shell.history.is_empty());
+    }
+
+    #[test]
+    fn pgn_saves_and_loads_games() {
+        let mut shell = ascii_shell();
+        shell.execute("set depth 2");
+        shell.execute("e4");
+        shell.execute("go");
+        let pgn = shell.execute("pgn").output;
+        assert!(pgn.contains("[White \"Player\"]"), "{pgn}");
+        // The engine's move carries its score and depth.
+        assert!(pgn.contains("1. e4 ") && pgn.contains("/2}"), "{pgn}");
+        assert!(pgn.ends_with(" *"), "{pgn}");
+        let path = std::env::temp_dir().join(format!("cb2026-shell-{}.pgn", std::process::id()));
+        let path = path.to_str().unwrap();
+        assert!(
+            shell
+                .execute(&format!("pgn save {path}"))
+                .output
+                .starts_with("Saved")
+        );
+        let fen = shell.position().to_fen();
+        shell.execute("new");
+        let loaded = shell.execute(&format!("pgn load {path}")).output;
+        assert!(loaded.starts_with("Loaded Player vs cb2026"), "{loaded}");
+        assert_eq!(shell.position().to_fen(), fen);
+        assert_eq!(shell.history.len(), 2);
+        std::fs::remove_file(path).unwrap();
+        assert!(
+            shell
+                .execute("pgn load /no/such/file.pgn")
+                .output
+                .starts_with("Couldn't load")
+        );
+    }
+
+    #[test]
+    fn clocks_run_and_flag() {
+        let mut shell = ascii_shell();
+        assert!(shell.execute("time 5+3").output.starts_with("Clocks set"));
+        let board = shell.execute("e4").output;
+        assert!(board.contains("Clocks: White 5:0"), "{board}");
+        // A clock too short to make a move in.
+        shell.execute("time 0.0001+0");
+        std::thread::sleep(Duration::from_millis(50));
+        let out = shell.execute("e5").output;
+        assert!(out.contains("Black lost on time."), "{out}");
+        assert_eq!(shell.result_code(), "1-0");
+        assert_eq!(shell.execute("time off").output, "Clocks off.");
+        assert!(shell.execute("time fast").output.starts_with("Usage"));
     }
 
     #[test]
