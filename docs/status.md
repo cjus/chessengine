@@ -5,7 +5,8 @@ is blocked on whom, and how to carry on. **Claude: read this first in a new sess
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
 *Last updated 2026-10-12 (M5: the check extension, IIR and three versions of improving merged,
-with chapter 14.1; improving is off by default and set aside).*
+with chapter 14.1; improving is off by default and set aside; time losses: details recorded,
+stress test #66).*
 
 ## Stages
 
@@ -61,6 +62,7 @@ wait on rating gauntlets or GUI checks.
 
 The open [`needs-carlos` issues](https://github.com/cjus/chessengine/issues?q=is%3Aopen+label%3Aneeds-carlos):
 
+- #66: time-loss stress test at 1+0.01 on the M3, and the problem lines from two earlier logs.
 - #36: choose the gauntlet reference engines; run the M2/M3 gauntlets.
 - #37: GUI compatibility matrix; Lichess bot account.
 - #24 (M1 GUI games).
@@ -130,8 +132,17 @@ Run the full test suite on every commit you replay, not only at the tip: each be
 ### Next work, in PRD order
 
 1. Time losses: IIR's SPRT had two in 2,337 games at 8+0.08, one for each engine, so not caused by
-   IIR (the referee allows 50 ms over the clock); improving's 1,142 games had none. Find the
-   cause before the M5 robustness run, which must be clean over 10,000 games.
+   IIR (the referee allows 50 ms over the clock); improving's 1,142 games (#60) had none. What we
+   know (2026-10-12):
+   - **A stall, not a long think:** cb2026 never plans more than half its remaining clock and
+     checks the clock every 1,024 nodes, so a loss means a stall of 200 ms or more.
+   - **Not Claude's builds:** nothing heavy ran on the Mac during IIR's test.
+   - **#67 records the details:** each loss now names the move, the time taken and the clock.
+     `mac-sprt.sh` lists the losses in its PR comment and keeps the games.
+
+   Next: #66, a stress test at 1+0.01 on the M3 (2,000 games, about 15 minutes), plus the
+   problem lines from #63's and #65's logs. Find the cause before the M5 robustness run, which
+   must be clean over 10,000 games.
 2. Milestone gates, once #36 is answered: gauntlets for M2–M4, level calibration (the
    calibration script is still to write, using `crates/tools/src/gauntlet.rs`).
 3. More M5 strength work, each change with an SPRT. Candidates: continuation history,

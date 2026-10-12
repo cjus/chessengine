@@ -68,9 +68,20 @@ tool's last lines count the games that ended badly, per engine:
 Problems for target/release/cb2026: 0 time losses, 0 illegal moves, 0 failures
 ```
 
-followed by the reasons for the first few. A robustness run is a long match at each of those
-time controls (`--tc 1+0.01`, `--tc 10+0.1`, `--tc 40/60`), for example against the previous
-release.
+followed by the reasons for the first few. A time loss names the move, how long the engine
+took and what was on its clock:
+
+```text
+  White (cb2026 0.1.0) lost on time at move 87: took 412 ms with 260 ms on its clock
+```
+
+A little over the clock points at the engine's time management or its `Move Overhead`; hundreds
+of milliseconds over points at the machine stalling the process. (cb2026 never plans more than
+half its remaining clock, so its own losses should be the second kind.) Save the games with
+`--pgn <file>` to look at the ones that went wrong.
+
+A robustness run is a long match at each of those time controls (`--tc 1+0.01`, `--tc 10+0.1`,
+`--tc 40/60`), for example against the previous release.
 
 ```sh
 ## Quick matches from the shell
@@ -97,7 +108,9 @@ scripts/mac-sprt.sh <PR number> [elo0 elo1] [time control]
 ```
 
 This builds the PR and `main` in separate worktrees, runs the SPRT with one game per
-performance core minus one under `caffeinate`, and posts the result to the PR as a comment.
+performance core minus one under `caffeinate`, and posts the result to the PR as a comment,
+with any time losses, illegal moves and failures. The games are kept in
+`target/sprt/pr<PR>-<commit>.pgn` on the test machine.
 
 ```sh
 scripts/mac-gauntlet.sh <engines file> <issue or PR number> [games per engine] [tc] [git ref]

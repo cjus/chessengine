@@ -10,7 +10,8 @@
 # Written for the test Mac (Apple Silicon): it runs one game per performance core minus one,
 # keeps the Mac awake with caffeinate, and needs git, cargo and the GitHub CLI (`gh`, logged
 # in). Set OPENINGS=<file> to use another opening book (default: tests/data/openings.epd).
-# See docs/PRD.md, "Test machine".
+# The games are saved to target/sprt/pr<PR>-<commit>.pgn; time losses, illegal moves and
+# failures are listed in the PR comment. See docs/PRD.md, "Test machine".
 set -euo pipefail
 
 if [[ $# -lt 1 || "$1" == "-h" || "$1" == "--help" ]]; then
@@ -55,19 +56,25 @@ KEEP_AWAKE=()
 command -v caffeinate >/dev/null && KEEP_AWAKE=(caffeinate -i)
 
 LOG="$WORK/sprt.log"
+mkdir -p "$ROOT/target/sprt"
+PGN="$ROOT/target/sprt/pr$PR-$NEW_SHA.pgn"
 echo "Running SPRT [$ELO0, $ELO1] at $TC, $CONCURRENCY games at a time..."
 set +e
 ${KEEP_AWAKE[@]+"${KEEP_AWAKE[@]}"} "$WORK/new/target/release/match" \
   --engine "$WORK/new/target/release/cb2026" \
   --engine "$WORK/base/target/release/cb2026" \
   --tc "$TC" --games 40000 --concurrency "$CONCURRENCY" \
-  --openings "$OPENINGS" --sprt "$ELO0" "$ELO1" | tee "$LOG"
+  --openings "$OPENINGS" --sprt "$ELO0" "$ELO1" --pgn "$PGN" | tee "$LOG"
 set -e
 
 FINAL="$(grep '^Final:' "$LOG" | tail -1)"
 VERDICT="$(grep '^SPRT:' "$LOG" | tail -1)"
 LAST="$(grep 'LLR' "$LOG" | tail -1)"
 MACHINE="$(sysctl -n machdep.cpu.brand_string 2>/dev/null || uname -m)"
+# The "Problems" lines after the final score, with the engines' paths replaced by their names.
+PROBLEMS="$(sed -n '/^Final:/,$p' "$LOG" | grep -E '^(Problems for |  )' |
+  sed -e "s|$WORK/new/target/release/cb2026|PR #$PR|g" -e "s|$WORK/base/target/release/cb2026|main|g" \
+    -e 's|^Problems for |- |' -e 's|^  |  - |' || true)"
 
 gh pr comment "$PR" --body "<!-- sprt -->
 **SPRT result** (run by \`scripts/mac-sprt.sh\` on $MACHINE)
@@ -76,5 +83,10 @@ gh pr comment "$PR" --body "<!-- sprt -->
 - Bounds [$ELO0, $ELO1], time control $TC, $CONCURRENCY games at a time
 - ${FINAL#Final: }
 - ${LAST}
-- **${VERDICT#SPRT: }**"
+- **${VERDICT#SPRT: }**
+
+Problems (time losses, illegal moves, failures):
+${PROBLEMS:-- none reported}
+
+Games: \`target/sprt/pr$PR-$NEW_SHA.pgn\` on the test machine."
 echo "Posted the result to PR #$PR."

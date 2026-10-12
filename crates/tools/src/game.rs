@@ -338,10 +338,17 @@ pub fn play_game_watched(
         };
         if let Some(added) = added {
             if reply.elapsed > clocks[mover] + TIME_MARGIN {
+                // How far over it went tells an engine that thinks too long (a little over)
+                // from a stalled process (far over).
                 return finish(
                     Termination::TimeLoss,
                     Outcome::win_for(!side),
-                    format!("{side} ({name}) lost on time"),
+                    format!(
+                        "{side} ({name}) lost on time at move {}: took {} ms with {} ms on its clock",
+                        san_moves.len() / 2 + 1,
+                        reply.elapsed.as_millis(),
+                        clocks[mover].as_millis()
+                    ),
                     san_moves,
                 );
             }
