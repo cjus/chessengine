@@ -436,14 +436,15 @@ testing only and are never included in the repo.
 ### Test machine
 
 Decided 2026-10-10: long tests run on Carlos's Apple Silicon Mac, short ones in Claude's cloud
-sessions. Changed 2026-10-12: long tests run on an Apple M3 Mac on Carlos's network
+sessions. Changed 2026-10-12: long tests run on an Apple M3 Max on Carlos's network
 (cjus/chessengine#62). The M1 Max that ran them until then is Carlos's working machine, where
 Claude Code runs, and is no longer used for tests.
 
-**The test machine:** an Apple M3 Mac (model, cores and memory to be recorded from
-cjus/chessengine#62). Until 2026-10-12 it was an Apple M1 Max, 10 cores (8 performance, 2
+**The test machine:** Apple M3 Max, 14 cores (10 performance, 4 efficiency), 36 GB RAM
+(cjus/chessengine#62). Until 2026-10-12 it was an Apple M1 Max, 10 cores (8 performance, 2
 efficiency), 64 GB RAM. This gives:
-- **SPRTs and gauntlets:** one game per performance core minus one (7 on the M1 Max),
+- **SPRTs and gauntlets:** one game per performance core minus one (9 on the M3 Max, 7 on the
+  M1 Max),
   single-threaded engines, 16 MB hash each (two engine processes per game, well within memory).
 - **Lazy SMP tests:** up to one thread per performance core on one engine against one opponent,
   run on their own, not mixed with other tests.
@@ -451,19 +452,22 @@ efficiency), 64 GB RAM. This gives:
   (about 150 GB on disk) works only with an external drive and is not needed for v1.
 - **Speed baseline:** speed figures name the machine they were measured on. The ≥100 Mnps perft
   gate (278.8 Mnps) and the `bench` speeds up to 2026-10-12 are from the M1 Max; later ones are
-  from the M3.
+  from the M3 Max. Its setup check (2026-10-12): the perft suites exact at 369.6 Mnps
+  (665,777,044 nodes in 1.8 s), and `bench` 765380 nodes at 2.13 Mnps (the M1 Max: about
+  1.7).
 
 - **`scripts/mac-sprt.sh <PR>`** (Claude writes it, Carlos runs it): builds the PR branch and
   `main` in release mode, runs the SPRT with the `match` tool, and posts the result to the PR as a
   `<!-- sprt -->` comment through `gh`. Carlos only starts it and lets it run overnight;
   `scripts/mac-gauntlet.sh` does the same for rating gauntlets.
-- **Performance cores only:** concurrency = performance cores − 1, so 7 on the M1 Max (`sysctl
-  hw.perflevel0.physicalcpu` reports 8). Efficiency cores run at a different speed and would skew results
+- **Performance cores only:** concurrency = performance cores − 1, so 9 on the M3 Max (`sysctl
+  hw.perflevel0.physicalcpu` reports 10) and 7 on the M1 Max. Efficiency cores run at a different speed and would skew results
   at a fixed time control.
 - **Steady conditions:** `caffeinate -i` so the Mac doesn't sleep, on mains power, other heavy
   apps closed. A laptop may throttle under hours of full load; a Mac mini or Studio is steadier.
-- **Throughput:** at 8+0.08 a game takes about 20 s, so 7 games at once give roughly 1,200
-  games an hour. Early stages gain tens of Elo and their SPRTs finish in minutes, so they run
+- **Throughput:** at 8+0.08 a game takes about 26 s whatever the CPU, because the clock sets
+  its length. 7 games at once on the M1 Max gave about 970 games an hour (measured); 9 on the
+  M3 Max should give about 1,250. Early stages gain tens of Elo and their SPRTs finish in minutes, so they run
   in cloud sessions (4 cores, 3 games at once). Late-stage +3–5 Elo changes need 10,000–40,000
   games: one or more nights on the Mac.
 - **If the queue backs up** (likely during M5 strength work): set up OpenBench, the open-source
@@ -617,7 +621,8 @@ and Chessprogramming wiki engine lists and trademarks before the repo goes publi
 
 At 8+0.08 a game takes about 20 s, so the M1 Max running 7 games at once (8 performance cores − 1)
 plays about 1,200 games an hour; the 4-core cloud session (3 games at once) about 540. Replace
-these with measured figures from the first real SPRT runs.
+these with measured figures from the first real SPRT runs. Measured (2026-10-12): a game takes
+about 26 s, and the M1 Max played about 970 games an hour.
 
 ## Decisions
 
@@ -636,8 +641,9 @@ these with measured figures from the first real SPRT runs.
 - [x] Test machine: Carlos's Apple M1 Max (8 performance + 2 efficiency cores, 64 GB) for long
       SPRTs and gauntlets at 7 games at once, via scripts that post results to the PR; cloud
       sessions for short tests; OpenBench later if needed (2026-10-10).
-- [x] Test machine moves to an Apple M3 Mac on Carlos's network; the M1 Max is no longer used for
-      tests. Running them on AWS Batch is on hold (cjus/chessengine#61, #62, 2026-10-12).
+- [x] Test machine moves to an Apple M3 Max (10 performance + 4 efficiency cores, 36 GB) on
+      Carlos's network; the M1 Max is no longer used for tests. Running them on AWS Batch is on
+      hold (cjus/chessengine#61, #62, 2026-10-12).
 - [x] GUI testing is Mac-first and open-source-first: En Croissant and Cute Chess as the primary
       GUIs, plus Scid and XBoard (2026-10-10). Commercial GUIs: HIARCS Chess Explorer on the
       Mac and ChessBase on Windows; ChessBase for Mac and Shredder are not planned
