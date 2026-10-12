@@ -27,3 +27,4 @@ self-play unless noted, so it overstates gains against other engines.
 | 2026-10-11 | Stage 18, part 2: Polyglot opening books | cjus/chessengine#50 | None: no functional change | — | — | — | bench unchanged |
 | 2026-10-11 | Stage 19: strength levels + MultiPV (levels not yet calibrated, #36) | cjus/chessengine#51 | None: no functional change | — | — | — | bench unchanged |
 | 2026-10-11 | Stage 20: XBoard/CECP, pondering, conformance tests, Lichess setup | cjus/chessengine#52 | None: no functional change | — | — | — | bench unchanged |
+| 2026-10-11 | M5: check extensions, switched on (vs stage 20; off by default) | cjus/chessengine#57 | SPRT | 8+0.08, cloud, 3 games at a time | 840 | +229 −249 =362, about −8.3 ± 17.7 | no verdict (LLR −0.66), [0, 5]; no gain, so off by default |

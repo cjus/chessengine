@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-11 (stages 17–20 and the shell work merged; Claude Code on Carlos's Mac).*
+*Last updated 2026-10-12 (M5: the check extension merged, with chapter 14.1).*
 
 ## Stages
 
@@ -33,12 +33,12 @@ it in every PR that changes the picture (a stage merged, a result in, a new bloc
 | Shell: `stats`, `tree`, `explain`, `eval diff`, `see`, `techniques`, `ab` | #53 | 1207153 | Merged, no functional change |
 | Shell: `redo`, clocks, `hint`, `resign`, `draw`, PGN save/load | #54 | 1207153 | Merged, no functional change |
 | Shell: `match`, `selfplay`, `uci`, `xboard` | #55 | 1207153 | Merged, no functional change |
-| M5: check extensions | `claude/m5-check-extension` | 1207153 | Off by default: −8.3 ± 17.7 after 840 games (no gain). Waits for its book chapter (CLAUDE.md, definition of done, item 5) |
+| M5: check extensions | #57 | 1207153 | Merged, off by default: −8.3 ± 17.7 after 840 games (no gain) |
 | M5: internal iterative reductions | `claude/m5-iir` | 765380 | SPRT vs stage 20: about +20 to +28 (± 29) after about 300 games when the cloud session ended, no verdict; **rerun it** |
 | M5: improving heuristic | `claude/m5-improving` | 648634 | Not tested yet (test it against IIR) |
 
-The three M5 branches form one linear stack on `main`, in the order of the table: each is the one
-above it plus one commit. `claude/m5-improving` is the tip.
+The two M5 branches still open form a linear stack on `main`: `claude/m5-iir`, then
+`claude/m5-improving` on top of it.
 
 ## Milestones
 
@@ -72,8 +72,8 @@ Claude ran it on the idle Mac).
 
 ### Merging the stack
 
-For each branch in order (the check extension, IIR, improving), once it has its SPRT result and
-its book chapter:
+For each branch in order (IIR, improving), once it has its SPRT result and its section of
+chapter 14.1:
 
 1. Rebase the branch onto the latest `origin/main`. The commits below it are already in `main`,
    so only its own commits replay.
@@ -97,10 +97,9 @@ Run the full test suite on every commit you replay, not only at the tip: each be
 
 ### Results still to record
 
-- **M5 techniques:** IIR and improving need SPRTs. The check extension's result is in its commit
-  and in `crates/engine/src/search.rs`'s module docs. None of the three has a book chapter yet:
-  the plan is one chapter on extensions and reductions after stage 14, and the three branches
-  merge with it.
+- **M5 techniques:** IIR and improving need SPRTs. Each adds its section to chapter 14.1,
+  "Extensions and reductions", and its row to the ledger. (14.1 is a sub-chapter of chapter 14,
+  so the book's chapter numbers still match the stage numbers.)
 
 ### Testing strength
 
@@ -124,8 +123,8 @@ Run the full test suite on every commit you replay, not only at the tip: each be
 
 ### Next work, in PRD order
 
-1. M5: rerun IIR's SPRT on the Mac ([0, 5]), then test improving against IIR. Write the chapter
-   on extensions and reductions, and merge the check extension, IIR and improving with it.
+1. M5: rerun IIR's SPRT on the Mac ([0, 5]), then test improving against IIR; merge each with its
+   section of chapter 14.1.
 2. Milestone gates, once #36 is answered: gauntlets for M2–M4, level calibration (the
    calibration script is still to write, using `crates/tools/src/gauntlet.rs`).
 3. More M5 strength work, each change with an SPRT. Candidates: continuation history,

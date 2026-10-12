@@ -158,6 +158,7 @@ Commands:
                        Reverse futility pruning, razoring, futility pruning, SEE pruning,
                        delta pruning
   set seeorder on|off  Search captures that lose material (by SEE) after quiet moves
+  set checkext on|off  Check extensions: search checking moves one ply deeper (default off)
   set pst on|off       Piece-square tables (off: material only)
   set eval hand|tuned  Hand-set evaluation values (default) or stage 16's tuned ones
   set tapered on|off   Blend middlegame and endgame values by phase (off: middlegame only)
@@ -1122,7 +1123,7 @@ fn parse_move(pos: &Position, text: &str) -> Option<Move> {
 }
 
 /// Usage for the `set` command.
-const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set threads <N> | set eval hand|tuned | set alphabeta|quiescence|mvvlva|tt|killers|countermoves|history|pvs|aspiration|nullmove|lmr|lmp|rfp|razoring|futility|seeprune|delta|seeorder|pst|tapered|mobility|pawns|pieces|kingsafety|tempo on|off";
+const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set threads <N> | set eval hand|tuned | set alphabeta|quiescence|mvvlva|tt|killers|countermoves|history|pvs|aspiration|nullmove|lmr|lmp|rfp|razoring|futility|seeprune|delta|seeorder|checkext|pst|tapered|mobility|pawns|pieces|kingsafety|tempo on|off";
 
 /// How long the engine thinks per move by default in the shell.
 const DEFAULT_MOVETIME_MS: u64 = 1000;
