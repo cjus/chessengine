@@ -101,8 +101,14 @@ its static evaluation alone reached beta, and cb2026's evaluation, unlike Stockf
 nothing about pieces under attack. In an SPRT against the same engine without it, cb2026 lost
 about 32 Elo (see "What it's worth"). **The second failed too**, by about 18 Elo. It took half a
 ply off the margin, as here, so at depth 1 a node still needs 40 centipawns to spare. Both also
-doubled late move pruning's threshold when improving (`lmp_improving` = 2). This version leaves
-that out, so it tests the margin on its own.
+doubled late move pruning's threshold when improving (`lmp_improving` = 2). The version above
+leaves that out, so it tests the margin on its own.
+
+**The third version failed as well**, by about 33 Elo, so **cb2026 ships with improving off**.
+Taken together, the three results point at reverse futility pruning: with the margin alone
+smaller, the engine lost more than with the same margin and late move pruning doubled, so the
+late move pruning part seems to have made up some of the loss. Testing the parts one at a time
+is what showed that. The switch and both parameters stay, so either part can be tried again.
 
 Both tests also ran with a bug, found afterwards: the root is searched by its own function,
 which didn't store its static evaluation, so every node two plies down compared its evaluation
@@ -115,14 +121,14 @@ The six positions of chapters 10 to 14 (the first six bench positions) at depth 
 
 | Setting | Nodes | vs defaults |
 | --- | ---: | ---: |
-| Defaults (IIR and improving on, check extension off) | 115,438 | — |
-| `set improving off` | 148,075 | +28% |
-| `set iir off` | 190,276 | +65% |
-| `set checkext on` | 142,568 | +24% |
+| Defaults (IIR on; improving and the check extension off) | 148,075 | — |
+| `set iir off` | 193,361 | +31% |
+| `set improving on` | 115,438 | −22% |
+| `set checkext on` | 146,051 | −1% |
 
-Improving takes over a fifth off the tree. Its second version, which also made late move
-pruning wait longer, took off 7%, and its first 31%; both made the engine weaker. The games
-below decide, not the node counts.
+IIR takes almost a quarter off the tree. Improving takes off over a fifth more; its second
+version, which also made late move pruning wait longer, took off 7%, and its first 31%. All
+three made the engine weaker: the games below decide, not the node counts.
 
 ## Pitfalls
 
@@ -159,7 +165,7 @@ below decide, not the node counts.
 | IIR vs `main` without it, 8+0.08, test Mac, SPRT [0, 5] | **+19.2 ± 10.4 Elo** over 2,337 games (+705 −576 =1056): passed |
 | Improving, first version (a whole ply off the margin), vs `main` without it (with IIR), 8+0.08, test Mac (M1 Max), SPRT [0, 5] | **−32.0 ± 15.1 Elo** over 1,142 games (+267 −372 =503): failed (LLR −2.96) |
 | Improving, half a ply off the margin, late move pruning doubled, vs `main` without it (with IIR), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−17.7 ± 11.5 Elo** over 1,691 games (+362 −448 =881): failed (LLR −2.97) |
-| Improving, half a ply off the margin only, vs `main` without it (with IIR), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | Pending: SPRT on the test Mac |
+| Improving, half a ply off the margin only, vs `main` without it (with IIR), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−33.0 ± 15.3 Elo** over 1,036 games (+221 −319 =496): failed (LLR −2.96), so improving is off by default |
 
 ## Further reading
 

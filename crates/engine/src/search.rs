@@ -120,9 +120,14 @@
 //! **Late move pruning is left alone.** The second version, half a ply off the margin, also
 //! measured weaker: −18 ± 12 Elo after 1,691 games (cjus/chessengine#63). Both versions also
 //! doubled late move pruning's threshold when improving (`lmp_improving` = 2), so the cost may
-//! have been there; this version changes reverse futility pruning only. Both tests also ran with
-//! a bug, found afterwards and fixed in #63: the root didn't store its evaluation, so every node
-//! two plies down counted as improving.
+//! have been there; the third version changed reverse futility pruning only. Both tests also ran
+//! with a bug, found afterwards and fixed in #63: the root didn't store its evaluation, so every
+//! node two plies down counted as improving.
+//!
+//! **Off by default.** The third version measured worse still: −33 ± 15 Elo after 1,036 games
+//! (cjus/chessengine#65). So the cost is in reverse futility pruning: a smaller margin when
+//! improving loses here, and the doubled late move pruning of the second version seems to have
+//! made up some of it. The switch and both parameters stay, so the parts can be tested again.
 //!
 //! ## Tablebase probes (stage 18)
 //!
@@ -354,7 +359,8 @@ impl Default for Techniques {
             // Off by default: it didn't measure stronger (see the module documentation).
             check_extension: false,
             iir: true,
-            improving: true,
+            // Off by default: three versions measured weaker (see the module documentation).
+            improving: false,
         }
     }
 }
