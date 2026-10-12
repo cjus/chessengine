@@ -81,10 +81,10 @@ quick looks, not decisions: they have no SPRT.
 
 ## Long tests on the test Mac
 
-The test Mac is the Apple M3 on Carlos's network (from 2026-10-12; the M1 Max ran the tests
-before). Setting it up once is in cjus/chessengine#62: Rust, `gh auth login` and
-`gh auth setup-git`, and a clone of the repo. Start each test with `nohup`, so that it keeps
-running when the terminal or SSH session closes:
+The test Mac is an Apple M3 Max on Carlos's network, with 10 performance cores, so 9 games at
+a time (from 2026-10-12; the M1 Max ran the tests before). Setting it up once is in
+cjus/chessengine#62: Rust, `gh auth login` and `gh auth setup-git`, and a clone of the repo.
+Start each test with `nohup`, so that it keeps running when the terminal or SSH session closes:
 
 ```sh
 git checkout main && git pull
