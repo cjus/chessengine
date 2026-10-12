@@ -16,8 +16,6 @@ use cb2026_engine::Engine;
 use cb2026_protocol::Protocol;
 use cb2026_shell::{Shell, Style};
 
-/// Exit code for a mode or command that a later stage will implement.
-const EXIT_NOT_IMPLEMENTED: u8 = 1;
 /// Exit code for bad command-line arguments.
 const EXIT_USAGE: u8 = 2;
 
@@ -62,7 +60,7 @@ fn run(mode: Mode) -> ExitCode {
     };
     match mode {
         Mode::Uci => run_uci(first_line),
-        Mode::Xboard => not_implemented("XBoard mode", "stage 20"),
+        Mode::Xboard => run_xboard(first_line),
         Mode::Shell | Mode::Auto => run_shell(first_line),
     }
 }
@@ -96,6 +94,23 @@ fn detect_mode() -> (Mode, Option<String>) {
 fn run_uci(first_line: Option<String>) -> ExitCode {
     let stdin = io::stdin();
     match cb2026_protocol::uci::run_with_engine(
+        stdin.lock(),
+        Box::new(io::stdout()),
+        first_line,
+        new_engine(),
+    ) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("cb2026: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// Speaks XBoard (CECP) on standard input and output until `quit`.
+fn run_xboard(first_line: Option<String>) -> ExitCode {
+    let stdin = io::stdin();
+    match cb2026_protocol::xboard::run(
         stdin.lock(),
         Box::new(io::stdout()),
         first_line,
@@ -150,13 +165,4 @@ fn no_color_requested() -> bool {
 /// Whether the terminal says it can't do much (`TERM=dumb`): then use plain ASCII.
 fn dumb_terminal() -> bool {
     std::env::var("TERM").is_ok_and(|t| t == "dumb")
-}
-
-/// Reports a feature that doesn't exist yet and the stage that will add it.
-fn not_implemented(what: &str, stage: &str) -> ExitCode {
-    eprintln!(
-        "{}: {what} is not implemented yet (planned for {stage}; see docs/PRD.md).",
-        cb2026_engine::id_name()
-    );
-    ExitCode::from(EXIT_NOT_IMPLEMENTED)
 }

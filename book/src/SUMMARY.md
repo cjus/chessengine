@@ -33,7 +33,7 @@
 - [Lazy SMP](ch17-smp.md)
 - [Tablebases, opening books and Chess960](ch18-endgames.md)
 - [Strength levels](ch19-levels.md)
-- [XBoard and playing on Lichess]()
+- [XBoard, pondering and playing on Lichess](ch20-xboard.md)
 
 # Part V: Neural networks
 

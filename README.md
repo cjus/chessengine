@@ -5,9 +5,10 @@
 Chess, Banksia, En Croissant, HIARCS Chess Explorer, ChessBase, Shredder and other GUIs, and it
 comes with an interactive shell for playing games, watching the engine think and looking inside it.
 
-Status: planning. See [`docs/PRD.md`](docs/PRD.md) for the product requirements.
+Status: in development, stage by stage (see the stages in [`docs/PRD.md`](docs/PRD.md)).
+The book in `book/` explains each technique as it's added.
 
-## Planned usage
+## Usage
 
 ```
 cb2026            # interactive shell in a terminal
@@ -15,6 +16,9 @@ cb2026 --uci      # UCI mode (GUIs switch to it automatically by sending "uci")
 cb2026 --xboard   # XBoard/CECP mode
 cb2026 bench      # fixed benchmark; prints nodes and speed
 ```
+
+For GUIs see [`docs/gui-compat.md`](docs/gui-compat.md); to run it as a Lichess bot see
+[`docs/lichess.md`](docs/lichess.md).
 
 Releases are made from version tags; see [`docs/releasing.md`](docs/releasing.md).
 

@@ -25,3 +25,4 @@ self-play unless noted, so it overstates gains against other engines.
 | 2026-10-11 | Stage 18, part 1: Syzygy tablebases + Chess960 start positions | cjus/chessengine#49 | None: no functional change | — | — | — | bench unchanged |
 | 2026-10-11 | Stage 18, part 2: Polyglot opening books | cjus/chessengine#50 | None: no functional change | — | — | — | bench unchanged |
 | 2026-10-11 | Stage 19: strength levels + MultiPV (levels not yet calibrated, #36) | cjus/chessengine#51 | None: no functional change | — | — | — | bench unchanged |
+| 2026-10-11 | Stage 20: XBoard/CECP, pondering, conformance tests, Lichess setup | cjus/chessengine#52 | None: no functional change | — | — | — | bench unchanged |
