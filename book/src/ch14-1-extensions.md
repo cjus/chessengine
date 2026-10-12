@@ -5,11 +5,12 @@
 Chapters 12 to 14 made the tree smaller by guessing which moves and positions don't need a full
 search. This chapter moves depth in both directions. An **extension** searches a move *deeper*
 than its siblings; a **reduction** searches a whole node *shallower* (chapter 13's late move
-reductions work on single moves).
+reductions work on single moves). And one fact about a position, whether the side to move is
+**improving**, changes how boldly the pruning of chapters 13 and 14 guesses.
 
 The techniques in this chapter came after stage 20, as strength work towards version 1.0
 (milestone M5), so no stage tag contains them: read this chapter against `main`. Like everything
-before them, each can be switched off and on: `set checkext` and `set iir`.
+before them, each can be switched off and on: `set checkext`, `set iir` and `set improving`.
 
 ## Check extensions
 
@@ -67,18 +68,56 @@ before searching a node without a hash move, it ran a shallower search of the sa
 find a move to try first. IIR gets that move from the next iteration instead, and is cheaper and
 about as good. Stockfish (GPL-3.0) has replaced IID with it.
 
+## Improving
+
+A side whose static evaluation is higher than two plies ago, the last time it was to move, is
+**improving**: its moves are working, and its evaluation will probably keep rising.
+
+```rust,ignore
+{{#include ../../crates/engine/src/search.rs:improving}}
+```
+
+That changes the bets two pruning techniques make.
+
+**Reverse futility pruning** (chapter 14) bets that a node far above beta stays there. If the
+side to move is improving, the bet is safer, so the margin shrinks by one ply's worth:
+
+```rust,ignore
+{{#include ../../crates/engine/src/search.rs:reverse_futility}}
+```
+
+**Late move pruning** (chapter 13) bets that once enough quiet moves have failed, the rest will
+too. In an improving position quiet moves are more often good, so it tries twice as many before
+giving up:
+
+```rust,ignore
+{{#include ../../crates/engine/src/search.rs:lmp}}
+```
+
+The first change prunes more and the second less. Together they made the tree almost a third
+smaller on the six test positions (below), and the engine weaker: in an SPRT against the same
+engine without them, cb2026 lost about 32 Elo (see "What it's worth").
+
+**cb2026 ships with it off.** The likely cause, not yet tested, is the first change at depth 1.
+There the margin becomes zero, so the node is cut off whenever its static evaluation alone
+reaches beta, and the static evaluation knows nothing about pieces under attack. Stockfish
+(GPL-3.0) uses the improving idea in many more of its pruning and reduction decisions, so the
+idea can work; this version of it didn't. The switch stays, so a gentler version can be tried:
+one that changes only late move pruning, or never lets the margin reach zero.
+
 ## What it saves
 
 The six positions of chapters 10 to 14 (the first six bench positions) at depth 8:
 
 | Setting | Nodes | vs defaults |
 | --- | ---: | ---: |
-| Defaults (IIR on, check extension off) | 148,075 | — |
+| Defaults (IIR on; improving and the check extension off) | 148,075 | — |
 | `set iir off` | 193,361 | +31% |
+| `set improving on` | 101,865 | −31% |
 | `set checkext on` | 146,051 | −1% |
 
-IIR takes almost a quarter off the tree. With it on, the check extension costs little on these
-positions, but a smaller or equal tree doesn't make it stronger: the games below decide.
+IIR takes almost a quarter off the tree, and turning improving on takes almost a third off what
+is left. Only IIR made the engine stronger: the games below decide that, not the node counts.
 
 ## Pitfalls
 
@@ -93,6 +132,14 @@ positions, but a smaller or equal tree doesn't make it stronger: the games below
   searches with a result it doesn't have.
 - **Nodes aren't Elo.** IIR saves nodes by searching some nodes less deeply. Whether that costs
   more than it saves is for an SPRT to say, not a node count.
+- **A margin that reaches zero.** A margin scaled down by a flag can disappear altogether: at
+  depth 1, improving took reverse futility pruning's margin to zero. Make sure every margin
+  stays positive at the smallest depth it applies to.
+- **Nodes aren't Elo, again.** Improving made the tree almost a third smaller and lost 32 Elo. A
+  big node saving is a reason to run an SPRT, not a result.
+- **Two plies back may be a check.** In check, cb2026 computes no static evaluation (it is
+  recorded as `-INFINITY`), so a side that was in check two plies ago always counts as
+  improving. Some engines look four plies back in that case.
 
 ## What it's worth
 
@@ -100,6 +147,7 @@ positions, but a smaller or equal tree doesn't make it stronger: the games below
 | --- | --- |
 | Check extensions on vs off (stage 20), 8+0.08, cloud, SPRT [0, 5] | −8.3 ± 17.7 Elo over 840 games (+229 −249 =362), no verdict when the session's two-hour limit stopped it: no gain, so it is off by default |
 | IIR vs `main` without it, 8+0.08, test Mac, SPRT [0, 5] | **+19.2 ± 10.4 Elo** over 2,337 games (+705 −576 =1056): passed |
+| Improving vs `main` without it (with IIR), 8+0.08, test Mac, SPRT [0, 5] | **−32.0 ± 15.1 Elo** over 1,142 games (+267 −372 =503): failed (LLR −2.96), so it is off by default |
 
 ## Further reading
 
@@ -107,4 +155,5 @@ positions, but a smaller or equal tree doesn't make it stronger: the games below
   [Check Extensions](https://www.chessprogramming.org/Check_Extensions),
   [Singular Extensions](https://www.chessprogramming.org/Singular_Extensions),
   [Internal Iterative Deepening](https://www.chessprogramming.org/Internal_Iterative_Deepening),
-  [Internal Iterative Reductions](https://www.chessprogramming.org/Internal_Iterative_Reductions).
+  [Internal Iterative Reductions](https://www.chessprogramming.org/Internal_Iterative_Reductions),
+  [Improving](https://www.chessprogramming.org/Improving).

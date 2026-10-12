@@ -4,7 +4,8 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-12 (M5: the check extension and IIR merged, with chapter 14.1).*
+*Last updated 2026-10-12 (M5: the check extension, IIR and improving merged, with chapter
+14.1; long tests move to the M3 Mac, #62).*
 
 ## Stages
 
@@ -35,9 +36,9 @@ it in every PR that changes the picture (a stage merged, a result in, a new bloc
 | Shell: `match`, `selfplay`, `uci`, `xboard` | #55 | 1207153 | Merged, no functional change |
 | M5: check extensions | #57 | 1207153 | Merged, off by default: −8.3 ± 17.7 after 840 games (no gain) |
 | M5: internal iterative reductions | #58 | 765380 | Merged: +19.2 ± 10.4, 2,337 games, [0, 5] passed (Mac) |
-| M5: improving heuristic | `claude/m5-improving` | 648634 | Not tested yet (test it against IIR) |
+| M5: improving heuristic | #60 | 765380 | Merged, off by default: −32.0 ± 15.1, 1,142 games, [0, 5] failed (Mac) |
 
-The last M5 branch still open, `claude/m5-improving`, is one commit on top of `main`.
+Every M5 branch so far is merged; no branch is waiting.
 
 ## Milestones
 
@@ -58,9 +59,13 @@ wait on rating gauntlets or GUI checks.
 
 The open [`needs-carlos` issues](https://github.com/cjus/chessengine/issues?q=is%3Aopen+label%3Aneeds-carlos):
 
+- #62: set up the M3 Mac as the test machine. Long tests run there from 2026-10-12.
 - #36: choose the gauntlet reference engines; run the M2/M3 gauntlets.
 - #37: GUI compatibility matrix; Lichess bot account.
 - #24 (M1 GUI games).
+
+On hold: #61, running long tests on AWS Batch (closed 2026-10-12; reopen it if the M3 can't keep
+up with the test queue).
 
 Done on 2026-10-11: #17 (stage tags 1–16 pushed from the Mac; Claude now pushes each new stage
 tag itself when it runs there, and has tagged stages 17–20), #6 (the Cross-platform workflow
@@ -71,8 +76,8 @@ Claude ran it on the idle Mac).
 
 ### Merging the stack
 
-For each branch (now only improving), once it has its SPRT result and its section of
-chapter 14.1:
+For each branch of a stack (none is open now), once it has its SPRT result and its book
+section:
 
 1. Rebase the branch onto the latest `origin/main`. The commits below it are already in `main`,
    so only its own commits replay.
@@ -88,47 +93,46 @@ When a change below a commit alters the search, every later commit's `Bench:` li
 re-measured:
 
 ```sh
-git rebase --onto <new base> <old base> claude/m5-improving \
+git rebase --onto <new base> <old base> <branch> \
   --exec 'cargo build --release -q -p cb2026 && b=$(./target/release/cb2026 bench | awk "/Nodes searched/{print \$4}") && git commit -q --amend -m "$(git log -1 --format=%B | sed "s/^Bench: [0-9]*\$/Bench: $b/")" && cargo test -q --workspace'
 ```
 
 Run the full test suite on every commit you replay, not only at the tip: each becomes a PR head.
 
-### Results still to record
-
-- **M5 techniques:** improving needs its SPRT. It adds its section to chapter 14.1,
-  "Extensions and reductions", and its row to the ledger. (14.1 is a sub-chapter of chapter 14,
-  so the book's chapter numbers still match the stage numbers.)
-
 ### Testing strength
 
 - **The cloud machine** (4 cores) runs short SPRTs, 3 games at a time, but a background job
   stops after 2 hours. That's about 850 games, enough for gains of 30+ Elo. Smaller changes need
-  the Mac.
-- **On the Mac** that limit doesn't apply. `scripts/mac-sprt.sh <PR> [elo0 elo1]` runs 7 games at
-  a time, about 980 games an hour at 8+0.08 (a game takes about 26 seconds whatever the CPU,
-  because the clock sets its length), and posts to the PR. CLAUDE.md says long SPRTs and
-  gauntlets are Carlos's to run; ask him before starting one, even when Claude is running on
-  the Mac.
+  the test Mac.
+- **The test Mac** is, from 2026-10-12, the M3 Mac on Carlos's network. #62 sets it up, and its
+  model and speed then go into the PRD's "Test machine" section. Carlos starts long tests there
+  (`docs/testing.md`, "Long tests on the test Mac"), and the scripts post the results to the PR.
+  `scripts/mac-sprt.sh <PR> [elo0 elo1]` runs one game per performance core minus one (7 on the
+  M1 Max: about 970 games an hour at 8+0.08; a game takes about 26 seconds whatever the CPU,
+  because the clock sets its length). CLAUDE.md says long SPRTs and gauntlets are Carlos's to
+  run.
+- **The M1 Max is no longer a test machine.** Claude Code runs on it, Carlos needs it free and
+  disconnects it, so don't start SPRTs, gauntlets or other long runs there.
 - **Neutral changes take long.** When the true difference sits at one of the two hypotheses, the
   SPRT needs many games: stage 17's one-thread test (about 0 Elo, bounds [−5, 0]) took 15,188
-  games, 15 hours on the Mac. Clear gains of +100 Elo or more end in a few hundred.
+  games, 15 hours on the M1 Max. Clear gains of +100 Elo or more end in a few hundred.
 - **Thread scaling** (`scripts/mac-smp.sh`) plays one game at a time, about 140 an hour, so its
   bounds default to [0, 25]: it asks whether more threads clearly gain. Stage 17's 4-thread test
   passed in 38 games, 17 minutes.
 - **Bounds:** gainers use [0, 5]; refactors and anything meant to be neutral use [−5, 0]. A
-  result without a verdict is recorded honestly. Stage 16 and the check extension went in
-  switched off rather than claimed as gains.
+  result without a verdict is recorded honestly. Stage 16, the check extension and improving
+  went in switched off rather than claimed as gains.
 
 ### Next work, in PRD order
 
-1. M5: test improving against `main` (which has IIR) on the Mac, and merge it with its section
-   of chapter 14.1.
+1. The M3 test Mac (#62): once it is set up, record it in the PRD. Its first test can be a
+   gentler improving heuristic (see 4).
 2. Time losses: IIR's SPRT had two in 2,337 games at 8+0.08, one for each engine, so not caused by
-   IIR (the referee allows 50 ms over the clock). Find the cause before the M5 robustness run,
-   which must be clean over 10,000 games.
+   IIR (the referee allows 50 ms over the clock); improving's 1,142 games had none. Find the
+   cause before the M5 robustness run, which must be clean over 10,000 games.
 3. Milestone gates, once #36 is answered: gauntlets for M2–M4, level calibration (the
    calibration script is still to write, using `crates/tools/src/gauntlet.rs`).
-4. More M5 strength work, each change with an SPRT. Candidates: continuation history,
-   history-based LMR adjustment, singular extensions, time management.
+4. More M5 strength work, each change with an SPRT. Candidates: a gentler improving heuristic
+   (only late move pruning, or a reverse futility margin that never reaches zero), continuation
+   history, history-based LMR adjustment, singular extensions, time management.
 5. The v1.0 release (`docs/releasing.md`), then stage 21 (NNUE).
