@@ -5,8 +5,8 @@ is blocked on whom, and how to carry on. **Claude: read this first in a new sess
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
 *Last updated 2026-10-12 (M5: the check extension, IIR and three versions of improving merged,
-with chapter 14.1; improving is off by default and set aside; time losses: details recorded,
-stress test #66).*
+with chapter 14.1; improving is off by default and set aside; time losses not reproduced,
+#66).*
 
 ## Stages
 
@@ -62,7 +62,6 @@ wait on rating gauntlets or GUI checks.
 
 The open [`needs-carlos` issues](https://github.com/cjus/chessengine/issues?q=is%3Aopen+label%3Aneeds-carlos):
 
-- #66: time-loss stress test at 1+0.01 on the M3, and the problem lines from two earlier logs.
 - #36: choose the gauntlet reference engines; run the M2/M3 gauntlets.
 - #37: GUI compatibility matrix; Lichess bot account.
 - #24 (M1 GUI games).
@@ -71,7 +70,7 @@ On hold: #61, running long tests on AWS Batch (closed 2026-10-12; reopen it if t
 up with the test queue).
 
 Done on 2026-10-12: #62 (the M3 Max is set up; its check: `bench` 765380, the perft suites
-exact at 369.6 Mnps).
+exact at 369.6 Mnps) and #66 (the time-loss checks on the M3: none).
 
 Done on 2026-10-11: #17 (stage tags 1–16 pushed from the Mac; Claude now pushes each new stage
 tag itself when it runs there, and has tagged stages 17–20), #6 (the Cross-platform workflow
@@ -131,18 +130,21 @@ Run the full test suite on every commit you replay, not only at the tip: each be
 
 ### Next work, in PRD order
 
-1. Time losses: IIR's SPRT had two in 2,337 games at 8+0.08, one for each engine, so not caused by
-   IIR (the referee allows 50 ms over the clock); improving's 1,142 games (#60) had none. What we
-   know (2026-10-12):
-   - **A stall, not a long think:** cb2026 never plans more than half its remaining clock and
-     checks the clock every 1,024 nodes, so a loss means a stall of 200 ms or more.
-   - **Not Claude's builds:** nothing heavy ran on the Mac during IIR's test.
-   - **#67 records the details:** each loss now names the move, the time taken and the clock.
-     `mac-sprt.sh` lists the losses in its PR comment and keeps the games.
+1. Time losses: **not reproduced** (2026-10-12, #66). IIR's SPRT had two in 2,337 games at 8+0.08
+   on the M1 Max, one for each engine. Since then there have been none:
 
-   Next: #66, a stress test at 1+0.01 on the M3 (2,000 games, about 15 minutes), plus the
-   problem lines from #63's and #65's logs. Find the cause before the M5 robustness run, which
-   must be clean over 10,000 games.
+   | Run | Machine | Games | Time losses |
+   | --- | --- | ---: | --- |
+   | #60's SPRT, 8+0.08 | M1 Max, 7 at a time | 1,142 | 0 |
+   | #63's SPRT, 8+0.08 | M3 Max, 9 at a time | 1,691 | 0 |
+   | #65's SPRT, 8+0.08 | M3 Max, 9 at a time | 1,036 | 0 |
+   | Stress test, `main` vs itself, 1+0.01 | M3 Max, 9 at a time | 2,000 | 0 (and no illegal moves or failures) |
+
+   cb2026 never plans more than half its remaining clock and checks the clock every 1,024 nodes,
+   so those two losses needed a stall of 200 ms or more: most likely the M1 Max, which was also
+   Carlos's working machine. Nothing to fix now. If a loss happens again, #67's details (move,
+   time taken, clock) say which kind it is, and every SPRT comment lists them. The M5 robustness
+   run (10,000+ games at 1+0.01, 10+0.1 and 40/60) is the final check.
 2. Milestone gates, once #36 is answered: gauntlets for M2–M4, level calibration (the
    calibration script is still to write, using `crates/tools/src/gauntlet.rs`).
 3. More M5 strength work, each change with an SPRT. Candidates: continuation history,
