@@ -9,7 +9,7 @@
 //! - [`run`] reads lines from any input, executes them and writes the results, adding a prompt
 //!   when a person is typing.
 //!
-//! ## Commands so far (stages 1–3)
+//! ## Commands so far
 //!
 //! | Command | What it does |
 //! | --- | --- |
@@ -45,6 +45,10 @@
 //! | `set lmr on\|off`, `set lmp on\|off` | Late move reductions; late move pruning |
 //! | `set rfp\|razoring\|futility\|seeprune\|delta\|seeorder on\|off` | Stage 14's pruning and SEE ordering |
 //! | `eval` | The static evaluation, term by term |
+//! | `eval diff <move>`, `see <move>` | Which evaluation terms a move changes; its static exchange evaluation |
+//! | `explain <move>` | Search a move and compare it with the engine's choice |
+//! | `stats`, `tree <depth> [plies]` | What the last search did; the search tree's first plies |
+//! | `techniques`, `ab <name> [depth]` | Every switch and its state; search with and without one and compare |
 //! | `set pst on\|off`, `set tapered on\|off` | Switch the piece-square tables or the middlegame/endgame blend off |
 //! | `set mobility\|pawns\|pieces\|kingsafety\|tempo on\|off` | Switch a group of evaluation terms off |
 //! | `bench` | The fixed benchmark |
@@ -54,15 +58,13 @@
 //!
 //! ## Coming in later stages
 //!
-//! - **By milestone M3 (stages 15–16):** the other explain commands: `eval diff`, `explain`,
-//!   `tree` and `stats`.
-//! - **Stage 19:** strength levels.
 //! - **M4:** `match`, a short match against another UCI engine.
 //!
 //! The full plan is in `docs/PRD.md`, "The interactive shell".
 
 #![forbid(unsafe_code)]
 
+mod explain;
 pub mod render;
 
 use std::io::{self, BufRead, Write};
@@ -83,6 +85,7 @@ use std::time::Duration;
 
 use cb2026_engine::book::OpeningBook;
 use cb2026_engine::levels;
+use cb2026_engine::stats::SearchStats;
 use cb2026_engine::tablebase::{self, TbWdl};
 use cb2026_engine::tt::MAX_HASH_MB;
 use cb2026_engine::{Engine, Limits, MAX_THREADS, NAME, Score, SearchInfo, bench, eval, search};
@@ -152,6 +155,14 @@ Commands:
                        Evaluation term groups: mobility, pawn structure and passed pawns,
                        bishop pair and rook files, king safety, tempo
   eval                 The static evaluation of the position, term by term
+  eval diff <move>     Which evaluation terms a move changes
+  see <move>           Static exchange evaluation: what the captures on its square win
+  explain <move>       Search a move and compare it with the engine's choice
+  stats                What the last search did: hash hits, cutoffs, each pruning technique
+  tree <depth> [plies] The search tree's first plies (default 2): windows, scores, cutoffs,
+                       and the moves pruned or reduced
+  techniques           Every technique and evaluation term, on or off
+  ab <name> [depth]    Search with and without a technique and compare (default depth 8)
   bench                The fixed benchmark: total nodes and speed
   bb <set>             Show a bitboard: occupied, empty, white, black, checkers,
                        pinned, or a piece letter (P N B R Q K for White, p n b r q k)
@@ -192,6 +203,8 @@ pub struct Shell {
     engine_limit: EngineLimit,
     /// Whether to show the engine's thinking, depth by depth.
     think: bool,
+    /// What the last search did, for `stats`.
+    last_stats: Option<SearchStats>,
 }
 
 impl Shell {
@@ -210,6 +223,7 @@ impl Shell {
             engine_plays: [false, false],
             engine_limit: EngineLimit::Movetime(DEFAULT_MOVETIME_MS),
             think: true,
+            last_stats: None,
         }
     }
 
@@ -335,7 +349,17 @@ impl Shell {
                 _ => Response::text("Usage: think on|off"),
             },
             "zobrist" => self.zobrist(),
-            "eval" => self.eval(),
+            "eval" if args.is_empty() => self.eval(),
+            "eval" => match args.strip_prefix("diff") {
+                Some(mv) => self.eval_diff(mv.trim()),
+                None => Response::text("Usage: eval | eval diff <move>"),
+            },
+            "see" => self.see_move(args),
+            "explain" => self.explain(args),
+            "stats" => self.stats(),
+            "tree" => self.tree(args),
+            "techniques" => self.techniques(),
+            "ab" => self.ab(args),
             "tb" => self.tablebase(),
             "level" => match args.parse::<u32>() {
                 Ok(level) if level <= levels::FULL_STRENGTH => {
@@ -426,6 +450,7 @@ impl Shell {
             &stop,
             &mut |info: &SearchInfo| infos.push(info.clone()),
         );
+        self.last_stats = Some(result.stats);
         let mv = result.best_move?;
         let mut text = String::new();
         if self.think {
@@ -838,15 +863,6 @@ impl Shell {
                 Ok(ms) if ms > 0 => self.engine_limit = EngineLimit::Movetime(ms),
                 _ => return Response::text("Usage: set movetime <milliseconds>"),
             },
-            (Some("alphabeta"), value) if on_off(value).is_some() => {
-                self.engine.techniques.alpha_beta = on_off(value).unwrap_or(true);
-            }
-            (Some("quiescence"), value) if on_off(value).is_some() => {
-                self.engine.techniques.quiescence = on_off(value).unwrap_or(true);
-            }
-            (Some("mvvlva"), value) if on_off(value).is_some() => {
-                self.engine.techniques.mvv_lva = on_off(value).unwrap_or(true);
-            }
             (Some("eval"), Some(which @ ("hand" | "tuned"))) => {
                 let values = if which == "tuned" {
                     eval::EvalParams::tuned()
@@ -863,71 +879,11 @@ impl Shell {
                     }
                 ));
             }
-            (Some("pst"), value) if on_off(value).is_some() => {
-                self.engine.params.use_pst = on_off(value).unwrap_or(true);
-            }
-            (Some("tapered"), value) if on_off(value).is_some() => {
-                self.engine.params.tapered = on_off(value).unwrap_or(true);
-            }
-            (Some("mobility"), value) if on_off(value).is_some() => {
-                self.engine.params.terms.use_mobility = on_off(value).unwrap_or(true);
-            }
-            (Some("pawns"), value) if on_off(value).is_some() => {
-                self.engine.params.terms.use_pawns = on_off(value).unwrap_or(true);
-            }
-            (Some("pieces"), value) if on_off(value).is_some() => {
-                self.engine.params.terms.use_pieces = on_off(value).unwrap_or(true);
-            }
-            (Some("kingsafety"), value) if on_off(value).is_some() => {
-                self.engine.params.terms.use_king_safety = on_off(value).unwrap_or(true);
-            }
-            (Some("tempo"), value) if on_off(value).is_some() => {
-                self.engine.params.terms.use_tempo = on_off(value).unwrap_or(true);
-            }
-            (Some("killers"), value) if on_off(value).is_some() => {
-                self.engine.techniques.killers = on_off(value).unwrap_or(true);
-            }
-            (Some("countermoves"), value) if on_off(value).is_some() => {
-                self.engine.techniques.countermoves = on_off(value).unwrap_or(true);
-            }
-            (Some("history"), value) if on_off(value).is_some() => {
-                self.engine.techniques.history = on_off(value).unwrap_or(true);
-            }
-            (Some("pvs"), value) if on_off(value).is_some() => {
-                self.engine.techniques.pvs = on_off(value).unwrap_or(true);
-            }
-            (Some("aspiration"), value) if on_off(value).is_some() => {
-                self.engine.techniques.aspiration = on_off(value).unwrap_or(true);
-            }
-            (Some("nullmove"), value) if on_off(value).is_some() => {
-                self.engine.techniques.null_move = on_off(value).unwrap_or(true);
-            }
-            (Some("lmr"), value) if on_off(value).is_some() => {
-                self.engine.techniques.lmr = on_off(value).unwrap_or(true);
-            }
-            (Some("lmp"), value) if on_off(value).is_some() => {
-                self.engine.techniques.late_move_pruning = on_off(value).unwrap_or(true);
-            }
-            (Some("rfp"), value) if on_off(value).is_some() => {
-                self.engine.techniques.reverse_futility = on_off(value).unwrap_or(true);
-            }
-            (Some("razoring"), value) if on_off(value).is_some() => {
-                self.engine.techniques.razoring = on_off(value).unwrap_or(true);
-            }
-            (Some("futility"), value) if on_off(value).is_some() => {
-                self.engine.techniques.futility = on_off(value).unwrap_or(true);
-            }
-            (Some("seeprune"), value) if on_off(value).is_some() => {
-                self.engine.techniques.see_pruning = on_off(value).unwrap_or(true);
-            }
-            (Some("delta"), value) if on_off(value).is_some() => {
-                self.engine.techniques.delta_pruning = on_off(value).unwrap_or(true);
-            }
-            (Some("seeorder"), value) if on_off(value).is_some() => {
-                self.engine.techniques.see_ordering = on_off(value).unwrap_or(true);
-            }
-            (Some("tt"), value) if on_off(value).is_some() => {
-                self.engine.techniques.tt = on_off(value).unwrap_or(true);
+            (Some(name), value)
+                if on_off(value).is_some()
+                    && let Some(s) = explain::switch(name) =>
+            {
+                *(s.flag)(&mut self.engine) = on_off(value).unwrap_or(true);
             }
             (Some("book"), path) => {
                 let path = path.unwrap_or("");
@@ -1179,6 +1135,84 @@ mod tests {
             },
             Engine::new(),
         )
+    }
+
+    #[test]
+    fn techniques_are_listed_and_switched() {
+        let mut shell = ascii_shell();
+        assert!(
+            shell
+                .execute("techniques")
+                .output
+                .contains("nullmove     on")
+        );
+        shell.execute("set nullmove off");
+        assert!(
+            shell
+                .execute("techniques")
+                .output
+                .contains("nullmove     off")
+        );
+        assert!(
+            shell
+                .execute("set nullmove maybe")
+                .output
+                .starts_with("Usage")
+        );
+        let ab = shell.execute("ab lmr 4").output;
+        assert!(ab.contains("\n  on ") && ab.contains("\n  off "), "{ab}");
+        assert!(ab.contains("× the nodes"), "{ab}");
+        assert!(shell.execute("ab frobnicate").output.starts_with("Usage"));
+    }
+
+    #[test]
+    fn stats_describe_the_last_search() {
+        let mut shell = ascii_shell();
+        assert!(shell.execute("stats").output.starts_with("No search yet"));
+        shell.execute("go depth 4");
+        let stats = shell.execute("stats").output;
+        assert!(stats.contains("Beta cutoffs:"), "{stats}");
+        assert!(stats.contains("by the first move searched"), "{stats}");
+    }
+
+    #[test]
+    fn explain_compares_a_move_with_the_best() {
+        let mut shell = ascii_shell();
+        shell.execute("set depth 4");
+        let out = shell.execute("explain a3").output;
+        assert!(out.contains("Engine's choice"), "{out}");
+        assert!(out.contains("Your move a3"), "{out}");
+        // The mate in one is the engine's choice too.
+        shell.execute("fen 6k1/5ppp/8/8/8/8/8/4R1K1 w - - 0 1");
+        let out = shell.execute("explain Re8+").output;
+        assert!(out.contains("is the move the engine would play"), "{out}");
+        assert!(shell.execute("explain").output.starts_with("Usage"));
+    }
+
+    #[test]
+    fn eval_diff_and_see() {
+        let mut shell = ascii_shell();
+        shell.execute("fen 4k3/8/8/3p4/4P3/8/8/4K3 w - - 0 1");
+        let diff = shell.execute("eval diff exd5").output;
+        assert!(diff.contains("Material"), "{diff}");
+        assert!(diff.contains("Total"), "{diff}");
+        let see = shell.execute("see exd5").output;
+        assert!(
+            see.contains("+1.00") && see.contains("wins material"),
+            "{see}"
+        );
+        assert!(shell.execute("see e2e4").output.starts_with("Usage"));
+    }
+
+    #[test]
+    fn tree_shows_the_first_plies() {
+        let mut shell = ascii_shell();
+        let tree = shell.execute("tree 3 1").output;
+        assert!(tree.contains("depth 2 ["), "{tree}");
+        assert!(tree.contains("Result:"), "{tree}");
+        let deeper = shell.execute("tree 4 2").output;
+        assert!(deeper.contains("\n  "), "two plies are indented: {deeper}");
+        assert!(shell.execute("tree 99").output.starts_with("Usage"));
     }
 
     #[test]
