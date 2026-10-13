@@ -101,6 +101,11 @@ pub(crate) const SWITCHES: &[Switch] = &[
         flag: |e| &mut e.techniques.lmr,
     },
     Switch {
+        name: "histlmr",
+        description: "History-adjusted late move reductions (off by default)",
+        flag: |e| &mut e.techniques.history_lmr,
+    },
+    Switch {
         name: "lmp",
         description: "Late move pruning",
         flag: |e| &mut e.techniques.late_move_pruning,
