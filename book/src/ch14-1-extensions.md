@@ -214,6 +214,7 @@ move in ten was affected.
 | Improving, first version (a whole ply off the margin), vs `main` without it (with IIR), 8+0.08, test Mac (M1 Max), SPRT [0, 5] | **−32.0 ± 15.1 Elo** over 1,142 games (+267 −372 =503): failed (LLR −2.96) |
 | Improving, half a ply off the margin, late move pruning doubled, vs `main` without it (with IIR), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−17.7 ± 11.5 Elo** over 1,691 games (+362 −448 =881): failed (LLR −2.97) |
 | Improving, half a ply off the margin only, vs `main` without it (with IIR), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−33.0 ± 15.3 Elo** over 1,036 games (+221 −319 =496): failed (LLR −2.96), so improving is off by default |
+| History in LMR vs `main` without it, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | Waiting (cjus/chessengine#70) |
 
 ## Further reading
 

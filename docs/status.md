@@ -6,7 +6,8 @@ it in every PR that changes the picture (a stage merged, a result in, a new bloc
 
 *Last updated 2026-10-12 (M5: the check extension, IIR and three versions of improving merged,
 with chapter 14.1; improving is off by default and set aside; time losses not reproduced,
-#66; continuation history merged, +10.7 ± 7.3, #69).*
+#66; continuation history merged, +10.7 ± 7.3, #69; history in LMR, #70, rebased onto it and
+next for an SPRT on the M3).*
 
 ## Stages
 
@@ -41,10 +42,11 @@ with chapter 14.1; improving is off by default and set aside; time losses not re
 | M5: improving, half a ply off the margin; root evaluation fix | #63 | 765380 | Merged, off by default: −17.7 ± 11.5, 1,691 games, [0, 5] failed (M3 Max) |
 | M5: improving, the reverse futility margin only | #65 | 765380 | Merged, off by default: −33.0 ± 15.3, 1,036 games, [0, 5] failed (M3 Max) |
 | M5: continuation history (chapter 10.1) | #69 | 754226 | Merged: +10.7 ± 7.3, 4,532 games, [0, 5] passed (M3 Max) |
+| M5: history in late move reductions (chapter 14.1) | #70, `claude/m5-history-lmr` | 766853 | Draft, on by default; rebased onto `main` with #69; SPRT [0, 5] next on the M3 |
 
-Waiting, as drafts branched from `main` before #69 merged: #70 (history in LMR), #71 (singular
-extensions and multi-cut) and #72 (adaptive time management). Their SPRTs run one at a time on
-the M3, in that order. **Before each SPRT starts, rebase that PR onto the current `main`** and
+Waiting: #70, rebased and ready for its SPRT; then #71 (singular extensions and multi-cut) and
+#72 (adaptive time management), drafts branched from `main` before #69 merged. Their SPRTs run
+one at a time on the M3, in that order. **Before each SPRT starts, rebase that PR onto the current `main`** and
 re-measure its `Bench:` line: `scripts/mac-sprt.sh` plays the PR's head against `main`, so an
 unrebased PR would be measured against changes it doesn't have. For each: if it passes, record
 it in its chapter and the ledger, mark it ready and merge; if it fails, switch it off by
