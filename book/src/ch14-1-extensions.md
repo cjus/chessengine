@@ -221,9 +221,9 @@ from empty tables leaves few moves at 256 or more. The bench, which searches to 
 move in ten was affected.
 
 Singular extensions don't appear here: at depth 8, no node below the root has 8 plies left. At
-depth 10 they make the tree **76% bigger** (686,500 nodes against 390,008). Over the six
-positions the search tried 449 hash moves, extended 117 and cut off 107 nodes by multi-cut;
-without multi-cut the tree is 1% bigger again. That is the price of extending near the root:
+depth 10 they make the tree **85% bigger** (694,595 nodes against 375,334). Over the six
+positions the search tried 472 hash moves, extended 120 and cut off 138 nodes by multi-cut;
+without multi-cut the tree is 7% bigger again. That is the price of extending near the root:
 each extension adds a ply to a large part of the tree. Whether the deeper look at forced lines
 is worth it is for the games to say.
 
@@ -270,6 +270,7 @@ is worth it is for the games to say.
 | Improving, half a ply off the margin, late move pruning doubled, vs `main` without it (with IIR), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−17.7 ± 11.5 Elo** over 1,691 games (+362 −448 =881): failed (LLR −2.97) |
 | Improving, half a ply off the margin only, vs `main` without it (with IIR), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−33.0 ± 15.3 Elo** over 1,036 games (+221 −319 =496): failed (LLR −2.96), so improving is off by default |
 | History in LMR vs `main` without it (with continuation history), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | +2.1 ± 5.0 Elo over 8,910 games (+2188 −2134 =4588): no verdict (LLR −0.30), stopped; off by default |
+| Singular extensions and multi-cut vs `main` without them (with continuation history), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | Waiting (cjus/chessengine#71) |
 
 ## Further reading
 
