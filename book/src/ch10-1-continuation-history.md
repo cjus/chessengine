@@ -108,11 +108,14 @@ lost on time.
 
 | Test | Result |
 | --- | --- |
-| History off (continuation history alone orders quiet moves) vs `main` with both, 8+0.08, test Mac (M3 Max), SPRT [−5, 0] | Waiting (cjus/chessengine#73) |
+| History off (continuation history alone orders quiet moves) vs `main` with both, 8+0.08, test Mac (M3 Max), SPRT [−5, 0] | **−17.7 ± 9.9 Elo** over 2,124 games (+427 −535 =1162): failed (LLR −2.96), so history stays on |
 
 That second test is a simplification test: its bounds ask whether switching history off loses
-5 Elo or more. If it passes, the history table adds nothing on top of the rest; if it fails,
-history still earns its place.
+5 Elo or more. It does, about 18. So the history table still earns its place, on top of
+continuation history and in a search that prunes late moves, even though switching it off made
+the tree 18% smaller. That is the plainest case in this book of fewer nodes meaning a weaker
+engine: the moves a worse order puts last are the ones that get reduced and pruned, and some of
+them were good.
 
 ## Further reading
 
