@@ -151,6 +151,28 @@
 //! is small. A stronger version could add continuation history to the score, or use a smaller
 //! divisor. The switch and parameters stay.
 //!
+//! ## Singular extensions and multi-cut
+//!
+//! A hash move is **singular** if it is much better than every other move: then it is probably
+//! forced (a recapture, the one defence to a threat), and a mistake in its line costs the most,
+//! so it is searched a ply deeper. To find out, the node is searched again first, at half the
+//! depth and without the hash move, with a null window at `singular_beta`, the hash move's
+//! score less `singular_margin` (2) centipawns per ply of depth. If no other move reaches it,
+//! the hash move is singular. This needs a hash entry that is a lower bound or exact and at
+//! most `singular_tt_depth_margin` (3) plies shallower than the node, from depth
+//! `singular_min_depth` (8) on, and stops at twice the root depth, so that a chain of
+//! extensions can't grow without limit.
+//!
+//! That search can also answer a second question. If another move beats `singular_beta` and
+//! `singular_beta` is at least beta, two moves beat beta, so the node is cut off: **multi-cut**.
+//!
+//! The search without the hash move is a search of a different question, so it neither reads
+//! nor writes the transposition table, tries no null move and does no IIR. If the hash move is
+//! the only legal move, it fails low: nothing else comes close.
+//!
+//! Both are as in Stockfish (GPL-3.0); the code is cb2026's own. Singular extensions go back to
+//! Deep Thought (Anantharaman, Campbell and Hsu, 1988).
+//!
 //! ## Tablebase probes (stage 18)
 //!
 //! With few pieces left, the search can ask the endgame tablebases for the exact result
@@ -274,6 +296,12 @@ pub struct SearchParams {
     pub delta_margin: i32,
     /// Internal iterative reductions apply from this depth on.
     pub iir_min_depth: u32,
+    /// Singular extensions apply from this depth on...
+    pub singular_min_depth: u32,
+    /// ...when the hash move's entry is at most this many plies shallower than the node...
+    pub singular_tt_depth_margin: u32,
+    /// ...and no other move comes within this many centipawns per ply of depth of its score.
+    pub singular_margin: i32,
 }
 
 impl Default for SearchParams {
@@ -310,6 +338,9 @@ impl Default for SearchParams {
             see_capture_margin: 100,
             delta_margin: 200,
             iir_min_depth: 4,
+            singular_min_depth: 8,
+            singular_tt_depth_margin: 3,
+            singular_margin: 2,
         }
     }
 }
@@ -375,6 +406,11 @@ pub struct Techniques {
     pub see_ordering: bool,
     /// Search moves that give check one ply deeper (off by default).
     pub check_extension: bool,
+    /// Singular extensions: search the hash move a ply deeper when no other move comes close.
+    pub singular_extension: bool,
+    /// Multi-cut: when the singular extension's search finds another move that beats beta
+    /// too, cut the node off (needs singular extensions).
+    pub multi_cut: bool,
     /// Internal iterative reductions: search nodes without a hash move a ply shallower.
     pub iir: bool,
     /// Adjust pruning when the side to move is improving (better than two plies ago).
@@ -408,6 +444,8 @@ impl Default for Techniques {
             see_ordering: true,
             // Off by default: it didn't measure stronger (see the module documentation).
             check_extension: false,
+            singular_extension: true,
+            multi_cut: true,
             iir: true,
             // Off by default: three versions measured weaker (see the module documentation).
             improving: false,
@@ -433,6 +471,8 @@ impl Techniques {
             see_pruning: false,
             delta_pruning: false,
             check_extension: false,
+            singular_extension: false,
+            multi_cut: false,
             iir: false,
             improving: false,
             ..Techniques::default()
@@ -500,6 +540,11 @@ pub(crate) struct Searcher<'a> {
     /// The static evaluation at each ply of the current line (`-INFINITY` in check), for the
     /// improving heuristic.
     evals: Vec<i32>,
+    /// A move to leave out at each ply: the hash move, while a singular extension's search
+    /// asks whether any other move comes close to it.
+    excluded: Vec<Option<Move>>,
+    /// The depth of the current iteration, which limits how far extensions can reach.
+    root_depth: u32,
     /// Late move reductions by depth and move number (see [`lmr_table`]).
     lmr: Vec<[u8; LMR_TABLE_SIZE]>,
     /// A counter shared with other threads, which this search adds its nodes to.
@@ -576,6 +621,8 @@ impl<'a> Searcher<'a> {
             path: Vec::new(),
             moved: Vec::new(),
             evals: vec![-INFINITY; MAX_PLY as usize + 1],
+            excluded: vec![None; MAX_PLY as usize + 1],
+            root_depth: 0,
             lmr: lmr_table(&search_params),
             shared_nodes: None,
             tablebase: None,
@@ -681,6 +728,8 @@ impl<'a> Searcher<'a> {
             return 0;
         }
 
+        // Set while a singular extension's search leaves this node's hash move out.
+        let excluded = self.excluded[ply as usize];
         let moves = pos.legal_moves();
         if moves.is_empty() {
             // Checkmate (worse the sooner it happens) or stalemate.
@@ -707,11 +756,15 @@ impl<'a> Searcher<'a> {
         // ANCHOR: tt_probe
         // Transposition table: a deep enough result may settle this position at once, and in
         // any case its best move is searched first.
+        // (Not in a singular extension's search: the entry is about the node with every move.)
         let mut tt_move = None;
+        let mut tt_entry = None;
         if self.techniques.tt
+            && excluded.is_none()
             && let Some(entry) = self.tt.probe(pos.hash())
         {
             self.note(Note::TtHit);
+            tt_entry = Some(entry);
             tt_move = entry.best_move.filter(|mv| moves.contains(mv));
             if u32::from(entry.depth) >= depth {
                 let score = score_from_tt(entry.score, ply);
@@ -734,6 +787,7 @@ impl<'a> Searcher<'a> {
         // and the node probably isn't important; search it a ply shallower.
         let depth = if self.techniques.iir
             && tt_move.is_none()
+            && excluded.is_none()
             && depth >= self.search_params.iir_min_depth
         {
             depth - 1
@@ -820,6 +874,7 @@ impl<'a> Searcher<'a> {
         // Null-move pruning: if passing still keeps us at or above beta, a real move would too.
         if self.techniques.null_move
             && selective
+            && excluded.is_none()
             && depth >= p.null_min_depth
             && self.path.last() != Some(&None)
             && has_pieces(pos)
@@ -858,10 +913,70 @@ impl<'a> Searcher<'a> {
         }
         // ANCHOR_END: null_move
 
+        // ANCHOR: singular
+        // Singular extension: is the hash move much better than every other move? Search the
+        // node again, at half the depth and without the hash move, against a window a little
+        // below the hash move's score. If no other move reaches it, the hash move is probably
+        // forced, and it is searched a ply deeper.
+        let mut singular_move = None;
+        if self.techniques.singular_extension
+            && depth >= p.singular_min_depth
+            && ply < 2 * self.root_depth
+            && let Some(entry) = tt_entry
+            && let Some(hash_move) = tt_move
+            && entry.bound != Bound::Upper
+            && u32::from(entry.depth) + p.singular_tt_depth_margin >= depth
+        {
+            let tt_score = score_from_tt(entry.score, ply);
+            if tt_score.abs() < MATE - MAX_PLY as i32 {
+                let singular_beta = tt_score - p.singular_margin * depth as i32;
+                self.note(Note::SingularSearch(hash_move));
+                self.excluded[ply as usize] = Some(hash_move);
+                let mut singular_pv = Vec::new();
+                let score = self.negamax(
+                    pos,
+                    (depth - 1) / 2,
+                    ply,
+                    singular_beta - 1,
+                    singular_beta,
+                    &mut singular_pv,
+                );
+                self.excluded[ply as usize] = None;
+                self.note(Note::Exit { score });
+                if self.aborted {
+                    return 0;
+                }
+                if score < singular_beta {
+                    self.note(Note::SingularExtension(hash_move));
+                    singular_move = Some(hash_move);
+                } else if self.techniques.multi_cut && singular_beta >= beta {
+                    // Multi-cut: the hash move beat beta, and another move beats it too even
+                    // at half the depth. With two moves that good, the node is a cutoff.
+                    self.note(Note::MultiCut);
+                    return singular_beta;
+                }
+            }
+        }
+        // ANCHOR_END: singular
+
+        // In a singular extension's search, the hash move is left out. If it was the only
+        // move, nothing else comes close: fail low.
+        let without_excluded: Vec<Move>;
+        let moves: &[Move] = match excluded {
+            Some(left_out) => {
+                without_excluded = moves.iter().copied().filter(|&mv| mv != left_out).collect();
+                &without_excluded
+            }
+            None => &moves,
+        };
+        if moves.is_empty() {
+            return alpha;
+        }
+
         let previous = self.previous();
         let picker = MovePicker::new(
             pos,
-            &moves,
+            moves,
             tt_move,
             ply,
             &previous,
@@ -964,9 +1079,12 @@ impl<'a> Searcher<'a> {
             // ANCHOR_END: lmr
 
             // ANCHOR: check_extension
-            // Check extension: a move that gives check is searched one ply deeper.
-            let extension =
-                u32::from(self.techniques.check_extension && gives_check && ply < MAX_PLY / 2);
+            // Check extension: a move that gives check is searched one ply deeper. So is a
+            // singular hash move (above).
+            let extension = u32::from(
+                (self.techniques.check_extension && gives_check && ply < MAX_PLY / 2)
+                    || Some(mv) == singular_move,
+            );
             // ANCHOR_END: check_extension
 
             searched += 1;
@@ -1003,7 +1121,8 @@ impl<'a> Searcher<'a> {
         self.keys.pop();
 
         // ANCHOR: tt_store
-        if self.techniques.tt && !self.aborted {
+        // (Not in a singular extension's search: its result leaves the best move out.)
+        if self.techniques.tt && !self.aborted && excluded.is_none() {
             let bound = if best >= beta {
                 Bound::Lower
             } else if best > original_alpha {
@@ -1231,6 +1350,7 @@ impl<'a> Searcher<'a> {
         mut alpha: i32,
         beta: i32,
     ) -> RootResult {
+        self.root_depth = depth;
         // The root's static evaluation, for the improving heuristic two plies down. `negamax`
         // stores its own, but the root is searched here.
         self.evals[0] = if pos.in_check() {
@@ -1796,5 +1916,36 @@ mod tests {
         let max = crate::ordering::HISTORY_MAX;
         assert_eq!(p.lmr_history_adjustment(max), p.lmr_history_max);
         assert_eq!(p.lmr_history_adjustment(-max), -p.lmr_history_max);
+    }
+
+    #[test]
+    fn a_search_without_the_only_move_fails_low_and_stores_nothing() {
+        // Black has one legal move, ...a5: the queen on g6 covers g8, g7 and h7.
+        let pos = Position::from_fen("7k/8/p5Q1/8/8/8/8/K7 b - - 0 1").unwrap();
+        let only: Vec<Move> = pos.legal_moves().iter().copied().collect();
+        assert_eq!(only.len(), 1);
+        let params = EvalParams::material_only();
+        let stop = AtomicBool::new(false);
+        let tt = TranspositionTable::new(1);
+        let mut ordering = OrderingTables::default();
+        let mut searcher = Searcher::new(
+            &params,
+            SearchParams::default(),
+            &tt,
+            &mut ordering,
+            Techniques::default(),
+            StopConditions {
+                stop: &stop,
+                deadline: None,
+                max_nodes: None,
+            },
+            &[],
+        );
+        // As a singular extension's search would: the node at ply 1, its hash move left out.
+        searcher.excluded[1] = Some(only[0]);
+        let mut pv = Vec::new();
+        let (alpha, beta) = (1000, 1001);
+        assert_eq!(searcher.negamax(&pos, 4, 1, alpha, beta, &mut pv), alpha);
+        assert!(tt.probe(pos.hash()).is_none());
     }
 }

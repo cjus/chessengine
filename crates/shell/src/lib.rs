@@ -160,6 +160,8 @@ Commands:
                        delta pruning
   set seeorder on|off  Search captures that lose material (by SEE) after quiet moves
   set checkext on|off  Check extensions: search checking moves one ply deeper (default off)
+  set singular on|off  Singular extensions (a hash move far better than the rest: a ply deeper)
+  set multicut on|off  Multi-cut: cut off a node where two moves beat beta (needs singular)
   set iir on|off       Internal iterative reductions (no hash move: a ply shallower)
   set improving on|off Adjust pruning when the side to move is improving (default off)
   set pst on|off       Piece-square tables (off: material only)
@@ -1128,7 +1130,7 @@ fn parse_move(pos: &Position, text: &str) -> Option<Move> {
 }
 
 /// Usage for the `set` command.
-const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set threads <N> | set eval hand|tuned | set alphabeta|quiescence|mvvlva|tt|killers|countermoves|history|conthist|pvs|aspiration|nullmove|lmr|histlmr|lmp|rfp|razoring|futility|seeprune|delta|seeorder|checkext|iir|improving|pst|tapered|mobility|pawns|pieces|kingsafety|tempo on|off";
+const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set threads <N> | set eval hand|tuned | set alphabeta|quiescence|mvvlva|tt|killers|countermoves|history|conthist|pvs|aspiration|nullmove|lmr|histlmr|lmp|rfp|razoring|futility|seeprune|delta|seeorder|checkext|singular|multicut|iir|improving|pst|tapered|mobility|pawns|pieces|kingsafety|tempo on|off";
 
 /// How long the engine thinks per move by default in the shell.
 const DEFAULT_MOVETIME_MS: u64 = 1000;
