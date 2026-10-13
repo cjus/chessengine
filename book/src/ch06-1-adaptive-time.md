@@ -82,7 +82,7 @@ the typical one longer. Whether that plays better is for the games to say.
 
 | Test | Result |
 | --- | --- |
-| Adaptive soft limit vs `main` without it, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | Waiting |
+| Adaptive soft limit vs `main` without it, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | Waiting (cjus/chessengine#72) |
 
 ## Further reading
 

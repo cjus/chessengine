@@ -7,7 +7,8 @@ it in every PR that changes the picture (a stage merged, a result in, a new bloc
 *Last updated 2026-10-12 (M5: the check extension, IIR and three versions of improving merged,
 with chapter 14.1; improving is off by default and set aside; time losses not reproduced,
 #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by default after
-no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71).*
+no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71; adaptive time
+management, #72, rebased and next for an SPRT on the M3).*
 
 ## Stages
 
@@ -44,10 +45,11 @@ no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71).*
 | M5: continuation history (chapter 10.1) | #69 | 754226 | Merged: +10.7 ± 7.3, 4,532 games, [0, 5] passed (M3 Max) |
 | M5: history in late move reductions (chapter 14.1) | #70 | 754226 | Merged, off by default: +2.1 ± 5.0, 8,910 games, [0, 5] no verdict (LLR −0.30), stopped (M3 Max) |
 | M5: singular extensions and multi-cut (chapter 14.1) | #71 | 1115153 | Merged: +29.5 ± 13.3, 1,357 games, [0, 5] passed (M3 Max) |
+| M5: adaptive time management (chapter 6.1) | #72, `claude/m5-time-management` | 1115153 (bench is depth-limited; timed games change) | Draft, on by default; rebased onto `main` with #71; SPRT [0, 5] next on the M3 |
 
-Waiting: #72 (adaptive time management), #73 (history off, bounds [−5, 0]) and #74 (history
-in LMR, second version), drafts branched from older `main`s. Their SPRTs run one at a time on
-the M3, in that order. **Before each SPRT starts, rebase that PR onto the current `main`** and
+Waiting: #72, rebased and ready for its SPRT; then #73 (history off, bounds [−5, 0]) and #74
+(history in LMR, second version), drafts branched from older `main`s. Their SPRTs run one at a
+time on the M3, in that order. **Before each SPRT starts, rebase that PR onto the current `main`** and
 re-measure its `Bench:` line: `scripts/mac-sprt.sh` plays the PR's head against `main`, so an
 unrebased PR would be measured against changes it doesn't have. For each: if it passes, record
 it in its chapter and the ledger, mark it ready and merge; if it fails, switch it off by
