@@ -464,7 +464,11 @@ mod tests {
             3,
             &Previous::default(),
             &tables,
-            &Techniques::default(),
+            // History on, whatever the default.
+            &Techniques {
+                history: true,
+                ..Techniques::default()
+            },
         )
         .map(|m| pos.to_san(m))
         .collect();
@@ -603,12 +607,18 @@ mod tests {
                 MovePicker::new(&pos, &moves, None, 3, &previous, &tables, &techniques);
             pos.to_san(picker.next().unwrap())
         };
-        let without = Techniques {
-            continuation_history: false,
+        // History on, whatever the default.
+        let both = Techniques {
+            history: true,
+            continuation_history: true,
             ..Techniques::default()
         };
+        let without = Techniques {
+            continuation_history: false,
+            ..both
+        };
         assert_eq!(first(without), "a6");
-        assert_eq!(first(Techniques::default()), "e5");
+        assert_eq!(first(both), "e5");
     }
 
     #[test]

@@ -429,7 +429,10 @@ impl Default for Techniques {
             tt: true,
             killers: true,
             countermoves: true,
-            history: true,
+            // Off for an experiment (cjus/chessengine#73): does the history table still help
+            // now that late move reductions and pruning cut late moves, and continuation
+            // history orders quiet moves too?
+            history: false,
             continuation_history: true,
             pvs: true,
             aspiration: true,
