@@ -434,6 +434,7 @@ impl Engine {
             tablebase,
             tablebase_params,
             multipv,
+            time,
             ..
         } = self;
         let tablebase = tablebase.as_deref();
@@ -491,7 +492,8 @@ impl Engine {
                     root_moves,
                     max_depth,
                     start,
-                    soft: budget.soft,
+                    budget,
+                    time,
                     helper_nodes: &helper_nodes,
                     lines,
                     reported: self_multipv,
@@ -617,7 +619,9 @@ struct MainSearch<'a> {
     root_moves: Vec<Move>,
     max_depth: u32,
     start: Instant,
-    soft: Option<Duration>,
+    /// The time limits, and how to adapt the soft one.
+    budget: time::TimeBudget,
+    time: &'a TimeParams,
     helper_nodes: &'a AtomicU64,
     /// How many lines to search (MultiPV, or a level's candidates).
     lines: usize,
@@ -641,13 +645,16 @@ fn main_search(
         mut root_moves,
         max_depth,
         start,
-        soft,
+        budget,
+        time,
         helper_nodes,
         lines: wanted,
         reported,
     } = job;
     let wanted = wanted.min(root_moves.len()).max(1);
     let mut lines: Vec<RootResult> = Vec::new();
+    // For the time manager: how many depths in a row the best move has stayed the same.
+    let mut stable = 0;
     for depth in 1..=max_depth {
         let mut this_depth: Vec<RootResult> = Vec::new();
         let mut complete = true;
@@ -687,6 +694,8 @@ fn main_search(
                 multipv: k as u32 + 1,
             });
         }
+        // The best move and score before this depth, for the time manager.
+        let before = lines.first().map(|line| (line.best_move, line.score));
         if !this_depth.is_empty() {
             lines = this_depth;
         }
@@ -704,10 +713,26 @@ fn main_search(
         if wanted == 1 && lines[0].score.abs() >= MATE - depth as i32 {
             break;
         }
-        // Starting another depth now would probably not finish in time.
+        // ANCHOR: soft_limit
+        // Starting another depth now would probably not finish in time. How soon "now" is
+        // depends on how settled the search is (see `time::adapted_soft`).
+        let (best_move, score) = (lines[0].best_move, lines[0].score);
+        let fall = match before {
+            Some((previous_move, previous_score)) => {
+                stable = if previous_move == best_move {
+                    stable + 1
+                } else {
+                    0
+                };
+                previous_score - score
+            }
+            None => 0,
+        };
+        let soft = time::adapted_soft(&budget, stable, fall, time);
         if soft.is_some_and(|soft| start.elapsed() >= soft) {
             break;
         }
+        // ANCHOR_END: soft_limit
         if searcher.aborted() {
             break;
         }

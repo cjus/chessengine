@@ -55,6 +55,8 @@ cb2026 sets two limits per move:
 {{#include ../../crates/engine/src/time.rs:params}}
 ```
 
+(The fields after `move_overhead` came later, in chapter 6.1.)
+
 ```rust,ignore
 {{#include ../../crates/engine/src/time.rs:budget}}
 ```
