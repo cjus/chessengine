@@ -44,6 +44,8 @@ On the principal variation, where the exact score matters, reductions are one pl
 {{#include ../../crates/engine/src/search.rs:lmr}}
 ```
 
+(The history adjustment came later, in chapter 14.1.)
+
 ## Late move pruning
 
 Near the leaves, LMR's reductions would leave little depth to search. **Late move pruning**

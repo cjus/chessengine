@@ -45,7 +45,7 @@
 //! | `set killers\|countermoves\|history\|conthist on\|off` | Switch a quiet-move ordering heuristic off |
 //! | `set pvs on\|off`, `set aspiration on\|off` | Principal variation search; aspiration windows |
 //! | `set nullmove on\|off` | Null-move pruning |
-//! | `set lmr on\|off`, `set lmp on\|off` | Late move reductions; late move pruning |
+//! | `set lmr on\|off`, `set histlmr on\|off`, `set lmp on\|off` | Late move reductions; adjusted by history; late move pruning |
 //! | `set rfp\|razoring\|futility\|seeprune\|delta\|seeorder on\|off` | Stage 14's pruning and SEE ordering |
 //! | `eval` | The static evaluation, term by term |
 //! | `eval diff <move>`, `see <move>` | Which evaluation terms a move changes; its static exchange evaluation |
@@ -153,6 +153,7 @@ Commands:
                        Start each depth with a narrow window around the last score
   set nullmove on|off  Null-move pruning
   set lmr on|off       Late move reductions: search late quiet moves less deeply
+  set histlmr on|off   Reduce quiet moves with a good history less
   set lmp on|off       Late move pruning: skip late quiet moves near the leaves
   set rfp|razoring|futility|seeprune|delta on|off
                        Reverse futility pruning, razoring, futility pruning, SEE pruning,
@@ -1026,7 +1027,7 @@ impl Shell {
             _ => return Response::text(SET_USAGE),
         }
         Response::text(format!(
-            "Sliding attacks: {}\nEngine moves: {}\nAlpha-beta pruning: {}\nQuiescence search: {}\nMVV-LVA ordering: {}\nTransposition table: {} ({} MB)\nThreads: {}\nPiece-square tables: {}\nTapered evaluation: {}\nMobility, pawns, pieces, king safety, tempo: {}, {}, {}, {}, {}\nKillers, countermoves, history, continuation history: {}, {}, {}, {}\nPVS, aspiration windows: {}, {}\nNull-move pruning: {}\nLate move reductions, pruning: {}, {}\nReverse futility, razoring, futility: {}, {}, {}\nSEE pruning, delta pruning, SEE ordering: {}, {}, {}",
+            "Sliding attacks: {}\nEngine moves: {}\nAlpha-beta pruning: {}\nQuiescence search: {}\nMVV-LVA ordering: {}\nTransposition table: {} ({} MB)\nThreads: {}\nPiece-square tables: {}\nTapered evaluation: {}\nMobility, pawns, pieces, king safety, tempo: {}, {}, {}, {}, {}\nKillers, countermoves, history, continuation history: {}, {}, {}, {}\nPVS, aspiration windows: {}, {}\nNull-move pruning: {}\nLate move reductions, adjusted by history, pruning: {}, {}, {}\nReverse futility, razoring, futility: {}, {}, {}\nSEE pruning, delta pruning, SEE ordering: {}, {}, {}",
             match slider_method() {
                 SliderMethod::Rays => "walking rays",
                 SliderMethod::Magics => "magic bitboards",
@@ -1060,6 +1061,7 @@ impl Shell {
             on_off_text(self.engine.techniques.aspiration),
             on_off_text(self.engine.techniques.null_move),
             on_off_text(self.engine.techniques.lmr),
+            on_off_text(self.engine.techniques.history_lmr),
             on_off_text(self.engine.techniques.late_move_pruning),
             on_off_text(self.engine.techniques.reverse_futility),
             on_off_text(self.engine.techniques.razoring),
@@ -1126,7 +1128,7 @@ fn parse_move(pos: &Position, text: &str) -> Option<Move> {
 }
 
 /// Usage for the `set` command.
-const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set threads <N> | set eval hand|tuned | set alphabeta|quiescence|mvvlva|tt|killers|countermoves|history|conthist|pvs|aspiration|nullmove|lmr|lmp|rfp|razoring|futility|seeprune|delta|seeorder|checkext|iir|improving|pst|tapered|mobility|pawns|pieces|kingsafety|tempo on|off";
+const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set threads <N> | set eval hand|tuned | set alphabeta|quiescence|mvvlva|tt|killers|countermoves|history|conthist|pvs|aspiration|nullmove|lmr|histlmr|lmp|rfp|razoring|futility|seeprune|delta|seeorder|checkext|iir|improving|pst|tapered|mobility|pawns|pieces|kingsafety|tempo on|off";
 
 /// How long the engine thinks per move by default in the shell.
 const DEFAULT_MOVETIME_MS: u64 = 1000;

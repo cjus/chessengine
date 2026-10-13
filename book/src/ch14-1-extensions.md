@@ -5,12 +5,14 @@
 Chapters 12 to 14 made the tree smaller by guessing which moves and positions don't need a full
 search. This chapter moves depth in both directions. An **extension** searches a move *deeper*
 than its siblings; a **reduction** searches a whole node *shallower* (chapter 13's late move
-reductions work on single moves). And one fact about a position, whether the side to move is
-**improving**, changes how boldly the pruning of chapters 13 and 14 guesses.
+reductions work on single moves). One fact about a position, whether the side to move is
+**improving**, changes how boldly the pruning of chapters 13 and 14 guesses. And one fact about
+a move, its **history** score, changes how much late move reductions take off it.
 
 The techniques in this chapter came after stage 20, as strength work towards version 1.0
 (milestone M5), so no stage tag contains them: read this chapter against `main`. Like everything
-before them, each can be switched off and on: `set checkext`, `set iir` and `set improving`.
+before them, each can be switched off and on: `set checkext`, `set iir`, `set improving` and
+`set histlmr`.
 
 ## Check extensions
 
@@ -115,20 +117,63 @@ which didn't store its static evaluation, so every node two plies down compared 
 with `-INFINITY` and counted as improving. Fixing it changed the six test positions' tree by 31
 nodes, so it is probably not why improving lost.
 
+## History in late move reductions
+
+Late move reductions (chapter 13) reduce a quiet move by how late it comes in the ordering. But
+that order is only as good as the history table, which ranks the quiet moves, and it puts the
+killers and the countermove first whatever their history. A move with a high history score
+that still came late has caused cutoffs elsewhere, and it deserves a closer look.
+
+So the reduction shrinks by a ply for every 256 points of history score
+(`lmr_history_divisor`), by at most two plies (`lmr_history_max`). A negative score makes it
+grow the same way.
+
+```rust,ignore
+{{#include ../../crates/engine/src/search.rs:lmr}}
+```
+
+The divisor comes from measuring. History scores can run from −16,384 to +16,384, but those of
+the moves LMR actually reduces are mostly tiny. Over a 40-move self-play game at 200 ms a move:
+
+| History score of a reduced move | Share |
+| --- | ---: |
+| −256 or below | almost none |
+| −256 to −64 | 9% |
+| −64 to +64 | 74% |
+| +64 to +256 | 7% |
+| +256 to +512 | 3% |
+| +512 and above | 7% |
+
+So this version reduces about one late move in ten less, and hardly ever reduces one more. The
+scores lean positive because the penalties go only to the quiet moves searched before a quiet
+move's cutoff. At a node where no quiet move cuts off, which is most of the nodes LMR works on,
+none of them is penalised.
+
+Stockfish (GPL-3.0) adjusts its reductions by history too, using its history and continuation
+history added up, on a scale of its own; the scale here is cb2026's. Continuation history
+(chapter 10.1) could join the score in the same way.
+
 ## What it saves
 
 The six positions of chapters 10 to 14 (the first six bench positions) at depth 8:
 
 | Setting | Nodes | vs defaults |
 | --- | ---: | ---: |
-| Defaults (IIR on; improving and the check extension off) | 148,075 | — |
-| `set iir off` | 193,361 | +31% |
-| `set improving on` | 115,438 | −22% |
-| `set checkext on` | 146,051 | −1% |
+| Defaults (IIR and history in LMR on; improving and the check extension off) | 147,792 | — |
+| `set histlmr off` | 148,075 | +0.2% |
+| `set iir off` | 193,666 | +31% |
+| `set improving on` | 120,454 | −18% |
+| `set checkext on` | 146,121 | −1% |
 
-IIR takes almost a quarter off the tree. Improving takes off over a fifth more; its second
+IIR takes almost a quarter off the tree. Improving takes off almost a fifth more; its second
 version, which also made late move pruning wait longer, took off 7%, and its first 31%. All
 three made the engine weaker: the games below decide, not the node counts.
+
+History in LMR hardly changes these trees. History scores grow with depth (the bonus is
+`depth²`) and over a game (each search keeps half of the last one's), and a search to depth 8
+from empty tables leaves few moves at 256 or more. The bench, which searches to depth 10, grew
+2.4%. In the self-play game above, where the tables carry over from move to move, one reduced
+move in ten was affected.
 
 ## Pitfalls
 
@@ -153,6 +198,9 @@ three made the engine weaker: the games below decide, not the node counts.
   reads what earlier nodes stored. A node searched by a different function, like the root here,
   is easy to miss, and nothing fails: the comparison just gives the wrong answer. A unit test
   now checks the root's entry.
+- **Measure the scale before choosing a divisor.** A history score's range says nothing about
+  where the scores actually sit. Here they sit within ±64 for three moves in four, so a divisor
+  set from the range (say 8,192, two plies at the cap) would almost never change a reduction.
 - **Two plies back may be a check.** In check, cb2026 computes no static evaluation (it is
   recorded as `-INFINITY`), so a side that was in check two plies ago always counts as
   improving. Some engines look four plies back in that case.

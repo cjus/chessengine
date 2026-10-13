@@ -129,6 +129,22 @@
 //! improving loses here, and the doubled late move pruning of the second version seems to have
 //! made up some of it. The switch and both parameters stay, so the parts can be tested again.
 //!
+//! ## History in late move reductions
+//!
+//! LMR reduces a quiet move by how late it comes in the ordering. But the order of the quiet
+//! moves comes from the history table, which is coarse, and a move with a high history score
+//! that still came late has caused cutoffs elsewhere: it deserves a closer look. So the
+//! reduction shrinks by a ply for every `lmr_history_divisor` (256) points of history score, by
+//! at most `lmr_history_max` (2) plies, and grows the same way for a negative score.
+//!
+//! The divisor comes from measuring. Over a 40-move self-play game, about three quarters of the
+//! moves LMR reduced had history scores within ±64; about one in ten had 256 or more; almost
+//! none had less than −256. The scores lean positive because penalties go only to the quiet
+//! moves tried before a quiet move's cutoff: at a node where no quiet move cuts off, none of
+//! them is penalised. So in practice this version
+//! reduces good moves less and hardly ever reduces any move more. Stockfish (GPL-3.0) does the
+//! same with its history and continuation history added up; the code here is cb2026's own.
+//!
 //! ## Tablebase probes (stage 18)
 //!
 //! With few pieces left, the search can ask the endgame tablebases for the exact result
@@ -213,6 +229,11 @@ pub struct SearchParams {
     pub lmr_base: u32,
     /// The divisor of `ln(depth) × ln(move number)`, in hundredths.
     pub lmr_divisor: u32,
+    /// A quiet move's reduction shrinks by a ply for each this much history score it has
+    /// (and grows by a ply for each this much below zero)...
+    pub lmr_history_divisor: i32,
+    /// ...by at most this many plies either way.
+    pub lmr_history_max: i32,
     /// Late move pruning applies up to this depth...
     pub lmp_max_depth: u32,
     /// ...once `lmp_base + depth²` quiet moves have been tried...
@@ -262,6 +283,10 @@ impl Default for SearchParams {
             lmr_min_moves: 3,
             lmr_base: 75,
             lmr_divisor: 225,
+            // About one reduced move in ten has a history score of 256 or more (measured over a
+            // self-play game; see the module documentation).
+            lmr_history_divisor: 256,
+            lmr_history_max: 2,
             lmp_max_depth: 3,
             lmp_base: 3,
             // Doubling it when improving was part of both failed versions (#60, #63).
@@ -283,6 +308,14 @@ impl Default for SearchParams {
     }
 }
 // ANCHOR_END: search_params
+
+impl SearchParams {
+    /// How many plies less to reduce a late quiet move with this history score: positive
+    /// for a good history, negative for a bad one, at most `lmr_history_max` either way.
+    pub fn lmr_history_adjustment(&self, history: i32) -> i32 {
+        (history / self.lmr_history_divisor).clamp(-self.lmr_history_max, self.lmr_history_max)
+    }
+}
 
 /// Search techniques that can be switched off, to see what each one is worth.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -318,6 +351,8 @@ pub struct Techniques {
     pub null_move: bool,
     /// Late move reductions: search late quiet moves less deeply (needs PVS).
     pub lmr: bool,
+    /// Adjust late move reductions by history: reduce quiet moves with a good history less.
+    pub history_lmr: bool,
     /// Late move pruning: skip late quiet moves near the leaves.
     pub late_move_pruning: bool,
     /// Reverse futility pruning (static null move).
@@ -355,6 +390,7 @@ impl Default for Techniques {
             aspiration: true,
             null_move: true,
             lmr: true,
+            history_lmr: true,
             late_move_pruning: true,
             reverse_futility: true,
             razoring: true,
@@ -381,6 +417,7 @@ impl Techniques {
         Techniques {
             null_move: false,
             lmr: false,
+            history_lmr: false,
             late_move_pruning: false,
             reverse_futility: false,
             razoring: false,
@@ -899,14 +936,19 @@ impl<'a> Searcher<'a> {
                 && index as u32 >= p.lmr_min_moves
             {
                 let row = &self.lmr[(depth as usize).min(LMR_TABLE_SIZE - 1)];
-                let mut reduction = u32::from(row[index.min(LMR_TABLE_SIZE - 1)]);
+                let mut reduction = i32::from(row[index.min(LMR_TABLE_SIZE - 1)]);
                 // Reduce the principal variation less: its exact score matters.
                 if pv_node {
-                    reduction = reduction.saturating_sub(1);
+                    reduction -= 1;
+                }
+                // Reduce a move with a good history less: it has caused cutoffs elsewhere.
+                if self.techniques.history_lmr {
+                    let history = self.ordering.history(pos.side_to_move(), mv);
+                    reduction -= p.lmr_history_adjustment(history);
                 }
                 MoveSearch::Later {
                     // Never reduce into the quiescence search.
-                    reduction: reduction.min(depth - 2),
+                    reduction: reduction.clamp(0, depth as i32 - 2) as u32,
                 }
             } else {
                 MoveSearch::Later { reduction: 0 }
@@ -1732,5 +1774,19 @@ mod tests {
         assert_eq!(to_score(MATE - 3), Score::Mate(2));
         assert_eq!(to_score(-MATE + 2), Score::Mate(-1));
         assert_eq!(to_score(57), Score::Centipawns(57));
+    }
+
+    #[test]
+    fn history_adjusts_reductions_by_at_most_lmr_history_max() {
+        let p = SearchParams::default();
+        let step = p.lmr_history_divisor;
+        assert_eq!(p.lmr_history_adjustment(0), 0);
+        assert_eq!(p.lmr_history_adjustment(step - 1), 0);
+        assert_eq!(p.lmr_history_adjustment(-(step - 1)), 0);
+        assert_eq!(p.lmr_history_adjustment(step), 1);
+        assert_eq!(p.lmr_history_adjustment(-step), -1);
+        let max = crate::ordering::HISTORY_MAX;
+        assert_eq!(p.lmr_history_adjustment(max), p.lmr_history_max);
+        assert_eq!(p.lmr_history_adjustment(-max), -p.lmr_history_max);
     }
 }
