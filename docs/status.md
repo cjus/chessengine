@@ -6,7 +6,7 @@ it in every PR that changes the picture (a stage merged, a result in, a new bloc
 
 *Last updated 2026-10-12 (M5: the check extension, IIR and three versions of improving merged,
 with chapter 14.1; improving is off by default and set aside; time losses not reproduced,
-#66).*
+#66; continuation history in draft, #69, waiting for its SPRT on the M3).*
 
 ## Stages
 
@@ -40,8 +40,12 @@ with chapter 14.1; improving is off by default and set aside; time losses not re
 | M5: improving heuristic | #60 | 765380 | Merged, off by default: −32.0 ± 15.1, 1,142 games, [0, 5] failed (Mac) |
 | M5: improving, half a ply off the margin; root evaluation fix | #63 | 765380 | Merged, off by default: −17.7 ± 11.5, 1,691 games, [0, 5] failed (M3 Max) |
 | M5: improving, the reverse futility margin only | #65 | 765380 | Merged, off by default: −33.0 ± 15.3, 1,036 games, [0, 5] failed (M3 Max) |
+| M5: continuation history (chapter 10.1) | #69, `claude/m5-continuation-history` | 754226 | Draft, on by default; SPRT [0, 5] vs `main` waiting on the M3 |
 
-Every M5 branch so far is merged; no branch is waiting.
+Waiting: #69 (continuation history). Carlos starts its SPRT on the M3 (`docs/testing.md`, "Long
+tests on the test Mac"); the script posts the result to the PR. If it passes, record it in
+chapter 10.1 and the ledger, mark the PR ready and merge. If it fails, switch it off by default
+(`continuation_history: false`, as with #57, #60, #63 and #65), record it, and merge.
 
 ## Milestones
 
@@ -147,8 +151,11 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    run (10,000+ games at 1+0.01, 10+0.1 and 40/60) is the final check.
 2. Milestone gates, once #36 is answered: gauntlets for M2–M4, level calibration (the
    calibration script is still to write, using `crates/tools/src/gauntlet.rs`).
-3. More M5 strength work, each change with an SPRT. Candidates: continuation history,
-   history-based LMR adjustment, singular extensions, time management. Improving is set aside
+3. More M5 strength work, each change with an SPRT. Continuation history is in test (#69).
+   Candidates: history-based LMR adjustment, singular extensions, time management, and an SPRT
+   of `set history off` against `main`: chapter 10.1 found that turning history off makes the
+   tree 18% smaller now that LMR and late move pruning cut late moves, so it is worth checking
+   that stage 10's gain still holds. Improving is set aside
    (Carlos, 2026-10-12) after three failed versions (#60, #63, #65). The results point at
    reverse futility pruning, and the late-move-pruning part may have helped, so later
    candidates are improving in late move pruning only (`rfp_improving` = 0, `lmp_improving` =
