@@ -54,15 +54,20 @@ clock, and it stops after a fixed share of its own.
 
 `ab` can't measure this: it searches to a fixed depth, and `bench` does too, so its node count
 doesn't change. In a game it shows in how the time is spread. One self-play game of 60 moves
-each at 8+0.08, before and after (different games, so the positions differ):
+each at 8+0.08, before and after, measured twice: on the engine of chapter 14.1 before
+continuation history, and again with continuation history and singular extensions (each pair
+is two different games, so the positions differ):
 
 | | Mean per move | Median | Slowest 10% from | Longest |
 | --- | ---: | ---: | ---: | ---: |
 | Before (fixed soft limit) | 210 ms | 146 ms | 527 ms | 857 ms |
 | After | 210 ms | 169 ms | 433 ms | 648 ms |
+| Before, with singular extensions | 210 ms | 121 ms | 467 ms | 916 ms |
+| After, with singular extensions | 210 ms | 156 ms | 459 ms | 851 ms |
 
-The total is the same, as it must be: both use their clock. The longest thinks are shorter and
-the typical one longer. Whether that plays better is for the games to say.
+The total is the same, as it must be: both use their clock. The typical think gets longer and
+the longest ones a little shorter. One game is a small sample, and the two pairs differ in how
+much: whether any of it plays better is for the games to say.
 
 ## Pitfalls
 
