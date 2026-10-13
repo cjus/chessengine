@@ -73,6 +73,12 @@ pub enum Note {
     PvsResearch(Move),
     /// This move caused a beta cutoff, as the `index`-th move searched (from 1).
     BetaCutoff(Move, u32),
+    /// A singular extension's search, without this hash move, starts at the node.
+    SingularSearch(Move),
+    /// No other move came close: this hash move is singular, and searched a ply deeper.
+    SingularExtension(Move),
+    /// Another move beat beta in the singular extension's search: the node is cut off.
+    MultiCut,
 }
 
 /// What happened during a search: counts of each decision.
@@ -114,6 +120,12 @@ pub struct SearchStats {
     pub reduction_researches: u64,
     /// PVS re-searches with the full window.
     pub pvs_researches: u64,
+    /// Singular extensions' searches (each leaving out a hash move).
+    pub singular_searches: u64,
+    /// Hash moves found singular and extended.
+    pub singular_extensions: u64,
+    /// Nodes cut off by multi-cut.
+    pub multi_cuts: u64,
 }
 
 impl SearchStats {
@@ -136,6 +148,9 @@ impl SearchStats {
             Note::Reduced(..) => &mut self.reduced,
             Note::ReductionResearch(_) => &mut self.reduction_researches,
             Note::PvsResearch(_) => &mut self.pvs_researches,
+            Note::SingularSearch(_) => &mut self.singular_searches,
+            Note::SingularExtension(_) => &mut self.singular_extensions,
+            Note::MultiCut => &mut self.multi_cuts,
             Note::BetaCutoff(_, index) => {
                 if index == 1 {
                     self.first_move_cutoffs += 1;
@@ -168,6 +183,9 @@ impl SearchStats {
             reduced,
             reduction_researches,
             pvs_researches,
+            singular_searches,
+            singular_extensions,
+            multi_cuts,
         } = *other;
         self.nodes += nodes;
         self.qnodes += qnodes;
@@ -187,6 +205,9 @@ impl SearchStats {
         self.reduced += reduced;
         self.reduction_researches += reduction_researches;
         self.pvs_researches += pvs_researches;
+        self.singular_searches += singular_searches;
+        self.singular_extensions += singular_extensions;
+        self.multi_cuts += multi_cuts;
     }
 }
 
@@ -257,6 +278,10 @@ mod tests {
             Note::BetaCutoff(mv, 1),
             Note::BetaCutoff(mv, 4),
             Note::Futility(mv),
+            Note::SingularSearch(mv),
+            Note::SingularSearch(mv),
+            Note::SingularExtension(mv),
+            Note::MultiCut,
             Note::Exit { score: 0 },
         ] {
             stats.count(note);
@@ -265,9 +290,14 @@ mod tests {
         assert_eq!(stats.cutoffs, 2);
         assert_eq!(stats.first_move_cutoffs, 1);
         assert_eq!(stats.futility, 1);
+        assert_eq!(stats.singular_searches, 2);
+        assert_eq!(stats.singular_extensions, 1);
+        assert_eq!(stats.multi_cuts, 1);
         let mut total = stats;
         total.add(&stats);
         assert_eq!(total.cutoffs, 4);
+        assert_eq!(total.singular_searches, 4);
+        assert_eq!(total.multi_cuts, 2);
     }
 
     #[test]

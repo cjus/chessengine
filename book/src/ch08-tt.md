@@ -48,6 +48,8 @@ Here is the probe at the top of negamax, then the store at the end:
 {{#include ../../crates/engine/src/search.rs:tt_store}}
 ```
 
+(The `excluded` conditions came later, with singular extensions in chapter 14.1.)
+
 The stored move is checked against the legal moves before it is used. A wrong move could
 come from two different positions sharing a key, which is very rare with 64-bit keys but not
 impossible.

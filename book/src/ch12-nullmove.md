@@ -27,6 +27,8 @@ The test is cheap for two reasons:
 {{#include ../../crates/engine/src/search.rs:null_move}}
 ```
 
+(The `excluded` condition came later, with singular extensions in chapter 14.1.)
+
 Most positions where the side to move is far ahead fail this test for the opponent quickly,
 and whole subtrees vanish. On the six test positions at depth 8, null-move pruning cuts the
 nodes from 40.6 million to 10.0 million, a 75% saving. That's roughly two extra plies of

@@ -146,6 +146,16 @@ pub(crate) const SWITCHES: &[Switch] = &[
         flag: |e| &mut e.techniques.check_extension,
     },
     Switch {
+        name: "singular",
+        description: "Singular extensions",
+        flag: |e| &mut e.techniques.singular_extension,
+    },
+    Switch {
+        name: "multicut",
+        description: "Multi-cut (in the singular extensions' search)",
+        flag: |e| &mut e.techniques.multi_cut,
+    },
+    Switch {
         name: "iir",
         description: "Internal iterative reductions",
         flag: |e| &mut e.techniques.iir,
@@ -343,6 +353,13 @@ impl Shell {
         out.push_str(&format!(
             "  PVS: {} re-searches with the full window\n",
             s.pvs_researches
+        ));
+        out.push_str(&format!(
+            "  Singular extensions: {} searches, {} hash moves extended ({:.0}%), {} multi-cuts\n",
+            s.singular_searches,
+            s.singular_extensions,
+            percent(s.singular_extensions, s.singular_searches),
+            s.multi_cuts
         ));
         out.push_str("Counts say how often a technique fired, not how many nodes it saved: `ab <name>` measures that.");
         Response::text(out)
@@ -624,6 +641,13 @@ fn render_tree(root: &Position, tree: &SearchTree) -> String {
                 pending.push((len, "re-search with full window".to_string()));
                 None
             }
+            // The singular extension's search is a second search of the same node.
+            Note::SingularSearch(mv) => {
+                pending.push((len, format!("singular search without {}", san_of(mv))));
+                None
+            }
+            Note::SingularExtension(mv) => Some(format!("{} singular, extended", san_of(mv))),
+            Note::MultiCut => Some("multi-cut".to_string()),
             Note::TtHit | Note::NullMove | Note::Quiescence | Note::DeltaPruning(_) => None,
         };
         if let Some(tag) = tag

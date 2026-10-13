@@ -11,8 +11,8 @@ a move, its **history** score, changes how much late move reductions take off it
 
 The techniques in this chapter came after stage 20, as strength work towards version 1.0
 (milestone M5), so no stage tag contains them: read this chapter against `main`. Like everything
-before them, each can be switched off and on: `set checkext`, `set iir`, `set improving` and
-`set histlmr`.
+before them, each can be switched off and on: `set checkext`, `set singular`, `set multicut`,
+`set iir`, `set improving` and `set histlmr`.
 
 ## Check extensions
 
@@ -25,7 +25,8 @@ evaluates a position whose point hasn't happened yet.
 {{#include ../../crates/engine/src/search.rs:check_extension}}
 ```
 
-The child is then searched at `depth - 1 + extension`. The `ply < MAX_PLY / 2` condition
+The child is then searched at `depth - 1 + extension`. (`singular_move` is the next
+section's.) The `ply < MAX_PLY / 2` condition
 matters: an extension that can apply at every ply never reaches the horizon, and a long series
 of checks would grow the search without bound.
 
@@ -46,6 +47,41 @@ that gives check (chapter 13), and the quiescence search resolves the captures. 
 extend more selectively, for example only checks that don't lose material, or only **singular**
 moves: a move that a reduced search, with that move left out, shows to be much better than every
 alternative. The switch stays, so the experiment can be repeated.
+
+## Singular extensions
+
+The check extension extends a kind of move. A **singular extension** extends a move because of
+how it compares with the others: the hash move, if it is much better than every alternative. A
+move like that is probably forced, a recapture or the one defence to a threat, and a mistake
+anywhere in its line costs the most, so it is worth a ply more.
+
+Finding out costs a search. Before the moves are searched, the node is searched once more, at
+half the depth, **without the hash move**, with a null window just below the hash move's score:
+`singular_beta`, the hash table's score less 2 centipawns per ply of depth. If no other move
+reaches `singular_beta`, the hash move is singular and is searched with one ply more.
+
+```rust,ignore
+{{#include ../../crates/engine/src/search.rs:singular}}
+```
+
+The test needs a hash entry worth comparing against: a lower bound or an exact score, at most 3
+plies shallower than the node. It applies from depth 8 on, so near the root and only in deep
+searches. And no extension is made beyond twice the root depth, so that a chain of them can't
+grow the search without limit.
+
+The same search answers a second question for free. If another move does reach
+`singular_beta`, and `singular_beta` is at least beta, then two moves beat beta: the hash move,
+and this one even at half the depth. The node is cut off on the spot. That is **multi-cut**.
+
+The search without the hash move asks a different question from the node's own search, so it
+must not mix with it. It neither reads nor writes the transposition table (an entry about the
+node with all its moves would answer the wrong question, and its result would poison the
+entry), it tries no null move, and IIR doesn't reduce it further. If the hash move is the only
+legal move, the search has nothing to search: it fails low, since nothing else comes close.
+
+Singular extensions go back to Deep Thought, the Carnegie Mellon machine that led to Deep Blue
+(Anantharaman, Campbell and Hsu, 1988). This version, and multi-cut, are as in Stockfish (GPL-3.0); the code is
+cb2026's own.
 
 ## Internal iterative reductions
 
@@ -184,6 +220,14 @@ from empty tables leaves few moves at 256 or more. The bench, which searches to 
 1.7%. In the self-play game above, where the tables carry over from move to move, one reduced
 move in ten was affected.
 
+Singular extensions don't appear here: at depth 8, no node below the root has 8 plies left. At
+depth 10 they make the tree **85% bigger** (694,595 nodes against 375,334). Over the six
+positions the search tried 472 hash moves, extended 120 and cut off 138 nodes by multi-cut;
+without multi-cut the tree is 7% bigger again. That is the price of extending near the root:
+each extension adds a ply to a large part of the tree. The games say it is worth it: about **+30
+Elo** (see "What it's worth"), the biggest gain of anything in this chapter, with a tree almost
+twice the size. Nodes aren't Elo, in this direction too.
+
 ## Pitfalls
 
 - **Search explosion.** An extension that can apply at every ply never reaches the horizon, and
@@ -210,6 +254,9 @@ move in ten was affected.
 - **Measure the scale before choosing a divisor.** A history score's range says nothing about
   where the scores actually sit. Here they sit within ±64 for three moves in four, so a divisor
   set from the range (say 8,192, two plies at the cap) would almost never change a reduction.
+- **A second search of the same node.** The search without the hash move runs at the same ply
+  as the node itself. Anything stored per ply or per position, the hash table above all, has to
+  know that it is a different search, or it will mix the two results.
 - **Two plies back may be a check.** In check, cb2026 computes no static evaluation (it is
   recorded as `-INFINITY`), so a side that was in check two plies ago always counts as
   improving. Some engines look four plies back in that case.
@@ -224,6 +271,7 @@ move in ten was affected.
 | Improving, half a ply off the margin, late move pruning doubled, vs `main` without it (with IIR), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−17.7 ± 11.5 Elo** over 1,691 games (+362 −448 =881): failed (LLR −2.97) |
 | Improving, half a ply off the margin only, vs `main` without it (with IIR), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−33.0 ± 15.3 Elo** over 1,036 games (+221 −319 =496): failed (LLR −2.96), so improving is off by default |
 | History in LMR vs `main` without it (with continuation history), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | +2.1 ± 5.0 Elo over 8,910 games (+2188 −2134 =4588): no verdict (LLR −0.30), stopped; off by default |
+| Singular extensions and multi-cut vs `main` without them (with continuation history), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+29.5 ± 13.3 Elo** over 1,357 games (+409 −294 =654): passed (LLR 2.96) |
 
 ## Further reading
 
