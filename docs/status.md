@@ -8,7 +8,8 @@ it in every PR that changes the picture (a stage merged, a result in, a new bloc
 with chapter 14.1; improving is off by default and set aside; time losses not reproduced,
 #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by default after
 no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71; adaptive time
-management merged, +33.5 ± 14.3, #72).*
+management merged, +33.5 ± 14.3, #72; the history-off experiment, #73, rebased and next for
+an SPRT on the M3).*
 
 ## Stages
 
@@ -46,9 +47,12 @@ management merged, +33.5 ± 14.3, #72).*
 | M5: history in late move reductions (chapter 14.1) | #70 | 754226 | Merged, off by default: +2.1 ± 5.0, 8,910 games, [0, 5] no verdict (LLR −0.30), stopped (M3 Max) |
 | M5: singular extensions and multi-cut (chapter 14.1) | #71 | 1115153 | Merged: +29.5 ± 13.3, 1,357 games, [0, 5] passed (M3 Max) |
 | M5: adaptive time management (chapter 6.1) | #72 | 1115153 (bench is depth-limited; timed games change) | Merged: +33.5 ± 14.3, 1,062 games, [0, 5] passed (M3 Max) |
+| M5 experiment: history heuristic off (chapter 10.1) | #73, `claude/m5-history-off` | 923482 | Draft; rebased onto `main` with #72; SPRT [−5, 0] next on the M3. If it fails, history stays on and only the result merges |
 
-Waiting: #73 (history off, bounds [−5, 0]) and #74 (history in LMR, second version), drafts
-branched from older `main`s. Their SPRTs run one at a time on the M3, in that order. **Before each SPRT starts, rebase that PR onto the current `main`** and
+Waiting: #73, rebased and ready for its SPRT with bounds [−5, 0] (`scripts/mac-sprt.sh 73 -5
+0`); then #74 (history in LMR, second version), a draft branched from an older `main`. #73 and
+#74 both concern the history table: if #73 passes and history goes off, #74's score becomes
+continuation history alone, and it should be re-measured before its SPRT. **Before each SPRT starts, rebase that PR onto the current `main`** and
 re-measure its `Bench:` line: `scripts/mac-sprt.sh` plays the PR's head against `main`, so an
 unrebased PR would be measured against changes it doesn't have. For each: if it passes, record
 it in its chapter and the ledger, mark it ready and merge; if it fails, switch it off by

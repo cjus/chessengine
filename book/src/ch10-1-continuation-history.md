@@ -76,7 +76,9 @@ missed, not because they were found quickly. The first-move figure misleads the 
 cutoffs that a bad order would have found late are the ones that never happen.
 
 So in a search with late move reductions and pruning, node counts can't say whether move
-ordering got better. Only games can.
+ordering got better. Only games can. That raises a question about the history table itself:
+with continuation history to order the quiet moves, does it still help? An SPRT with history
+switched off answers it (below).
 
 ## Pitfalls
 
@@ -103,6 +105,14 @@ ordering got better. Only games can.
 It took 4,532 games: a gain of about 10 Elo sits close to the test's upper bound of 5, and the
 closer the true value is to a bound, the longer an SPRT needs to decide. None of the games was
 lost on time.
+
+| Test | Result |
+| --- | --- |
+| History off (continuation history alone orders quiet moves) vs `main` with both, 8+0.08, test Mac (M3 Max), SPRT [−5, 0] | Waiting (cjus/chessengine#73) |
+
+That second test is a simplification test: its bounds ask whether switching history off loses
+5 Elo or more. If it passes, the history table adds nothing on top of the rest; if it fails,
+history still earns its place.
 
 ## Further reading
 
