@@ -98,7 +98,11 @@ ordering got better. Only games can.
 
 | Test | Result |
 | --- | --- |
-| Continuation history vs `main` without it, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | Waiting (cjus/chessengine#69) |
+| Continuation history vs `main` without it, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+10.7 ± 7.3 Elo** over 4,532 games (+1257 −1117 =2158): passed (LLR 2.96) |
+
+It took 4,532 games: a gain of about 10 Elo sits close to the test's upper bound of 5, and the
+closer the true value is to a bound, the longer an SPRT needs to decide. None of the games was
+lost on time.
 
 ## Further reading
 
