@@ -133,7 +133,8 @@ grow the same way.
 ```
 
 The divisor comes from measuring. History scores can run from −16,384 to +16,384, but those of
-the moves LMR actually reduces are mostly tiny. Over a 40-move self-play game at 200 ms a move:
+the moves LMR actually reduces are mostly tiny. Over a 40-move self-play game at 200 ms a move
+(measured before continuation history, chapter 10.1, came in):
 
 | History score of a reduced move | Share |
 | --- | ---: |
@@ -159,20 +160,20 @@ The six positions of chapters 10 to 14 (the first six bench positions) at depth 
 
 | Setting | Nodes | vs defaults |
 | --- | ---: | ---: |
-| Defaults (IIR and history in LMR on; improving and the check extension off) | 147,792 | — |
-| `set histlmr off` | 148,075 | +0.2% |
-| `set iir off` | 193,666 | +31% |
-| `set improving on` | 120,454 | −18% |
-| `set checkext on` | 146,121 | −1% |
+| Defaults (IIR, continuation history and history in LMR on; improving and the check extension off) | 145,132 | — |
+| `set histlmr off` | 145,410 | +0.2% |
+| `set iir off` | 196,436 | +35% |
+| `set improving on` | 117,842 | −19% |
+| `set checkext on` | 151,089 | +4% |
 
-IIR takes almost a quarter off the tree. Improving takes off almost a fifth more; its second
+IIR takes about a quarter off the tree. Improving takes off almost a fifth more; its second
 version, which also made late move pruning wait longer, took off 7%, and its first 31%. All
 three made the engine weaker: the games below decide, not the node counts.
 
 History in LMR hardly changes these trees. History scores grow with depth (the bonus is
 `depth²`) and over a game (each search keeps half of the last one's), and a search to depth 8
 from empty tables leaves few moves at 256 or more. The bench, which searches to depth 10, grew
-2.4%. In the self-play game above, where the tables carry over from move to move, one reduced
+1.7%. In the self-play game above, where the tables carry over from move to move, one reduced
 move in ten was affected.
 
 ## Pitfalls
