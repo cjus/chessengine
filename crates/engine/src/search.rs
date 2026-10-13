@@ -141,9 +141,15 @@
 //! moves LMR reduced had history scores within ±64; about one in ten had 256 or more; almost
 //! none had less than −256. The scores lean positive because penalties go only to the quiet
 //! moves tried before a quiet move's cutoff: at a node where no quiet move cuts off, none of
-//! them is penalised. So in practice this version
-//! reduces good moves less and hardly ever reduces any move more. Stockfish (GPL-3.0) does the
-//! same with its history and continuation history added up; the code here is cb2026's own.
+//! them is penalised. So in practice this version reduces good moves less and hardly ever
+//! reduces any move more. Stockfish (GPL-3.0) does the same with its history and continuation
+//! history added up; the code here is cb2026's own.
+//!
+//! **Off by default.** An SPRT against `main` without it (with continuation history) found no
+//! clear difference: +2.1 ± 5.0 Elo after 8,910 games at 8+0.08, no verdict, stopped there
+//! (cjus/chessengine#70). It changes about one reduction in ten, by a ply or two, so any effect
+//! is small. A stronger version could add continuation history to the score, or use a smaller
+//! divisor. The switch and parameters stay.
 //!
 //! ## Tablebase probes (stage 18)
 //!
@@ -390,7 +396,9 @@ impl Default for Techniques {
             aspiration: true,
             null_move: true,
             lmr: true,
-            history_lmr: true,
+            // Off by default: no clear difference after 8,910 games (see the module
+            // documentation).
+            history_lmr: false,
             late_move_pruning: true,
             reverse_futility: true,
             razoring: true,

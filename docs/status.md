@@ -6,8 +6,8 @@ it in every PR that changes the picture (a stage merged, a result in, a new bloc
 
 *Last updated 2026-10-12 (M5: the check extension, IIR and three versions of improving merged,
 with chapter 14.1; improving is off by default and set aside; time losses not reproduced,
-#66; continuation history merged, +10.7 ± 7.3, #69; history in LMR, #70, rebased onto it and
-next for an SPRT on the M3).*
+#66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by default after
+no verdict, #70).*
 
 ## Stages
 
@@ -42,11 +42,11 @@ next for an SPRT on the M3).*
 | M5: improving, half a ply off the margin; root evaluation fix | #63 | 765380 | Merged, off by default: −17.7 ± 11.5, 1,691 games, [0, 5] failed (M3 Max) |
 | M5: improving, the reverse futility margin only | #65 | 765380 | Merged, off by default: −33.0 ± 15.3, 1,036 games, [0, 5] failed (M3 Max) |
 | M5: continuation history (chapter 10.1) | #69 | 754226 | Merged: +10.7 ± 7.3, 4,532 games, [0, 5] passed (M3 Max) |
-| M5: history in late move reductions (chapter 14.1) | #70, `claude/m5-history-lmr` | 766853 | Draft, on by default; rebased onto `main` with #69; SPRT [0, 5] next on the M3 |
+| M5: history in late move reductions (chapter 14.1) | #70 | 754226 | Merged, off by default: +2.1 ± 5.0, 8,910 games, [0, 5] no verdict (LLR −0.30), stopped (M3 Max) |
 
-Waiting: #70, rebased and ready for its SPRT; then #71 (singular extensions and multi-cut) and
-#72 (adaptive time management), drafts branched from `main` before #69 merged. Their SPRTs run
-one at a time on the M3, in that order. **Before each SPRT starts, rebase that PR onto the current `main`** and
+Waiting: #71 (singular extensions and multi-cut) and #72 (adaptive time management), drafts
+branched from `main` before #69 merged. Their SPRTs run one at a time on the M3, in that
+order. **Before each SPRT starts, rebase that PR onto the current `main`** and
 re-measure its `Bench:` line: `scripts/mac-sprt.sh` plays the PR's head against `main`, so an
 unrebased PR would be measured against changes it doesn't have. For each: if it passes, record
 it in its chapter and the ledger, mark it ready and merge; if it fails, switch it off by
@@ -129,7 +129,15 @@ Run the full test suite on every commit you replay, not only at the tip: each be
   disconnects it, so don't start SPRTs, gauntlets or other long runs there.
 - **Neutral changes take long.** When the true difference sits at one of the two hypotheses, the
   SPRT needs many games: stage 17's one-thread test (about 0 Elo, bounds [−5, 0]) took 15,188
-  games, 15 hours on the M1 Max. Clear gains of +100 Elo or more end in a few hundred.
+  games, 15 hours on the M1 Max. Clear gains of +100 Elo or more end in a few hundred. A change
+  worth about half the upper bound is the slowest of all: #70 (history in LMR) sat at +2 ± 5
+  after 8,910 games and was stopped with no verdict (Carlos, 2026-10-13) and merged off. If an
+  SPRT is still undecided after about 8,000 games with its estimate between the bounds,
+  propose the same.
+- **The M3's pace varies.** #69 played about 1,390 games an hour; #70 averaged about 760 an
+  hour overnight. Something slowed the M3 that night. Since it has a lid, closing it would make
+  the Mac sleep even with `caffeinate -i`. Expect fewer games an hour than the estimate above
+  when the M3 is in use or asleep for part of the run.
 - **Thread scaling** (`scripts/mac-smp.sh`) plays one game at a time, about 140 an hour, so its
   bounds default to [0, 25]: it asks whether more threads clearly gain. Stage 17's 4-thread test
   passed in 38 games, 17 minutes.
@@ -156,9 +164,10 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    run (10,000+ games at 1+0.01, 10+0.1 and 40/60) is the final check.
 2. Milestone gates, once #36 is answered: gauntlets for M2–M4, level calibration (the
    calibration script is still to write, using `crates/tools/src/gauntlet.rs`).
-3. More M5 strength work, each change with an SPRT. Continuation history passed (#69); in
-   test: history in LMR (#70), singular extensions (#71), adaptive time management (#72).
-   Candidates: adding continuation history to LMR's history score, and an SPRT
+3. More M5 strength work, each change with an SPRT. Continuation history passed (#69); history
+   in LMR had no verdict and is off (#70); in test: singular extensions (#71), adaptive time
+   management (#72). Candidates: history in LMR with continuation history added to the score
+   (or a smaller divisor), and an SPRT
    of `set history off` against `main`: chapter 10.1 found that turning history off makes the
    tree 18% smaller now that LMR and late move pruning cut late moves, so it is worth checking
    that stage 10's gain still holds. Improving is set aside

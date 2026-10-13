@@ -153,7 +153,7 @@ Commands:
                        Start each depth with a narrow window around the last score
   set nullmove on|off  Null-move pruning
   set lmr on|off       Late move reductions: search late quiet moves less deeply
-  set histlmr on|off   Reduce quiet moves with a good history less
+  set histlmr on|off   Reduce quiet moves with a good history less (default off)
   set lmp on|off       Late move pruning: skip late quiet moves near the leaves
   set rfp|razoring|futility|seeprune|delta on|off
                        Reverse futility pruning, razoring, futility pruning, SEE pruning,

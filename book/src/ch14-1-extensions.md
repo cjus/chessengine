@@ -154,19 +154,27 @@ Stockfish (GPL-3.0) adjusts its reductions by history too, using its history and
 history added up, on a scale of its own; the scale here is cb2026's. Continuation history
 (chapter 10.1) could join the score in the same way.
 
+**cb2026 ships with it off.** An SPRT against the same engine without it found no clear
+difference: about +2 Elo, give or take 5, after 8,910 games, with no verdict (see "What it's
+worth"). An effect that small sits between the test's two hypotheses, 0 and 5 Elo, which is
+where an SPRT takes longest; it could have needed tens of thousands more games, so the test
+was stopped. That fits what the table above shows: the adjustment changes about one reduction
+in ten, by a ply or two. A stronger version, with continuation history in the score or a
+smaller divisor, would change more of them. The switch and both parameters stay.
+
 ## What it saves
 
 The six positions of chapters 10 to 14 (the first six bench positions) at depth 8:
 
 | Setting | Nodes | vs defaults |
 | --- | ---: | ---: |
-| Defaults (IIR, continuation history and history in LMR on; improving and the check extension off) | 145,132 | — |
-| `set histlmr off` | 145,410 | +0.2% |
-| `set iir off` | 196,436 | +35% |
-| `set improving on` | 117,842 | −19% |
-| `set checkext on` | 151,089 | +4% |
+| Defaults (IIR and continuation history on; history in LMR, improving and the check extension off) | 145,410 | — |
+| `set histlmr on` | 145,132 | −0.2% |
+| `set iir off` | 196,157 | +35% |
+| `set improving on` | 114,511 | −21% |
+| `set checkext on` | 150,999 | +4% |
 
-IIR takes about a quarter off the tree. Improving takes off almost a fifth more; its second
+IIR takes about a quarter off the tree. Improving takes off over a fifth more; its second
 version, which also made late move pruning wait longer, took off 7%, and its first 31%. All
 three made the engine weaker: the games below decide, not the node counts.
 
@@ -215,7 +223,7 @@ move in ten was affected.
 | Improving, first version (a whole ply off the margin), vs `main` without it (with IIR), 8+0.08, test Mac (M1 Max), SPRT [0, 5] | **−32.0 ± 15.1 Elo** over 1,142 games (+267 −372 =503): failed (LLR −2.96) |
 | Improving, half a ply off the margin, late move pruning doubled, vs `main` without it (with IIR), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−17.7 ± 11.5 Elo** over 1,691 games (+362 −448 =881): failed (LLR −2.97) |
 | Improving, half a ply off the margin only, vs `main` without it (with IIR), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−33.0 ± 15.3 Elo** over 1,036 games (+221 −319 =496): failed (LLR −2.96), so improving is off by default |
-| History in LMR vs `main` without it, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | Waiting (cjus/chessengine#70) |
+| History in LMR vs `main` without it (with continuation history), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | +2.1 ± 5.0 Elo over 8,910 games (+2188 −2134 =4588): no verdict (LLR −0.30), stopped; off by default |
 
 ## Further reading
 
