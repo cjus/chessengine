@@ -166,6 +166,16 @@ pub(crate) const SWITCHES: &[Switch] = &[
         flag: |e| &mut e.techniques.improving,
     },
     Switch {
+        name: "tmstability",
+        description: "Time: stop sooner when the best move is stable",
+        flag: |e| &mut e.time.best_move_stability,
+    },
+    Switch {
+        name: "tmscore",
+        description: "Time: think longer when the score falls",
+        flag: |e| &mut e.time.falling_score,
+    },
+    Switch {
         name: "mobility",
         description: "Evaluation: mobility",
         flag: |e| &mut e.params.terms.use_mobility,

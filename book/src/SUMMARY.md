@@ -14,6 +14,7 @@
 
 - [Material, negamax and alpha-beta](ch05-alphabeta.md)
 - [Iterative deepening and time management](ch06-iterative.md)
+    - [Spending time where it's needed](ch06-1-adaptive-time.md)
 - [Quiescence search and MVV-LVA](ch07-quiescence.md)
 - [The transposition table](ch08-tt.md)
 - [Piece-square tables and tapered evaluation](ch09-pst.md)
