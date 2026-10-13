@@ -76,6 +76,11 @@ pub(crate) const SWITCHES: &[Switch] = &[
         flag: |e| &mut e.techniques.history,
     },
     Switch {
+        name: "conthist",
+        description: "Continuation history",
+        flag: |e| &mut e.techniques.continuation_history,
+    },
+    Switch {
         name: "pvs",
         description: "Principal variation search",
         flag: |e| &mut e.techniques.pvs,

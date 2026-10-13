@@ -32,13 +32,35 @@
 //!   update uses "gravity": bonuses shrink as a score nears its cap, so scores stay bounded
 //!   and old knowledge fades.
 //!
+//! ## Continuation history (M5)
+//!
+//! History asks whether a quiet move has been good *anywhere*. **Continuation history** asks
+//! whether it has been good *after the moves just played*: a table indexed by an earlier move
+//! (the piece that moved and its destination) and the candidate (its piece and destination).
+//! cb2026 keeps two, after the opponent's last move (one ply back) and after the side to
+//! move's own move before that (two plies back). A quiet move's ordering score is the sum of
+//! its history and both continuation scores, and a cutoff updates all three the same way, with
+//! the same bonus, penalty and gravity.
+//!
+//! It refines the countermove: the countermove table remembers one reply per opponent move,
+//! continuation history scores every reply. The two-ply table catches plans: after Nf3, a
+//! knight move to g5 or e5 is often the follow-up, whatever the opponent did in between.
+//!
+//! The pitfalls are size and dilution. Each table has 768 × 768 entries (12 pieces × 64
+//! squares, twice), about 2.4 MB, so it learns more slowly than the 2 × 64 × 64 history
+//! table and costs cache misses. Summing the scores lets a good continuation lift a move that
+//! history rates badly, which is the point, but also lets a stale one mislead.
+//!
+//! The idea is from Stockfish (GPL-3.0), which calls it continuation history (counter-move
+//! history and follow-up history in its first versions). This code is cb2026's own.
+//!
 //! ## The order, and staged picking
 //!
 //! 1. The transposition table move.
 //! 2. Captures and queen promotions, by MVV-LVA (from stage 14, only those that don't lose
 //!    material by static exchange evaluation).
 //! 3. The two killers, then the countermove.
-//! 4. The other quiet moves, by history.
+//! 4. The other quiet moves, by history plus continuation history.
 //! 5. Captures that lose material (stage 14).
 //!
 //! The moves are not sorted up front. A [`MovePicker`] picks the best remaining move each time
@@ -105,8 +127,9 @@ pub fn is_noisy(mv: Move) -> bool {
     }
 }
 
-/// Ordering keys: higher is searched first. The bands keep the stages apart; history scores
-/// stay within ±[`HISTORY_MAX`], below every band.
+/// Ordering keys: higher is searched first. The bands keep the stages apart; a quiet move's
+/// score, the sum of three history scores, stays within ±3 × [`HISTORY_MAX`], below every
+/// band.
 const TT_MOVE_KEY: i32 = 3_000_000;
 const NOISY_KEY: i32 = 2_000_000;
 const KILLER_KEYS: [i32; 2] = [1_000_000, 900_000];
@@ -114,9 +137,52 @@ const COUNTERMOVE_KEY: i32 = 800_000;
 const BAD_CAPTURE_KEY: i32 = -1_000_000;
 /// The largest a history score can get (in either direction).
 pub const HISTORY_MAX: i32 = 16_384;
+/// How many earlier moves continuation history looks back at: one ply (the opponent's last
+/// move) and two (the side to move's own move before that).
+pub const CONTINUATION_PLIES: usize = 2;
+/// The number of (piece, destination) pairs: 12 pieces × 64 squares.
+const PIECE_TO_COUNT: usize = 12 * 64;
+
+// ANCHOR: piece_to
+/// A move as continuation history sees it: the piece that moved and where it went.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PieceTo {
+    /// The piece, `color × 6 + piece type`.
+    piece: usize,
+    /// The destination square.
+    to: usize,
+}
+
+impl PieceTo {
+    /// `mv`, about to be played in `pos`. `None` if no piece stands on its from-square, which
+    /// a legal move never does.
+    pub fn new(pos: &Position, mv: Move) -> Option<PieceTo> {
+        let piece = pos.piece_at(mv.from())?;
+        Some(PieceTo {
+            piece: piece.color.index() * 6 + piece.piece_type.index(),
+            to: mv.to().index(),
+        })
+    }
+
+    /// A number from 0 to 767, for indexing.
+    fn index(self) -> usize {
+        self.piece * 64 + self.to
+    }
+}
+
+/// The moves that led to a node, for the heuristics that look back at them.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Previous {
+    /// The move that led here, for the countermove (`None` at the root and after a null move).
+    pub mv: Option<Move>,
+    /// The last moves by piece and destination, most recent first, for continuation history.
+    pub moved: [Option<PieceTo>; CONTINUATION_PLIES],
+}
+// ANCHOR_END: piece_to
 
 // ANCHOR: tables
-/// What the search has learned about quiet moves: killers per ply, countermoves, history.
+/// What the search has learned about quiet moves: killers per ply, countermoves, history and
+/// continuation history.
 #[derive(Clone, Debug)]
 pub struct OrderingTables {
     /// Two killer moves per ply.
@@ -125,6 +191,9 @@ pub struct OrderingTables {
     countermoves: [[Option<Move>; 64]; 12],
     /// Cutoff history by side, from-square and to-square.
     history: Box<[[[i32; 64]; 64]; 2]>,
+    /// Continuation history by plies back, the earlier move and the move: one flat table of
+    /// `CONTINUATION_PLIES × 768 × 768` scores (see [`continuation_index`]).
+    continuation: Vec<i32>,
 }
 // ANCHOR_END: tables
 
@@ -134,8 +203,17 @@ impl Default for OrderingTables {
             killers: vec![[None; 2]; MAX_PLY as usize + 1],
             countermoves: [[None; 64]; 12],
             history: Box::new([[[0; 64]; 64]; 2]),
+            // A flat `Vec`, not nested arrays in a `Box`: those can be built on the stack
+            // first, and at 4.7 MB they would overflow a search thread's.
+            continuation: vec![0; CONTINUATION_PLIES * PIECE_TO_COUNT * PIECE_TO_COUNT],
         }
     }
+}
+
+/// Where the score of `mv` after `earlier`, `back` plies before it, is in the continuation
+/// table (`back` is 0 for one ply back).
+fn continuation_index(back: usize, earlier: PieceTo, mv: PieceTo) -> usize {
+    (back * PIECE_TO_COUNT + earlier.index()) * PIECE_TO_COUNT + mv.index()
 }
 
 /// The countermove table's index for the piece standing on `mv`'s destination.
@@ -151,10 +229,14 @@ impl OrderingTables {
     }
 
     /// Prepares for a new search: killers are about the old search's plies, so they go;
-    /// history is halved, so it still helps but new results soon dominate.
+    /// history and continuation history are halved, so they still help but new results soon
+    /// dominate.
     pub fn new_search(&mut self) {
         self.killers.fill([None; 2]);
         for value in self.history.iter_mut().flatten().flatten() {
+            *value /= 2;
+        }
+        for value in &mut self.continuation {
             *value /= 2;
         }
     }
@@ -162,6 +244,22 @@ impl OrderingTables {
     /// The history score of `mv` for `side`.
     pub fn history(&self, side: Color, mv: Move) -> i32 {
         self.history[side.index()][mv.from().index()][mv.to().index()]
+    }
+
+    /// The continuation history score of `mv` in `pos`: its scores after each of the moves
+    /// in `previous`, added up.
+    pub fn continuation(&self, pos: &Position, mv: Move, previous: &Previous) -> i32 {
+        let Some(this) = PieceTo::new(pos, mv) else {
+            return 0;
+        };
+        previous
+            .moved
+            .iter()
+            .enumerate()
+            .filter_map(|(back, earlier)| {
+                Some(self.continuation[continuation_index(back, (*earlier)?, this)])
+            })
+            .sum()
     }
 
     /// The killer moves at `ply`.
@@ -177,7 +275,7 @@ impl OrderingTables {
 
     // ANCHOR: update
     /// Records that the quiet move `best` caused a beta cutoff at `ply` with `depth` left,
-    /// after the quiet moves in `tried` failed to.
+    /// after the quiet moves in `tried` failed to. `previous` are the moves that led here.
     pub fn record_cutoff(
         &mut self,
         pos: &Position,
@@ -185,24 +283,39 @@ impl OrderingTables {
         tried: &[Move],
         ply: u32,
         depth: u32,
-        previous: Option<Move>,
+        previous: &Previous,
     ) {
         let killers = &mut self.killers[ply as usize];
         if killers[0] != Some(best) {
             killers[1] = killers[0];
             killers[0] = Some(best);
         }
-        if let Some(prev) = previous
+        if let Some(prev) = previous.mv
             && let Some(slot) = piece_slot(pos, prev)
         {
             self.countermoves[slot][prev.to().index()] = Some(best);
         }
         let side = pos.side_to_move().index();
         let bonus = (depth * depth).min(HISTORY_MAX as u32) as i32;
-        let mut update = |mv: Move, change: i32| {
-            let entry = &mut self.history[side][mv.from().index()][mv.to().index()];
-            // Gravity: the nearer the cap, the smaller the change, so scores stay in range.
+        // Gravity: the nearer the cap, the smaller the change, so scores stay in range.
+        let gravity = |entry: &mut i32, change: i32| {
             *entry += change - *entry * change.abs() / HISTORY_MAX;
+        };
+        let mut update = |mv: Move, change: i32| {
+            gravity(
+                &mut self.history[side][mv.from().index()][mv.to().index()],
+                change,
+            );
+            // Continuation history: the same change, after each earlier move.
+            let Some(this) = PieceTo::new(pos, mv) else {
+                return;
+            };
+            for (back, earlier) in previous.moved.iter().enumerate() {
+                if let Some(earlier) = *earlier {
+                    let index = continuation_index(back, earlier, this);
+                    gravity(&mut self.continuation[index], change);
+                }
+            }
         };
         update(best, bonus);
         for &mv in tried {
@@ -220,14 +333,14 @@ pub struct MovePicker {
 }
 
 impl MovePicker {
-    /// Orders `moves` in `pos` for the search at `ply`. `tt_move` comes first; `previous` is
-    /// the move that led here (for the countermove).
+    /// Orders `moves` in `pos` for the search at `ply`. `tt_move` comes first; `previous` are
+    /// the moves that led here (for the countermove and continuation history).
     pub fn new(
         pos: &Position,
         moves: &[Move],
         tt_move: Option<Move>,
         ply: u32,
-        previous: Option<Move>,
+        previous: &Previous,
         tables: &OrderingTables,
         techniques: &Techniques,
     ) -> MovePicker {
@@ -237,7 +350,7 @@ impl MovePicker {
             [None; 2]
         };
         let countermove = if techniques.countermoves {
-            tables.countermove(pos, previous)
+            tables.countermove(pos, previous.mv)
         } else {
             None
         };
@@ -258,10 +371,15 @@ impl MovePicker {
                 KILLER_KEYS[1]
             } else if Some(mv) == countermove {
                 COUNTERMOVE_KEY
-            } else if techniques.history {
-                tables.history(side, mv)
             } else {
-                0
+                let mut score = 0;
+                if techniques.history {
+                    score += tables.history(side, mv);
+                }
+                if techniques.continuation_history {
+                    score += tables.continuation(pos, mv, previous);
+                }
+                score
             }
         };
         MovePicker {
@@ -337,14 +455,14 @@ mod tests {
         let mv = |uci: &str| pos.parse_uci_move(uci).unwrap();
         let mut tables = OrderingTables::default();
         // Rd2 is a killer at ply 3, Rd3 has history.
-        tables.record_cutoff(&pos, mv("d1d3"), &[], 9, 10, None);
-        tables.record_cutoff(&pos, mv("d1d2"), &[], 3, 1, None);
+        tables.record_cutoff(&pos, mv("d1d3"), &[], 9, 10, &Previous::default());
+        tables.record_cutoff(&pos, mv("d1d2"), &[], 3, 1, &Previous::default());
         let picked: Vec<String> = MovePicker::new(
             &pos,
             &moves,
             Some(mv("e1f2")),
             3,
-            None,
+            &Previous::default(),
             &tables,
             &Techniques::default(),
         )
@@ -361,12 +479,12 @@ mod tests {
         let pos = Position::startpos();
         let mv = |uci: &str| pos.parse_uci_move(uci).unwrap();
         let mut tables = OrderingTables::default();
-        tables.record_cutoff(&pos, mv("g1f3"), &[], 2, 3, None);
-        tables.record_cutoff(&pos, mv("b1c3"), &[], 2, 3, None);
-        tables.record_cutoff(&pos, mv("b1c3"), &[], 2, 3, None);
+        tables.record_cutoff(&pos, mv("g1f3"), &[], 2, 3, &Previous::default());
+        tables.record_cutoff(&pos, mv("b1c3"), &[], 2, 3, &Previous::default());
+        tables.record_cutoff(&pos, mv("b1c3"), &[], 2, 3, &Previous::default());
         assert_eq!(tables.killers(2), [Some(mv("b1c3")), Some(mv("g1f3"))]);
         for _ in 0..1000 {
-            tables.record_cutoff(&pos, mv("e2e4"), &[mv("a2a3")], 5, 40, None);
+            tables.record_cutoff(&pos, mv("e2e4"), &[mv("a2a3")], 5, 40, &Previous::default());
         }
         let side = Color::White;
         assert!(tables.history(side, mv("e2e4")) <= HISTORY_MAX);
@@ -385,9 +503,112 @@ mod tests {
         pos.make_move(e4);
         let reply = pos.parse_uci_move("c7c5").unwrap();
         let mut tables = OrderingTables::default();
-        tables.record_cutoff(&pos, reply, &[], 1, 2, Some(e4));
+        let previous = Previous {
+            mv: Some(e4),
+            moved: [None; CONTINUATION_PLIES],
+        };
+        tables.record_cutoff(&pos, reply, &[], 1, 2, &previous);
         assert_eq!(tables.countermove(&pos, Some(e4)), Some(reply));
         assert_eq!(tables.countermove(&pos, None), None);
+    }
+
+    #[test]
+    fn continuation_history_remembers_replies_one_and_two_plies_on() {
+        // 1. e4 c5: after e4 (two plies back) and c5 (one ply back), Nf3 refutes a2-a3.
+        let mut pos = Position::startpos();
+        let mut moved = Vec::new();
+        for uci in ["e2e4", "c7c5"] {
+            let mv = pos.parse_uci_move(uci).unwrap();
+            moved.push(PieceTo::new(&pos, mv));
+            pos.make_move(mv);
+        }
+        let previous = Previous {
+            mv: None,
+            moved: [moved[1], moved[0]],
+        };
+        let nf3 = pos.parse_uci_move("g1f3").unwrap();
+        let a3 = pos.parse_uci_move("a2a3").unwrap();
+        let mut tables = OrderingTables::default();
+        tables.record_cutoff(&pos, nf3, &[a3], 2, 4, &previous);
+        // 16 (depth²) in each table, less nothing: the entries started at 0.
+        assert_eq!(tables.continuation(&pos, nf3, &previous), 2 * 16);
+        assert_eq!(tables.continuation(&pos, a3, &previous), -2 * 16);
+        // Each table on its own: after c5 alone, and after e4 alone.
+        let one_ply = Previous {
+            mv: None,
+            moved: [moved[1], None],
+        };
+        let two_plies = Previous {
+            mv: None,
+            moved: [None, moved[0]],
+        };
+        assert_eq!(tables.continuation(&pos, nf3, &one_ply), 16);
+        assert_eq!(tables.continuation(&pos, nf3, &two_plies), 16);
+        // Nothing is known after other moves, or with no earlier moves.
+        let after_e4_one_ply_back = Previous {
+            mv: None,
+            moved: [moved[0], None],
+        };
+        assert_eq!(tables.continuation(&pos, nf3, &after_e4_one_ply_back), 0);
+        assert_eq!(tables.continuation(&pos, nf3, &Previous::default()), 0);
+        // Halved for a new search.
+        tables.new_search();
+        assert_eq!(tables.continuation(&pos, nf3, &previous), 2 * 8);
+    }
+
+    #[test]
+    fn continuation_history_stays_bounded() {
+        let mut pos = Position::startpos();
+        let e4 = pos.parse_uci_move("e2e4").unwrap();
+        let previous = Previous {
+            mv: None,
+            moved: [None, PieceTo::new(&pos, e4)],
+        };
+        pos.make_move(e4);
+        let e5 = pos.parse_uci_move("e7e5").unwrap();
+        let a6 = pos.parse_uci_move("a7a6").unwrap();
+        let mut tables = OrderingTables::default();
+        for _ in 0..1000 {
+            tables.record_cutoff(&pos, e5, &[a6], 5, 40, &previous);
+        }
+        let good = tables.continuation(&pos, e5, &previous);
+        let bad = tables.continuation(&pos, a6, &previous);
+        assert!(
+            (HISTORY_MAX / 2 + 1..=HISTORY_MAX).contains(&good),
+            "{good}"
+        );
+        assert!((-HISTORY_MAX..-HISTORY_MAX / 2).contains(&bad), "{bad}");
+    }
+
+    #[test]
+    fn picker_orders_quiet_moves_by_history_plus_continuation_history() {
+        // After 1. e4, history likes ...a6 a little more than ...e5, but continuation history
+        // likes ...e5 after e4.
+        let mut pos = Position::startpos();
+        let e4 = pos.parse_uci_move("e2e4").unwrap();
+        let previous = Previous {
+            mv: None,
+            moved: [PieceTo::new(&pos, e4), None],
+        };
+        pos.make_move(e4);
+        let mv = |uci: &str| pos.parse_uci_move(uci).unwrap();
+        let mut tables = OrderingTables::default();
+        // a6: history 9. e5: history 4 + 4 = 8, continuation history 8.
+        tables.record_cutoff(&pos, mv("a7a6"), &[], 9, 3, &Previous::default());
+        tables.record_cutoff(&pos, mv("e7e5"), &[], 9, 2, &previous);
+        tables.record_cutoff(&pos, mv("e7e5"), &[], 9, 2, &previous);
+        let moves: Vec<Move> = pos.legal_moves().iter().copied().collect();
+        let first = |techniques: Techniques| {
+            let mut picker =
+                MovePicker::new(&pos, &moves, None, 3, &previous, &tables, &techniques);
+            pos.to_san(picker.next().unwrap())
+        };
+        let without = Techniques {
+            continuation_history: false,
+            ..Techniques::default()
+        };
+        assert_eq!(first(without), "a6");
+        assert_eq!(first(Techniques::default()), "e5");
     }
 
     #[test]

@@ -18,6 +18,7 @@
 - [The transposition table](ch08-tt.md)
 - [Piece-square tables and tapered evaluation](ch09-pst.md)
 - [Move ordering](ch10-ordering.md)
+    - [Continuation history](ch10-1-continuation-history.md)
 - [Principal variation search and aspiration windows](ch11-pvs.md)
 - [Null-move pruning](ch12-nullmove.md)
 - [Late move reductions and pruning](ch13-lmr.md)

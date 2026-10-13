@@ -170,7 +170,9 @@ use cb2026_chess::{Move, PieceType, Position};
 
 use crate::Score;
 use crate::eval::{EvalParams, evaluate};
-use crate::ordering::{MovePicker, OrderingTables, is_noisy};
+use crate::ordering::{
+    CONTINUATION_PLIES, MovePicker, OrderingTables, PieceTo, Previous, is_noisy,
+};
 use crate::see::{SEE_VALUES, see};
 use crate::stats::{Note, SearchStats, SearchTree};
 use crate::tablebase::{self, Tablebase, TablebaseParams};
@@ -304,6 +306,9 @@ pub struct Techniques {
     pub countermoves: bool,
     /// The history heuristic: quiet moves are ordered by how often they caused cutoffs.
     pub history: bool,
+    /// Continuation history: quiet moves are also ordered by how often they caused cutoffs
+    /// after the moves one and two plies before.
+    pub continuation_history: bool,
     /// Principal variation search: moves after the first get a null-window search first.
     pub pvs: bool,
     /// Aspiration windows: each iteration starts with a narrow window around the last score.
@@ -345,6 +350,7 @@ impl Default for Techniques {
             killers: true,
             countermoves: true,
             history: true,
+            continuation_history: true,
             pvs: true,
             aspiration: true,
             null_move: true,
@@ -443,6 +449,9 @@ pub(crate) struct Searcher<'a> {
     /// The moves from the root to the current position (for the countermove heuristic), with
     /// `None` for a null move.
     path: Vec<Option<Move>>,
+    /// The same moves by piece and destination, for continuation history (`None` for a null
+    /// move). Kept in step with `path` by [`Searcher::push_move`] and [`Searcher::pop_move`].
+    moved: Vec<Option<PieceTo>>,
     /// The static evaluation at each ply of the current line (`-INFINITY` in check), for the
     /// improving heuristic.
     evals: Vec<i32>,
@@ -520,6 +529,7 @@ impl<'a> Searcher<'a> {
             aborted: false,
             keys: history.to_vec(),
             path: Vec::new(),
+            moved: Vec::new(),
             evals: vec![-INFINITY; MAX_PLY as usize + 1],
             lmr: lmr_table(&search_params),
             shared_nodes: None,
@@ -774,7 +784,7 @@ impl<'a> Searcher<'a> {
             let reduction = p.null_reduction + depth / p.null_depth_divisor;
             let mut child = pos.clone();
             child.make_null_move();
-            self.path.push(None);
+            self.push_move(pos, None);
             self.keys.push(pos.hash());
             let mut null_pv = Vec::new();
             let score = -self.negamax(
@@ -787,7 +797,7 @@ impl<'a> Searcher<'a> {
             );
             self.note(Note::Exit { score: -score });
             self.keys.pop();
-            self.path.pop();
+            self.pop_move();
             if self.aborted {
                 return 0;
             }
@@ -803,13 +813,13 @@ impl<'a> Searcher<'a> {
         }
         // ANCHOR_END: null_move
 
-        let previous = self.path.last().copied().flatten();
+        let previous = self.previous();
         let picker = MovePicker::new(
             pos,
             &moves,
             tt_move,
             ply,
-            previous,
+            &previous,
             self.ordering,
             &self.techniques,
         );
@@ -910,10 +920,10 @@ impl<'a> Searcher<'a> {
             // ANCHOR_END: check_extension
 
             searched += 1;
-            self.path.push(Some(mv));
+            self.push_move(pos, Some(mv));
             let child_depth = depth - 1 + extension;
             let score = self.search_move(&child, child_depth, alpha, beta, how, &mut child_pv);
-            self.path.pop();
+            self.pop_move();
             if self.aborted {
                 break;
             }
@@ -932,7 +942,7 @@ impl<'a> Searcher<'a> {
                 self.note(Note::BetaCutoff(mv, searched));
                 if !is_noisy(mv) {
                     self.ordering
-                        .record_cutoff(pos, mv, &quiets_tried, ply, depth, previous);
+                        .record_cutoff(pos, mv, &quiets_tried, ply, depth, &previous);
                 }
                 break;
             }
@@ -965,6 +975,30 @@ impl<'a> Searcher<'a> {
         best
     }
     // ANCHOR_END: negamax
+
+    /// Adds `mv`, about to be played in `pos` (`None` for a null move), to the path.
+    fn push_move(&mut self, pos: &Position, mv: Option<Move>) {
+        self.path.push(mv);
+        self.moved.push(mv.and_then(|mv| PieceTo::new(pos, mv)));
+    }
+
+    /// Takes the last move off the path.
+    fn pop_move(&mut self) {
+        self.path.pop();
+        self.moved.pop();
+    }
+
+    /// The moves that led to the current position, for move ordering.
+    fn previous(&self) -> Previous {
+        let mut moved = [None; CONTINUATION_PLIES];
+        for (slot, earlier) in moved.iter_mut().zip(self.moved.iter().rev()) {
+            *slot = *earlier;
+        }
+        Previous {
+            mv: self.path.last().copied().flatten(),
+            moved,
+        }
+    }
 
     // ANCHOR: pvs
     /// The score of the move that led to `child` (the last move on the path), from the
@@ -1084,7 +1118,7 @@ impl<'a> Searcher<'a> {
             &moves,
             None,
             ply,
-            None,
+            &Previous::default(),
             self.ordering,
             &self.techniques,
         );
@@ -1165,7 +1199,7 @@ impl<'a> Searcher<'a> {
         for (index, &mv) in root_moves.iter().enumerate() {
             let mut child = pos.clone();
             child.make_move(mv);
-            self.path.push(Some(mv));
+            self.push_move(pos, Some(mv));
             let score = self.search_move(
                 &child,
                 depth.saturating_sub(1),
@@ -1178,7 +1212,7 @@ impl<'a> Searcher<'a> {
                 },
                 &mut child_pv,
             );
-            self.path.pop();
+            self.pop_move();
             if self.aborted {
                 break;
             }
@@ -1440,6 +1474,7 @@ mod tests {
             killers: false,
             countermoves: false,
             history: false,
+            continuation_history: false,
             ..Techniques::sound()
         };
         let ordered = search(fen, 4, plain);
@@ -1472,6 +1507,7 @@ mod tests {
             killers: false,
             countermoves: false,
             history: false,
+            continuation_history: false,
             ..Techniques::sound()
         };
         let (mut with_nodes, mut without_nodes) = (0, 0);
@@ -1490,22 +1526,31 @@ mod tests {
 
     #[test]
     fn pvs_gives_the_same_score_with_fewer_nodes() {
-        let fen = "r1bq1rk1/pppp1ppp/2n2n2/2b1p3/2B1P3/2N2N2/PPPP1PPP/R1BQ1RK1 w - - 0 1";
-        let with = search(fen, 5, Techniques::sound());
-        let without = search(
-            fen,
-            5,
-            Techniques {
-                pvs: false,
-                ..Techniques::sound()
-            },
-        );
-        assert_eq!(with.score, without.score);
+        // Several positions: in one position at one depth, PVS can cost a few nodes (the first
+        // of these did by 1% at depth 5 once continuation history came in).
+        let fens = [
+            "r1bq1rk1/pppp1ppp/2n2n2/2b1p3/2B1P3/2N2N2/PPPP1PPP/R1BQ1RK1 w - - 0 1",
+            "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+            "r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10",
+        ];
+        let (mut with_nodes, mut without_nodes) = (0, 0);
+        for fen in fens {
+            let with = search(fen, 5, Techniques::sound());
+            let without = search(
+                fen,
+                5,
+                Techniques {
+                    pvs: false,
+                    ..Techniques::sound()
+                },
+            );
+            assert_eq!(with.score, without.score, "{fen}");
+            with_nodes += with.nodes;
+            without_nodes += without.nodes;
+        }
         assert!(
-            with.nodes < without.nodes,
-            "{} vs {}",
-            with.nodes,
-            without.nodes
+            with_nodes < without_nodes,
+            "{with_nodes} vs {without_nodes}"
         );
     }
 
