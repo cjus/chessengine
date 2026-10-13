@@ -262,6 +262,26 @@ impl OrderingTables {
             .sum()
     }
 
+    /// The score that orders the quiet moves: the history score of `mv` in `pos`, plus its
+    /// continuation history score after `previous`, each if switched on. Late move reductions
+    /// use it too, to reduce a move with a good score less.
+    pub fn quiet_score(
+        &self,
+        pos: &Position,
+        mv: Move,
+        previous: &Previous,
+        techniques: &Techniques,
+    ) -> i32 {
+        let mut score = 0;
+        if techniques.history {
+            score += self.history(pos.side_to_move(), mv);
+        }
+        if techniques.continuation_history {
+            score += self.continuation(pos, mv, previous);
+        }
+        score
+    }
+
     /// The killer moves at `ply`.
     pub fn killers(&self, ply: u32) -> [Option<Move>; 2] {
         self.killers[ply as usize]
@@ -354,7 +374,6 @@ impl MovePicker {
         } else {
             None
         };
-        let side = pos.side_to_move();
         let key = |mv: Move| {
             if Some(mv) == tt_move {
                 TT_MOVE_KEY
@@ -372,14 +391,7 @@ impl MovePicker {
             } else if Some(mv) == countermove {
                 COUNTERMOVE_KEY
             } else {
-                let mut score = 0;
-                if techniques.history {
-                    score += tables.history(side, mv);
-                }
-                if techniques.continuation_history {
-                    score += tables.continuation(pos, mv, previous);
-                }
-                score
+                tables.quiet_score(pos, mv, previous, techniques)
             }
         };
         MovePicker {
@@ -619,6 +631,33 @@ mod tests {
         };
         assert_eq!(first(without), "a6");
         assert_eq!(first(both), "e5");
+    }
+
+    #[test]
+    fn the_quiet_score_adds_what_is_switched_on() {
+        // After 1. e4, ...e5 caused a cutoff at depth 2: history 4, continuation history 4.
+        let mut pos = Position::startpos();
+        let e4 = pos.parse_uci_move("e2e4").unwrap();
+        let previous = Previous {
+            mv: None,
+            moved: [PieceTo::new(&pos, e4), None],
+        };
+        pos.make_move(e4);
+        let e5 = pos.parse_uci_move("e7e5").unwrap();
+        let mut tables = OrderingTables::default();
+        tables.record_cutoff(&pos, e5, &[], 9, 2, &previous);
+        let score = |history: bool, continuation_history: bool| {
+            let techniques = Techniques {
+                history,
+                continuation_history,
+                ..Techniques::default()
+            };
+            tables.quiet_score(&pos, e5, &previous, &techniques)
+        };
+        assert_eq!(score(true, true), 8);
+        assert_eq!(score(true, false), 4);
+        assert_eq!(score(false, true), 4);
+        assert_eq!(score(false, false), 0);
     }
 
     #[test]

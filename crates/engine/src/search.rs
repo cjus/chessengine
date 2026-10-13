@@ -145,11 +145,15 @@
 //! reduces any move more. Stockfish (GPL-3.0) does the same with its history and continuation
 //! history added up; the code here is cb2026's own.
 //!
-//! **Off by default.** An SPRT against `main` without it (with continuation history) found no
-//! clear difference: +2.1 ± 5.0 Elo after 8,910 games at 8+0.08, no verdict, stopped there
-//! (cjus/chessengine#70). It changes about one reduction in ten, by a ply or two, so any effect
-//! is small. A stronger version could add continuation history to the score, or use a smaller
-//! divisor. The switch and parameters stay.
+//! **The first version had no verdict.** An SPRT against `main` without it (with continuation
+//! history) found no clear difference: +2.1 ± 5.0 Elo after 8,910 games at 8+0.08, stopped
+//! there (cjus/chessengine#70). It changed about one reduction in ten, by a ply or two.
+//!
+//! **The second version** uses the score that orders the quiet moves (history plus continuation
+//! history, [`OrderingTables::quiet_score`]) and a divisor of 128. Over a 40-move self-play
+//! game, 86% of reduced moves had that score within ±128; about 9% had 128 or more and 5% had
+//! −128 or less. So it changes about one reduction in seven, and for the first time reduces a
+//! move with a bad score more as well as a good one less.
 //!
 //! ## Singular extensions and multi-cut
 //!
@@ -320,9 +324,10 @@ impl Default for SearchParams {
             lmr_min_moves: 3,
             lmr_base: 75,
             lmr_divisor: 225,
-            // About one reduced move in ten has a history score of 256 or more (measured over a
-            // self-play game; see the module documentation).
-            lmr_history_divisor: 256,
+            // About one reduced move in seven has a quiet-move score of at least 128 either way
+            // (measured over a self-play game; see the module documentation). The first
+            // version used 256 and history alone, and changed about one in ten.
+            lmr_history_divisor: 128,
             lmr_history_max: 2,
             lmp_max_depth: 3,
             lmp_base: 3,
@@ -435,9 +440,8 @@ impl Default for Techniques {
             aspiration: true,
             null_move: true,
             lmr: true,
-            // Off by default: no clear difference after 8,910 games (see the module
-            // documentation).
-            history_lmr: false,
+            // On for the second version's SPRT (cjus/chessengine#74); the first had no verdict.
+            history_lmr: true,
             late_move_pruning: true,
             reverse_futility: true,
             razoring: true,
@@ -1067,10 +1071,13 @@ impl<'a> Searcher<'a> {
                 if pv_node {
                     reduction -= 1;
                 }
-                // Reduce a move with a good history less: it has caused cutoffs elsewhere.
+                // Reduce a move with a good history less: it has caused cutoffs elsewhere. And
+                // one with a bad history more.
                 if self.techniques.history_lmr {
-                    let history = self.ordering.history(pos.side_to_move(), mv);
-                    reduction -= p.lmr_history_adjustment(history);
+                    let score = self
+                        .ordering
+                        .quiet_score(pos, mv, &previous, &self.techniques);
+                    reduction -= p.lmr_history_adjustment(score);
                 }
                 MoveSearch::Later {
                     // Never reduce into the quiescence search.
