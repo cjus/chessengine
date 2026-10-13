@@ -42,7 +42,7 @@
 //! | `level <0-20>`, `elo <n>\|off`, `set multipv <N>` | Strength level; limit to an Elo; show several lines |
 //! | `set syzygy <path>`, `tb` | Load Syzygy tablebases; show the tablebase result for the position |
 //! | `set book <path>`, `set ownbook on\|off`, `book` | Load a Polyglot opening book; play from it; show its moves here |
-//! | `set killers\|countermoves\|history on\|off` | Switch a quiet-move ordering heuristic off |
+//! | `set killers\|countermoves\|history\|conthist on\|off` | Switch a quiet-move ordering heuristic off |
 //! | `set pvs on\|off`, `set aspiration on\|off` | Principal variation search; aspiration windows |
 //! | `set nullmove on\|off` | Null-move pruning |
 //! | `set lmr on\|off`, `set lmp on\|off` | Late move reductions; late move pruning |
@@ -146,8 +146,8 @@ Commands:
   set book <path>      Load a Polyglot opening book (.bin; none: unload)
   set ownbook on|off   Play book moves when the book has any (default off)
   book                 The book's moves for this position, with their weights
-  set killers|countermoves|history on|off
-                       Quiet-move ordering heuristics
+  set killers|countermoves|history|conthist on|off
+                       Quiet-move ordering heuristics (conthist: continuation history)
   set pvs on|off       Principal variation search (null windows after the first move)
   set aspiration on|off
                        Start each depth with a narrow window around the last score
@@ -1026,7 +1026,7 @@ impl Shell {
             _ => return Response::text(SET_USAGE),
         }
         Response::text(format!(
-            "Sliding attacks: {}\nEngine moves: {}\nAlpha-beta pruning: {}\nQuiescence search: {}\nMVV-LVA ordering: {}\nTransposition table: {} ({} MB)\nThreads: {}\nPiece-square tables: {}\nTapered evaluation: {}\nMobility, pawns, pieces, king safety, tempo: {}, {}, {}, {}, {}\nKillers, countermoves, history: {}, {}, {}\nPVS, aspiration windows: {}, {}\nNull-move pruning: {}\nLate move reductions, pruning: {}, {}\nReverse futility, razoring, futility: {}, {}, {}\nSEE pruning, delta pruning, SEE ordering: {}, {}, {}",
+            "Sliding attacks: {}\nEngine moves: {}\nAlpha-beta pruning: {}\nQuiescence search: {}\nMVV-LVA ordering: {}\nTransposition table: {} ({} MB)\nThreads: {}\nPiece-square tables: {}\nTapered evaluation: {}\nMobility, pawns, pieces, king safety, tempo: {}, {}, {}, {}, {}\nKillers, countermoves, history, continuation history: {}, {}, {}, {}\nPVS, aspiration windows: {}, {}\nNull-move pruning: {}\nLate move reductions, pruning: {}, {}\nReverse futility, razoring, futility: {}, {}, {}\nSEE pruning, delta pruning, SEE ordering: {}, {}, {}",
             match slider_method() {
                 SliderMethod::Rays => "walking rays",
                 SliderMethod::Magics => "magic bitboards",
@@ -1055,6 +1055,7 @@ impl Shell {
             on_off_text(self.engine.techniques.killers),
             on_off_text(self.engine.techniques.countermoves),
             on_off_text(self.engine.techniques.history),
+            on_off_text(self.engine.techniques.continuation_history),
             on_off_text(self.engine.techniques.pvs),
             on_off_text(self.engine.techniques.aspiration),
             on_off_text(self.engine.techniques.null_move),
@@ -1125,7 +1126,7 @@ fn parse_move(pos: &Position, text: &str) -> Option<Move> {
 }
 
 /// Usage for the `set` command.
-const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set threads <N> | set eval hand|tuned | set alphabeta|quiescence|mvvlva|tt|killers|countermoves|history|pvs|aspiration|nullmove|lmr|lmp|rfp|razoring|futility|seeprune|delta|seeorder|checkext|iir|improving|pst|tapered|mobility|pawns|pieces|kingsafety|tempo on|off";
+const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set threads <N> | set eval hand|tuned | set alphabeta|quiescence|mvvlva|tt|killers|countermoves|history|conthist|pvs|aspiration|nullmove|lmr|lmp|rfp|razoring|futility|seeprune|delta|seeorder|checkext|iir|improving|pst|tapered|mobility|pawns|pieces|kingsafety|tempo on|off";
 
 /// How long the engine thinks per move by default in the shell.
 const DEFAULT_MOVETIME_MS: u64 = 1000;
