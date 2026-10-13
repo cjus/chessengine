@@ -34,6 +34,9 @@
 //! later moves. A fixed `movetime` is left alone (the GUI asked for that time exactly), and so
 //! is the time after a `ponderhit`.
 //!
+//! Against the same engine with a fixed soft limit: +33.5 ± 14.3 Elo after 1,062 games at
+//! 8+0.08 (cjus/chessengine#72).
+//!
 //! See the Chess Programming Wiki, [Time Management](https://www.chessprogramming.org/Time_Management).
 
 use std::time::Duration;

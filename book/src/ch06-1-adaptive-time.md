@@ -67,7 +67,8 @@ is two different games, so the positions differ):
 
 The total is the same, as it must be: both use their clock. The typical think gets longer and
 the longest ones a little shorter. One game is a small sample, and the two pairs differ in how
-much: whether any of it plays better is for the games to say.
+much. The games say it plays better, by about **33 Elo** (see "What it's worth"): spending the
+same time in different places is worth as much as singular extensions.
 
 ## Pitfalls
 
@@ -87,7 +88,11 @@ much: whether any of it plays better is for the games to say.
 
 | Test | Result |
 | --- | --- |
-| Adaptive soft limit vs `main` without it, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | Waiting (cjus/chessengine#72) |
+| Adaptive soft limit vs `main` without it (with singular extensions), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+33.5 ± 14.3 Elo** over 1,062 games (+299 −197 =566): passed (LLR 2.97), no time losses |
+
+The gain was measured at one time control, 8+0.08. At longer ones each depth takes longer and
+the trade-offs shift, so it is worth checking there too (`scripts/mac-sprt.sh <PR> 0 5
+40+0.4`).
 
 ## Further reading
 
