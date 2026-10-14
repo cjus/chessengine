@@ -219,6 +219,11 @@ So the divisor comes down to 128. Then about one reduced move in seven changes: 
 reduced less and 5% more. For the first time the adjustment works both ways: a move with a
 bad score, one that failed where it was tried before, is reduced a ply more.
 
+**This version passed**, by about **+22 Elo** (see "What it's worth"). The first changed too few
+reductions to show any effect in a reasonable number of games; changing one in seven, in both
+directions, and with the same score that orders the moves, made the difference. cb2026 ships
+with it on.
+
 ## What it saves
 
 The six positions of chapters 10 to 14 (the first six bench positions) at depth 8:
@@ -295,7 +300,7 @@ twice the size. Nodes aren't Elo, in this direction too.
 | Improving, half a ply off the margin only, vs `main` without it (with IIR), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−33.0 ± 15.3 Elo** over 1,036 games (+221 −319 =496): failed (LLR −2.96), so improving is off by default |
 | History in LMR vs `main` without it (with continuation history), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | +2.1 ± 5.0 Elo over 8,910 games (+2188 −2134 =4588): no verdict (LLR −0.30), stopped; off by default |
 | Singular extensions and multi-cut vs `main` without them (with continuation history), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+29.5 ± 13.3 Elo** over 1,357 games (+409 −294 =654): passed (LLR 2.96) |
-| History in LMR, second version (history plus continuation history, divisor 128), vs `main` without it, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | Waiting (cjus/chessengine#74) |
+| History in LMR, second version (history plus continuation history, divisor 128), vs `main` without it (with singular extensions and adaptive time), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+22.2 ± 11.4 Elo** over 1,661 games (+437 −331 =893): passed (LLR 2.95) |
 
 ## Further reading
 

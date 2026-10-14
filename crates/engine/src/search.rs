@@ -153,7 +153,8 @@
 //! history, [`OrderingTables::quiet_score`]) and a divisor of 128. Over a 40-move self-play
 //! game, 86% of reduced moves had that score within ±128; about 9% had 128 or more and 5% had
 //! −128 or less. So it changes about one reduction in seven, and for the first time reduces a
-//! move with a bad score more as well as a good one less.
+//! move with a bad score more as well as a good one less. It passed: +22.2 ± 11.4 Elo after
+//! 1,661 games at 8+0.08 (cjus/chessengine#74).
 //!
 //! ## Singular extensions and multi-cut
 //!
@@ -440,7 +441,7 @@ impl Default for Techniques {
             aspiration: true,
             null_move: true,
             lmr: true,
-            // On for the second version's SPRT (cjus/chessengine#74); the first had no verdict.
+            // The second version passed its SPRT (cjus/chessengine#74); the first had no verdict.
             history_lmr: true,
             late_move_pruning: true,
             reverse_futility: true,

@@ -9,7 +9,7 @@ with chapter 14.1; improving is off by default and set aside; time losses not re
 #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by default after
 no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71; adaptive time
 management merged, +33.5 ± 14.3, #72; history off loses −17.7 ± 9.9, so it stays on, #73;
-history in LMR's second version, #74, rebased and next for an SPRT on the M3).*
+history in LMR's second version merged, +22.2 ± 11.4, #74).*
 
 ## Stages
 
@@ -48,9 +48,10 @@ history in LMR's second version, #74, rebased and next for an SPRT on the M3).*
 | M5: singular extensions and multi-cut (chapter 14.1) | #71 | 1115153 | Merged: +29.5 ± 13.3, 1,357 games, [0, 5] passed (M3 Max) |
 | M5: adaptive time management (chapter 6.1) | #72 | 1115153 (bench is depth-limited; timed games change) | Merged: +33.5 ± 14.3, 1,062 games, [0, 5] passed (M3 Max) |
 | M5 experiment: history heuristic off (chapter 10.1) | #73 | 1115153 | Merged as a record only: history off −17.7 ± 9.9, 2,124 games, [−5, 0] failed (M3 Max); history stays on |
-| M5: history in LMR, second version (chapter 14.1) | #74, `claude/m5-history-lmr-2` | 1126902 | Draft, on by default; rebased onto `main` with #73; SPRT [0, 5] next on the M3 |
+| M5: history in LMR, second version (chapter 14.1) | #74 | 1126902 | Merged: +22.2 ± 11.4, 1,661 games, [0, 5] passed (M3 Max) |
 
-Waiting: #74, rebased and ready for its SPRT. Nothing else is queued. **Before each SPRT starts, rebase that PR onto the current `main`** and
+Nothing is waiting: every M5 branch so far is merged. When several PRs wait for the M3, they
+run one at a time, and **before each SPRT starts, rebase that PR onto the current `main`** and
 re-measure its `Bench:` line: `scripts/mac-sprt.sh` plays the PR's head against `main`, so an
 unrebased PR would be measured against changes it doesn't have. For each: if it passes, record
 it in its chapter and the ledger, mark it ready and merge; if it fails, switch it off by
@@ -168,11 +169,11 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    run (10,000+ games at 1+0.01, 10+0.1 and 40/60) is the final check.
 2. Milestone gates, once #36 is answered: gauntlets for M2–M4, level calibration (the
    calibration script is still to write, using `crates/tools/src/gauntlet.rs`).
-3. More M5 strength work, each change with an SPRT. Passed: continuation history (#69),
-   singular extensions and multi-cut (#71), adaptive time management (#72). No verdict, off:
-   history in LMR (#70). Failed as a simplification, so kept: history off (#73, −17.7 ± 9.9).
-   In test: history in LMR's second version (#74). Worth checking: #72 at the long time control (40+0.4), since time management
-   gains depend on it. Candidates: negative extensions (a hash move that isn't singular but beats
+3. More M5 strength work, each change with an SPRT. Passed on 2026-10-13: continuation history
+   (#69, +10.7), singular extensions and multi-cut (#71, +29.5), adaptive time management (#72,
+   +33.5), history in LMR's second version (#74, +22.2). No verdict, off: history in LMR's first
+   version (#70). Failed as a simplification, so kept: history off (#73, −17.7). Worth
+   checking: #72 at the long time control (40+0.4), since time management gains depend on it. Candidates: negative extensions (a hash move that isn't singular but beats
    beta searched a ply shallower), and tuning singular extensions' margin and minimum depth.
    Improving is set aside
    (Carlos, 2026-10-12) after three failed versions (#60, #63, #65). The results point at
