@@ -4,12 +4,12 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-12 (M5: the check extension, IIR and three versions of improving merged,
+*Last updated 2026-10-13 (M5: the check extension, IIR and three versions of improving merged,
 with chapter 14.1; improving is off by default and set aside; time losses not reproduced,
 #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by default after
 no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71; adaptive time
 management merged, +33.5 ± 14.3, #72; history off loses −17.7 ± 9.9, so it stays on, #73;
-history in LMR's second version merged, +22.2 ± 11.4, #74).*
+history in LMR's second version merged, +22.2 ± 11.4, #74. Nothing is waiting).*
 
 ## Stages
 
@@ -56,6 +56,19 @@ re-measure its `Bench:` line: `scripts/mac-sprt.sh` plays the PR's head against 
 unrebased PR would be measured against changes it doesn't have. For each: if it passes, record
 it in its chapter and the ledger, mark it ready and merge; if it fails, switch it off by
 default (as with #57, #60, #63 and #65), record it and merge.
+
+**The SPRT loop with Carlos.** Claude opens the PR as a draft with the M3 command in its
+description. Carlos starts it on the M3 and says so ("SPRT started on the M3 for #N"). Claude
+then runs `scripts/watch-sprt.sh <N>` in the background: it checks the PR every 10 minutes for
+the comment `mac-sprt.sh` posts and prints it (Carlos approved this polling on 2026-10-12).
+On the result, Claude records it and merges, then rebases the next PR in the queue and tells
+Carlos it's ready. If the watcher gives up, ask Carlos for `tail -5 ~/sprt-<N>.log` and
+`pgrep -fl "match|mac-sprt"` on the M3.
+
+**En Croissant on the M1 Max** uses `~/engines/cb2026`, a copy of a release build of `main`
+made on 2026-10-12 at 33d37e8, before the M5 gains of 2026-10-13. To refresh it when Carlos
+asks: build `main` (`cargo build --release`), check `bench` matches `main`'s, then
+`cp target/release/cb2026 ~/engines/cb2026`.
 
 ## Milestones
 
@@ -172,11 +185,20 @@ Run the full test suite on every commit you replay, not only at the tip: each be
 3. More M5 strength work, each change with an SPRT. Passed on 2026-10-13: continuation history
    (#69, +10.7), singular extensions and multi-cut (#71, +29.5), adaptive time management (#72,
    +33.5), history in LMR's second version (#74, +22.2). No verdict, off: history in LMR's first
-   version (#70). Failed as a simplification, so kept: history off (#73, −17.7). Worth
-   checking: #72 at the long time control (40+0.4), since time management gains depend on it. Candidates: negative extensions (a hash move that isn't singular but beats
-   beta searched a ply shallower), and tuning singular extensions' margin and minimum depth.
-   Improving is set aside
-   (Carlos, 2026-10-12) after three failed versions (#60, #63, #65). The results point at
+   version (#70). Failed as a simplification, so kept: history off (#73, −17.7).
+
+   Next, in a rough order of value:
+   - **#72 at the long time control**, since time management gains depend on it: a PR that
+     switches the adaptive soft limit off (`best_move_stability` and `falling_score` false),
+     run as a simplification, `scripts/mac-sprt.sh <PR> -5 0 40+0.4`. If it fails, the gain
+     holds at 40+0.4. At 40+0.4 a game takes about ten times longer, so expect a long run.
+   - **Negative extensions**: a hash move that isn't singular but whose score beats beta is
+     searched a ply shallower (Stockfish, GPL-3.0).
+   - **Tuning singular extensions**: `singular_margin` (2), `singular_min_depth` (8).
+   - **The milestone gauntlets** (item 2): with about +95 Elo of M5 gains since the M2/M3
+     gates were set, a rating run now would say a lot, once #36 names the reference engines.
+
+   Improving is set aside (Carlos, 2026-10-12) after three failed versions (#60, #63, #65). The results point at
    reverse futility pruning, and the late-move-pruning part may have helped, so later
    candidates are improving in late move pruning only (`rfp_improving` = 0, `lmp_improving` =
    2) and a wider `rfp_margin`.
