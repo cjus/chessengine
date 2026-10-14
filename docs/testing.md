@@ -112,6 +112,9 @@ performance core minus one under `caffeinate`, and posts the result to the PR as
 with any time losses, illegal moves and failures. The games are kept in
 `target/sprt/pr<PR>-<commit>.pgn` on the test machine.
 
+Claude follows a running SPRT with `scripts/watch-sprt.sh <PR> [hours]`, which checks the PR
+every 10 minutes for the result comment and prints it.
+
 ```sh
 scripts/mac-gauntlet.sh <engines file> <issue or PR number> [games per engine] [tc] [git ref]
 ```
