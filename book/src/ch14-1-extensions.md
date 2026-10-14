@@ -205,7 +205,7 @@ and almost never made one bigger.
 The second version scores a move as the move picker does, history plus continuation history
 (`OrderingTables::quiet_score`), so the reduction and the order agree about which moves look
 good. Adding continuation history doesn't widen the scores much at the moves LMR reduces. Over
-the same kind of game, after continuation history came in:
+the same kind of game, after continuation history came in (and before singular extensions):
 
 | History plus continuation history of a reduced move | Share |
 | --- | ---: |
@@ -238,7 +238,10 @@ three made the engine weaker: the games below decide, not the node counts.
 History in LMR's first version hardly changed these trees: history scores grow with depth (the
 bonus is `depth²`) and over a game (each search keeps half of the last one's), and a search to
 depth 8 from empty tables leaves few moves at 256 or more. The second version, with half the
-divisor and both directions, makes the tree 2% bigger here, and the bench 2.1% bigger.
+divisor and both directions, makes the tree 2% bigger here. With singular extensions in, it
+makes the bench 1.1% bigger, and the six positions at depth 10 3% smaller (674,643 nodes against
+694,595): reducing some moves more and others less doesn't add up the same way at every
+depth.
 
 Singular extensions don't appear here: at depth 8, no node below the root has 8 plies left. At
 depth 10 they make the tree **85% bigger** (694,595 nodes against 375,334). Over the six
