@@ -4,12 +4,14 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-13 (M5: the check extension, IIR and three versions of improving merged,
+*Last updated 2026-10-14 (M5: the check extension, IIR and three versions of improving merged,
 with chapter 14.1; improving is off by default and set aside; time losses not reproduced,
 #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by default after
 no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71; adaptive time
 management merged, +33.5 ± 14.3, #72; history off loses −17.7 ± 9.9, so it stays on, #73;
-history in LMR's second version merged, +22.2 ± 11.4, #74. Nothing is waiting).*
+history in LMR's second version merged, +22.2 ± 11.4, #74; adaptive time off at 40+0.4
+loses −13.8 ± 8.6, so the gain holds at the long time control, #76; negative extensions wait
+for their SPRT, #77).*
 
 ## Stages
 
@@ -49,9 +51,12 @@ history in LMR's second version merged, +22.2 ± 11.4, #74. Nothing is waiting).
 | M5: adaptive time management (chapter 6.1) | #72 | 1115153 (bench is depth-limited; timed games change) | Merged: +33.5 ± 14.3, 1,062 games, [0, 5] passed (M3 Max) |
 | M5 experiment: history heuristic off (chapter 10.1) | #73 | 1115153 | Merged as a record only: history off −17.7 ± 9.9, 2,124 games, [−5, 0] failed (M3 Max); history stays on |
 | M5: history in LMR, second version (chapter 14.1) | #74 | 1126902 | Merged: +22.2 ± 11.4, 1,661 games, [0, 5] passed (M3 Max) |
+| M5 experiment: adaptive time off at 40+0.4 (chapter 6.1) | #76 | 1126902 | Merged as a record only: adaptive time off −13.8 ± 8.6, 2,599 games, [−5, 0] at 40+0.4 failed (M3 Max); adaptive time stays on |
+| M5: negative extensions (chapter 14.1) | #77, `claude/m5-negative-extensions` | 1100720 | Draft, waiting for its SPRT: [0, 5] at 8+0.08 (M3 Max) |
 
-Nothing is waiting: every M5 branch so far is merged. When several PRs wait for the M3, they
-run one at a time, and **before each SPRT starts, rebase that PR onto the current `main`** and
+Waiting: #77 (negative extensions) for its SPRT on the M3. When several PRs wait for
+the M3, they run one at a time, and **before each SPRT starts, rebase that PR onto the current
+`main`** and
 re-measure its `Bench:` line: `scripts/mac-sprt.sh` plays the PR's head against `main`, so an
 unrebased PR would be measured against changes it doesn't have. For each: if it passes, record
 it in its chapter and the ledger, mark it ready and merge; if it fails, switch it off by
@@ -185,16 +190,17 @@ Run the full test suite on every commit you replay, not only at the tip: each be
 3. More M5 strength work, each change with an SPRT. Passed on 2026-10-13: continuation history
    (#69, +10.7), singular extensions and multi-cut (#71, +29.5), adaptive time management (#72,
    +33.5), history in LMR's second version (#74, +22.2). No verdict, off: history in LMR's first
-   version (#70). Failed as a simplification, so kept: history off (#73, −17.7).
+   version (#70). Failed as a simplification, so kept: history off (#73, −17.7) and, on
+   2026-10-14 at the long time control 40+0.4, adaptive time off (#76, −13.8 ± 8.6 over 2,599
+   games; about 255 games an hour on the M3, 10 hours).
 
    Next, in a rough order of value:
-   - **#72 at the long time control**, since time management gains depend on it: a PR that
-     switches the adaptive soft limit off (`best_move_stability` and `falling_score` false),
-     run as a simplification, `scripts/mac-sprt.sh <PR> -5 0 40+0.4`. If it fails, the gain
-     holds at 40+0.4. At 40+0.4 a game takes about ten times longer, so expect a long run.
-   - **Negative extensions**: a hash move that isn't singular but whose score beats beta is
-     searched a ply shallower (Stockfish, GPL-3.0).
+   - **Negative extensions**, #77: a hash move that isn't singular but whose score beats beta
+     is searched a ply shallower (Stockfish, GPL-3.0). Bench −2.3%.
    - **Tuning singular extensions**: `singular_margin` (2), `singular_min_depth` (8).
+   - **Tuning adaptive time at 40+0.4**: the gain there (about 14 Elo) is smaller than at
+     8+0.08 (about 33), and the scale's numbers were set by hand. Each run at 40+0.4 takes
+     about 10 hours, so it waits behind cheaper candidates.
    - **The milestone gauntlets** (item 2): with about +95 Elo of M5 gains since the M2/M3
      gates were set, a rating run now would say a lot, once #36 names the reference engines.
 
