@@ -91,8 +91,9 @@ same time in different places is worth as much as singular extensions.
 | Adaptive soft limit vs `main` without it (with singular extensions), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+33.5 ± 14.3 Elo** over 1,062 games (+299 −197 =566): passed (LLR 2.97), no time losses |
 
 The gain was measured at one time control, 8+0.08. At longer ones each depth takes longer and
-the trade-offs shift, so it is worth checking there too (`scripts/mac-sprt.sh <PR> 0 5
-40+0.4`).
+the trade-offs shift, so it is being checked at 40+0.4 (cjus/chessengine#76): an experiment
+that switches both scales off and asks, as a simplification with bounds [−5, 0], whether that
+loses. A failure means the gain holds at the long time control too.
 
 ## Further reading
 
