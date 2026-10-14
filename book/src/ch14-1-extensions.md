@@ -160,15 +160,19 @@ that order is only as good as the history table, which ranks the quiet moves, an
 killers and the countermove first whatever their history. A move with a high history score
 that still came late has caused cutoffs elsewhere, and it deserves a closer look.
 
-So the reduction shrinks by a ply for every 256 points of history score
-(`lmr_history_divisor`), by at most two plies (`lmr_history_max`). A negative score makes it
-grow the same way.
+So the reduction shrinks by a ply for every `lmr_history_divisor` points of the move's score, by
+at most two plies (`lmr_history_max`). A negative score makes it grow the same way. The score
+is the one that ordered the quiet moves, history plus continuation history; the first version
+used history alone.
 
 ```rust,ignore
 {{#include ../../crates/engine/src/search.rs:lmr}}
 ```
 
-The divisor comes from measuring. History scores can run from −16,384 to +16,384, but those of
+### The first version
+
+The first version used the history score alone, and a divisor of 256. The divisor came from
+measuring. History scores can run from −16,384 to +16,384, but those of
 the moves LMR actually reduces are mostly tiny. Over a 40-move self-play game at 200 ms a move
 (measured before continuation history, chapter 10.1, came in):
 
@@ -181,22 +185,44 @@ the moves LMR actually reduces are mostly tiny. Over a 40-move self-play game at
 | +256 to +512 | 3% |
 | +512 and above | 7% |
 
-So this version reduces about one late move in ten less, and hardly ever reduces one more. The
+So that version reduces about one late move in ten less, and hardly ever reduces one more. The
 scores lean positive because the penalties go only to the quiet moves searched before a quiet
 move's cutoff. At a node where no quiet move cuts off, which is most of the nodes LMR works on,
 none of them is penalised.
 
 Stockfish (GPL-3.0) adjusts its reductions by history too, using its history and continuation
-history added up, on a scale of its own; the scale here is cb2026's. Continuation history
-(chapter 10.1) could join the score in the same way.
+history added up, on a scale of its own; the scale here is cb2026's.
 
-**cb2026 ships with it off.** An SPRT against the same engine without it found no clear
-difference: about +2 Elo, give or take 5, after 8,910 games, with no verdict (see "What it's
-worth"). An effect that small sits between the test's two hypotheses, 0 and 5 Elo, which is
-where an SPRT takes longest; it could have needed tens of thousands more games, so the test
-was stopped. That fits what the table above shows: the adjustment changes about one reduction
-in ten, by a ply or two. A stronger version, with continuation history in the score or a
-smaller divisor, would change more of them. The switch and both parameters stay.
+**The first version had no verdict.** An SPRT against the same engine without it found no
+clear difference: about +2 Elo, give or take 5, after 8,910 games (see "What it's worth"). An
+effect that small sits between the test's two hypotheses, 0 and 5 Elo, which is where an SPRT
+takes longest; it could have needed tens of thousands more games, so the test was stopped.
+That fits the table above: the adjustment changed about one reduction in ten, by a ply or two,
+and almost never made one bigger.
+
+### The second version
+
+The second version scores a move as the move picker does, history plus continuation history
+(`OrderingTables::quiet_score`), so the reduction and the order agree about which moves look
+good. Adding continuation history doesn't widen the scores much at the moves LMR reduces. Over
+the same kind of game, after continuation history came in (and before singular extensions):
+
+| History plus continuation history of a reduced move | Share |
+| --- | ---: |
+| −256 or below | 0.5% |
+| −256 to −128 | 5% |
+| −128 to +128 | 86% |
+| +128 to +256 | 3% |
+| +256 and above | 6% |
+
+So the divisor comes down to 128. Then about one reduced move in seven changes: about 9% are
+reduced less and 5% more. For the first time the adjustment works both ways: a move with a
+bad score, one that failed where it was tried before, is reduced a ply more.
+
+**This version passed**, by about **+22 Elo** (see "What it's worth"). The first changed too few
+reductions to show any effect in a reasonable number of games; changing one in seven, in both
+directions, and with the same score that orders the moves, made the difference. cb2026 ships
+with it on.
 
 ## What it saves
 
@@ -204,21 +230,23 @@ The six positions of chapters 10 to 14 (the first six bench positions) at depth 
 
 | Setting | Nodes | vs defaults |
 | --- | ---: | ---: |
-| Defaults (IIR and continuation history on; history in LMR, improving and the check extension off) | 145,410 | — |
-| `set histlmr on` | 145,132 | −0.2% |
-| `set iir off` | 196,157 | +35% |
-| `set improving on` | 114,511 | −21% |
-| `set checkext on` | 150,999 | +4% |
+| Defaults (IIR, continuation history and history in LMR on; improving and the check extension off) | 148,427 | — |
+| `set histlmr off` | 145,410 | −2% |
+| `set iir off` | 194,771 | +31% |
+| `set improving on` | 117,842 | −21% |
+| `set checkext on` | 152,496 | +3% |
 
 IIR takes about a quarter off the tree. Improving takes off over a fifth more; its second
 version, which also made late move pruning wait longer, took off 7%, and its first 31%. All
 three made the engine weaker: the games below decide, not the node counts.
 
-History in LMR hardly changes these trees. History scores grow with depth (the bonus is
-`depth²`) and over a game (each search keeps half of the last one's), and a search to depth 8
-from empty tables leaves few moves at 256 or more. The bench, which searches to depth 10, grew
-1.7%. In the self-play game above, where the tables carry over from move to move, one reduced
-move in ten was affected.
+History in LMR's first version hardly changed these trees: history scores grow with depth (the
+bonus is `depth²`) and over a game (each search keeps half of the last one's), and a search to
+depth 8 from empty tables leaves few moves at 256 or more. The second version, with half the
+divisor and both directions, makes the tree 2% bigger here. With singular extensions in, it
+makes the bench 1.1% bigger, and the six positions at depth 10 3% smaller (674,643 nodes against
+694,595): reducing some moves more and others less doesn't add up the same way at every
+depth.
 
 Singular extensions don't appear here: at depth 8, no node below the root has 8 plies left. At
 depth 10 they make the tree **85% bigger** (694,595 nodes against 375,334). Over the six
@@ -272,6 +300,7 @@ twice the size. Nodes aren't Elo, in this direction too.
 | Improving, half a ply off the margin only, vs `main` without it (with IIR), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−33.0 ± 15.3 Elo** over 1,036 games (+221 −319 =496): failed (LLR −2.96), so improving is off by default |
 | History in LMR vs `main` without it (with continuation history), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | +2.1 ± 5.0 Elo over 8,910 games (+2188 −2134 =4588): no verdict (LLR −0.30), stopped; off by default |
 | Singular extensions and multi-cut vs `main` without them (with continuation history), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+29.5 ± 13.3 Elo** over 1,357 games (+409 −294 =654): passed (LLR 2.96) |
+| History in LMR, second version (history plus continuation history, divisor 128), vs `main` without it (with singular extensions and adaptive time), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+22.2 ± 11.4 Elo** over 1,661 games (+437 −331 =893): passed (LLR 2.95) |
 
 ## Further reading
 
