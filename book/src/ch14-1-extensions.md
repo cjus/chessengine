@@ -12,7 +12,7 @@ a move, its **history** score, changes how much late move reductions take off it
 The techniques in this chapter came after stage 20, as strength work towards version 1.0
 (milestone M5), so no stage tag contains them: read this chapter against `main`. Like everything
 before them, each can be switched off and on: `set checkext`, `set singular`, `set multicut`,
-`set iir`, `set improving` and `set histlmr`.
+`set negext`, `set iir`, `set improving` and `set histlmr`.
 
 ## Check extensions
 
@@ -73,6 +73,13 @@ The same search answers a second question for free. If another move does reach
 `singular_beta`, and `singular_beta` is at least beta, then two moves beat beta: the hash move,
 and this one even at half the depth. The node is cut off on the spot. That is **multi-cut**.
 
+And a third. If the hash move isn't singular, but its hash score beats beta (while
+`singular_beta` doesn't, or multi-cut would have cut the node off), the node will most likely
+fail high whichever good move it searches. A cutoff needs any move that beats beta, not the
+best line after the hash move, so that line needs less care: the hash move is searched a ply
+*shallower* than usual (`negative_extension_plies`, 1). That is a **negative extension**: the
+same test that extends a forced move a ply reduces one with good alternatives.
+
 The search without the hash move asks a different question from the node's own search, so it
 must not mix with it. It neither reads nor writes the transposition table (an entry about the
 node with all its moves would answer the wrong question, and its result would poison the
@@ -80,8 +87,8 @@ entry), it tries no null move, and IIR doesn't reduce it further. If the hash mo
 legal move, the search has nothing to search: it fails low, since nothing else comes close.
 
 Singular extensions go back to Deep Thought, the Carnegie Mellon machine that led to Deep Blue
-(Anantharaman, Campbell and Hsu, 1988). This version, and multi-cut, are as in Stockfish (GPL-3.0); the code is
-cb2026's own.
+(Anantharaman, Campbell and Hsu, 1988). This version, multi-cut and negative extensions are as
+in Stockfish (GPL-3.0); the code is cb2026's own.
 
 ## Internal iterative reductions
 
@@ -256,6 +263,12 @@ each extension adds a ply to a large part of the tree. The games say it is worth
 Elo** (see "What it's worth"), the biggest gain of anything in this chapter, with a tree almost
 twice the size. Nodes aren't Elo, in this direction too.
 
+Negative extensions came later, on top of history in LMR's second version. At depth 10 the
+six positions tried 485 hash moves for singularity, extended 125, cut off 142 nodes by
+multi-cut and searched 56 hash moves a ply shallower. That takes 0.9% off the tree (668,426
+nodes against 674,643) and 2.3% off the bench: a small change, since it applies only where the
+singular test has already run and the hash move is expected to cut off anyway.
+
 ## Pitfalls
 
 - **Search explosion.** An extension that can apply at every ply never reaches the horizon, and
@@ -285,6 +298,10 @@ twice the size. Nodes aren't Elo, in this direction too.
 - **A second search of the same node.** The search without the hash move runs at the same ply
   as the node itself. Anything stored per ply or per position, the hash table above all, has to
   know that it is a different search, or it will mix the two results.
+- **A negative extension trusts the hash score.** It reduces the move the node expects to cut
+  off with, on the strength of a score from an earlier search. If that score was too
+  optimistic, the move's shallower search is the one that has to find out. It applies only from
+  depth 8, with an entry at most 3 plies shallower, which keeps the guess well founded.
 - **Two plies back may be a check.** In check, cb2026 computes no static evaluation (it is
   recorded as `-INFINITY`), so a side that was in check two plies ago always counts as
   improving. Some engines look four plies back in that case.
@@ -301,6 +318,7 @@ twice the size. Nodes aren't Elo, in this direction too.
 | History in LMR vs `main` without it (with continuation history), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | +2.1 ± 5.0 Elo over 8,910 games (+2188 −2134 =4588): no verdict (LLR −0.30), stopped; off by default |
 | Singular extensions and multi-cut vs `main` without them (with continuation history), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+29.5 ± 13.3 Elo** over 1,357 games (+409 −294 =654): passed (LLR 2.96) |
 | History in LMR, second version (history plus continuation history, divisor 128), vs `main` without it (with singular extensions and adaptive time), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+22.2 ± 11.4 Elo** over 1,661 games (+437 −331 =893): passed (LLR 2.95) |
+| Negative extensions vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | Waiting for its SPRT (cjus/chessengine#77) |
 
 ## Further reading
 

@@ -171,12 +171,17 @@
 //! That search can also answer a second question. If another move beats `singular_beta` and
 //! `singular_beta` is at least beta, two moves beat beta, so the node is cut off: **multi-cut**.
 //!
+//! And a third. If the hash move isn't singular but its hash score beats beta, the node will
+//! probably cut off whichever of the good moves is searched first, and the hash move's exact
+//! line matters less: it is searched `negative_extension_plies` (1) shallower instead, a
+//! **negative extension**.
+//!
 //! The search without the hash move is a search of a different question, so it neither reads
 //! nor writes the transposition table, tries no null move and does no IIR. If the hash move is
 //! the only legal move, it fails low: nothing else comes close.
 //!
-//! Both are as in Stockfish (GPL-3.0); the code is cb2026's own. Singular extensions go back to
-//! Deep Thought (Anantharaman, Campbell and Hsu, 1988).
+//! All three are as in Stockfish (GPL-3.0); the code is cb2026's own. Singular extensions go
+//! back to Deep Thought (Anantharaman, Campbell and Hsu, 1988).
 //!
 //! They make the bench tree about half as big again, and the engine stronger: +29.5 ± 13.3 Elo
 //! after 1,357 games at 8+0.08 (cjus/chessengine#71).
@@ -310,6 +315,9 @@ pub struct SearchParams {
     pub singular_tt_depth_margin: u32,
     /// ...and no other move comes within this many centipawns per ply of depth of its score.
     pub singular_margin: i32,
+    /// A hash move that isn't singular but whose hash score beats beta is searched this many
+    /// plies shallower (a negative extension).
+    pub negative_extension_plies: u32,
 }
 
 impl Default for SearchParams {
@@ -350,6 +358,7 @@ impl Default for SearchParams {
             singular_min_depth: 8,
             singular_tt_depth_margin: 3,
             singular_margin: 2,
+            negative_extension_plies: 1,
         }
     }
 }
@@ -420,6 +429,9 @@ pub struct Techniques {
     /// Multi-cut: when the singular extension's search finds another move that beats beta
     /// too, cut the node off (needs singular extensions).
     pub multi_cut: bool,
+    /// Negative extensions: search a hash move that isn't singular but beats beta a ply
+    /// shallower (needs singular extensions).
+    pub negative_extension: bool,
     /// Internal iterative reductions: search nodes without a hash move a ply shallower.
     pub iir: bool,
     /// Adjust pruning when the side to move is improving (better than two plies ago).
@@ -454,6 +466,7 @@ impl Default for Techniques {
             check_extension: false,
             singular_extension: true,
             multi_cut: true,
+            negative_extension: true,
             iir: true,
             // Off by default: three versions measured weaker (see the module documentation).
             improving: false,
@@ -481,6 +494,7 @@ impl Techniques {
             check_extension: false,
             singular_extension: false,
             multi_cut: false,
+            negative_extension: false,
             iir: false,
             improving: false,
             ..Techniques::default()
@@ -927,6 +941,7 @@ impl<'a> Searcher<'a> {
         // below the hash move's score. If no other move reaches it, the hash move is probably
         // forced, and it is searched a ply deeper.
         let mut singular_move = None;
+        let mut shallower_move = None;
         if self.techniques.singular_extension
             && depth >= p.singular_min_depth
             && ply < 2 * self.root_depth
@@ -962,6 +977,11 @@ impl<'a> Searcher<'a> {
                     // at half the depth. With two moves that good, the node is a cutoff.
                     self.note(Note::MultiCut);
                     return singular_beta;
+                } else if self.techniques.negative_extension && tt_score >= beta {
+                    // Negative extension: not singular, but its hash score beats beta. The
+                    // node will probably cut off either way, so its line needs less care.
+                    self.note(Note::NegativeExtension(hash_move));
+                    shallower_move = Some(hash_move);
                 }
             }
         }
@@ -1096,11 +1116,17 @@ impl<'a> Searcher<'a> {
                 (self.techniques.check_extension && gives_check && ply < MAX_PLY / 2)
                     || Some(mv) == singular_move,
             );
+            // A hash move that isn't singular but beats beta is searched shallower (above).
+            let shallower = if Some(mv) == shallower_move {
+                p.negative_extension_plies
+            } else {
+                0
+            };
             // ANCHOR_END: check_extension
 
             searched += 1;
             self.push_move(pos, Some(mv));
-            let child_depth = depth - 1 + extension;
+            let child_depth = (depth - 1 + extension).saturating_sub(shallower);
             let score = self.search_move(&child, child_depth, alpha, beta, how, &mut child_pv);
             self.pop_move();
             if self.aborted {
