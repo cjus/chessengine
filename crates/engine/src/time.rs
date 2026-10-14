@@ -77,9 +77,9 @@ impl Default for TimeParams {
             increment_percent: 75,
             hard_factor: 3,
             move_overhead: Duration::from_millis(30),
-            best_move_stability: true,
+            best_move_stability: false,
             stability_percent: [180, 140, 110, 90, 75],
-            falling_score: true,
+            falling_score: false,
             falling_score_percent_per_cp: 1,
             falling_score_max_cp: 100,
         }
@@ -161,6 +161,15 @@ pub fn adapted_soft(
 mod tests {
     use super::*;
 
+    /// The defaults with both of the soft limit's scales switched on.
+    fn adaptive() -> TimeParams {
+        TimeParams {
+            best_move_stability: true,
+            falling_score: true,
+            ..TimeParams::default()
+        }
+    }
+
     fn clock(seconds: u64, increment_ms: u64) -> Limits {
         Limits {
             time: [Some(Duration::from_secs(seconds)), None],
@@ -214,7 +223,7 @@ mod tests {
 
     #[test]
     fn a_stable_best_move_stops_sooner_and_a_new_one_thinks_longer() {
-        let params = TimeParams::default();
+        let params = adaptive();
         let b = budget(&clock(60, 0), Color::White, &params);
         let soft = b.soft.unwrap();
         // Just changed: 180%. Four or more depths the same: 75%.
@@ -224,7 +233,7 @@ mod tests {
         // Switched off: the soft limit as it was.
         let off = TimeParams {
             best_move_stability: false,
-            ..TimeParams::default()
+            ..adaptive()
         };
         assert_eq!(adapted_soft(&b, 0, 0, &off), Some(soft));
     }
@@ -233,7 +242,7 @@ mod tests {
     fn a_falling_score_thinks_longer_up_to_a_cap() {
         let params = TimeParams {
             best_move_stability: false,
-            ..TimeParams::default()
+            ..adaptive()
         };
         let b = budget(&clock(60, 0), Color::White, &params);
         let soft = b.soft.unwrap();
@@ -245,7 +254,7 @@ mod tests {
 
     #[test]
     fn the_adapted_limit_never_passes_the_hard_limit_or_a_fixed_movetime() {
-        let params = TimeParams::default();
+        let params = adaptive();
         // With a big increment the soft limit is already near the hard one (half the clock).
         let b = budget(&clock(1, 5000), Color::White, &params);
         assert_eq!(adapted_soft(&b, 0, 100, &params), b.hard);
