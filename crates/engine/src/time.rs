@@ -35,7 +35,8 @@
 //! is the time after a `ponderhit`.
 //!
 //! Against the same engine with a fixed soft limit: +33.5 ± 14.3 Elo after 1,062 games at
-//! 8+0.08 (cjus/chessengine#72).
+//! 8+0.08 (cjus/chessengine#72). At the long time control, 40+0.4, switching it off loses
+//! 13.8 ± 8.6 Elo after 2,599 games (cjus/chessengine#76): smaller, but the gain holds.
 //!
 //! See the Chess Programming Wiki, [Time Management](https://www.chessprogramming.org/Time_Management).
 
@@ -77,9 +78,9 @@ impl Default for TimeParams {
             increment_percent: 75,
             hard_factor: 3,
             move_overhead: Duration::from_millis(30),
-            best_move_stability: false,
+            best_move_stability: true,
             stability_percent: [180, 140, 110, 90, 75],
-            falling_score: false,
+            falling_score: true,
             falling_score_percent_per_cp: 1,
             falling_score_max_cp: 100,
         }

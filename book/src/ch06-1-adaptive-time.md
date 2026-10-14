@@ -67,8 +67,9 @@ is two different games, so the positions differ):
 
 The total is the same, as it must be: both use their clock. The typical think gets longer and
 the longest ones a little shorter. One game is a small sample, and the two pairs differ in how
-much. The games say it plays better, by about **33 Elo** (see "What it's worth"): spending the
-same time in different places is worth as much as singular extensions.
+much. The games say it plays better, by about **33 Elo** at 8+0.08 and about 14 at 40+0.4 (see
+"What it's worth"): spending the same time in different places is worth as much as singular
+extensions at the short time control.
 
 ## Pitfalls
 
@@ -89,11 +90,15 @@ same time in different places is worth as much as singular extensions.
 | Test | Result |
 | --- | --- |
 | Adaptive soft limit vs `main` without it (with singular extensions), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+33.5 ± 14.3 Elo** over 1,062 games (+299 −197 =566): passed (LLR 2.97), no time losses |
+| Experiment: the adaptive soft limit off vs `main` with it (with history in LMR's second version), 40+0.4, test Mac (M3 Max), SPRT [−5, 0] | **−13.8 ± 8.6 Elo** over 2,599 games (+482 −585 =1532): failed (LLR −2.97), no time losses; it stays on |
 
-The gain was measured at one time control, 8+0.08. At longer ones each depth takes longer and
-the trade-offs shift, so it is being checked at 40+0.4 (cjus/chessengine#76): an experiment
-that switches both scales off and asks, as a simplification with bounds [−5, 0], whether that
-loses. A failure means the gain holds at the long time control too.
+The gain was first measured at 8+0.08. At longer time controls each depth takes longer and the
+trade-offs shift, so a second test switched both scales off at 40+0.4 and asked, as a
+simplification with bounds [−5, 0], whether that loses (cjus/chessengine#76). It does: the gain
+holds at the long time control, though it is smaller, about 14 Elo against 33. An SPRT stops as
+soon as it is sure, so either estimate could be some way off, but both say it gains.
+The scale's numbers were set by hand, so tuning them, at the long time control, is a candidate
+for later.
 
 ## Further reading
 
