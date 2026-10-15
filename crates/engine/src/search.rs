@@ -186,6 +186,8 @@
 //! They make the bench tree about half as big again, and the engine stronger: +29.5 ± 13.3 Elo
 //! after 1,357 games at 8+0.08 (cjus/chessengine#71). Negative extensions came later: they take
 //! 2.3% off the bench and gained +4.9 ± 4.0 Elo after 14,211 games (cjus/chessengine#77).
+//! Starting the test from depth 6 instead of 8 gained +5.0 ± 4.1 Elo after 12,282 games
+//! (cjus/chessengine#78).
 //!
 //! ## Tablebase probes (stage 18)
 //!
@@ -356,7 +358,8 @@ impl Default for SearchParams {
             see_capture_margin: 100,
             delta_margin: 200,
             iir_min_depth: 4,
-            // The first version started at 8 (cjus/chessengine#71).
+            // The first version started at 8 (cjus/chessengine#71); 6 gained +5.0 ± 4.1
+            // (cjus/chessengine#78).
             singular_min_depth: 6,
             singular_tt_depth_margin: 3,
             singular_margin: 2,

@@ -84,8 +84,8 @@ Starting two plies lower runs the test more than three times as often, but the t
 grow, and at depth 10 they shrink: the extra tests find multi-cuts as well as extensions, and
 the two pull in opposite directions. (These counts include negative extensions, below. Before
 them, starting from depth 6 made the depth-10 tree 4% bigger, not 3% smaller.) Node counts
-don't say which plays better: depth 6 is the change tested (see "What it's worth"), as the
-bigger step towards Stockfish's.
+don't say which plays better, so depth 6, the bigger step towards Stockfish's, went to the
+games: about **+5 Elo** (see "What it's worth").
 
 The same search answers a second question for free. If another move does reach
 `singular_beta`, and `singular_beta` is at least beta, then two moves beat beta: the hash move,
@@ -341,7 +341,7 @@ that it is small, about **+5 Elo**, and it took over 14,000 of them to say so.
 | Singular extensions and multi-cut vs `main` without them (with continuation history), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+29.5 ± 13.3 Elo** over 1,357 games (+409 −294 =654): passed (LLR 2.96) |
 | History in LMR, second version (history plus continuation history, divisor 128), vs `main` without it (with singular extensions and adaptive time), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+22.2 ± 11.4 Elo** over 1,661 games (+437 −331 =893): passed (LLR 2.95) |
 | Negative extensions vs `main` without them (with adaptive time), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+4.9 ± 4.0 Elo** over 14,211 games (+3518 −3317 =7376): passed (LLR 2.96) |
-| Singular extensions from depth 6 vs `main` (from depth 8), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | Waiting for its SPRT (cjus/chessengine#78) |
+| Singular extensions from depth 6 vs `main` (from depth 8, with negative extensions), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+5.0 ± 4.1 Elo** over 12,282 games (+2758 −2580 =6944): passed (LLR 2.97) |
 
 ## Further reading
 
