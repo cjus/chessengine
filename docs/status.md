@@ -11,7 +11,7 @@ no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71; a
 management merged, +33.5 ± 14.3, #72; history off loses −17.7 ± 9.9, so it stays on, #73;
 history in LMR's second version merged, +22.2 ± 11.4, #74; adaptive time off at 40+0.4
 loses −13.8 ± 8.6, so the gain holds at the long time control, #76; negative extensions
-merged, +4.9 ± 4.0, #77; singular extensions from depth 6 wait for their SPRT, #78).*
+merged, +4.9 ± 4.0, #77; singular extensions from depth 6 running on the M3, #78; SPRT progress comments).*
 
 ## Stages
 
@@ -53,12 +53,12 @@ merged, +4.9 ± 4.0, #77; singular extensions from depth 6 wait for their SPRT, 
 | M5: history in LMR, second version (chapter 14.1) | #74 | 1126902 | Merged: +22.2 ± 11.4, 1,661 games, [0, 5] passed (M3 Max) |
 | M5 experiment: adaptive time off at 40+0.4 (chapter 6.1) | #76 | 1126902 | Merged as a record only: adaptive time off −13.8 ± 8.6, 2,599 games, [−5, 0] at 40+0.4 failed (M3 Max); adaptive time stays on |
 | M5: negative extensions (chapter 14.1) | #77 | 1100720 | Merged: +4.9 ± 4.0, 14,211 games, [0, 5] passed (M3 Max) |
-| M5: singular extensions from depth 6 (chapter 14.1) | #78, `claude/m5-singular-depth` | to re-measure on `main` | Draft, waiting for its SPRT: [0, 5] at 8+0.08 (M3 Max) |
+| M5: singular extensions from depth 6 (chapter 14.1) | #78, `claude/m5-singular-depth` | 1131028 | Draft, its SPRT running on the M3 Max: [0, 5] at 8+0.08 |
 
-Waiting: #78 (singular extensions from depth 6) for its SPRT on the M3. When several PRs wait
-for the M3, they run one at a time, and **before each SPRT starts, rebase that PR onto the
-current `main`** and re-measure its `Bench:` line: `scripts/mac-sprt.sh` plays the PR's head
-against `main`, so an unrebased PR would be measured against changes it doesn't have. For each: if it passes, record
+Running: #78 (singular extensions from depth 6) on the M3. When several PRs wait for the M3,
+they run one at a time, and **before each SPRT starts, rebase that PR onto the current
+`main`** and re-measure its `Bench:` line: `scripts/mac-sprt.sh` plays the PR's head against
+`main`, so an unrebased PR would be measured against changes it doesn't have. For each: if it passes, record
 it in its chapter and the ledger, mark it ready and merge; if it fails, switch it off by
 default (as with #57, #60, #63 and #65), record it and merge.
 
@@ -66,6 +66,10 @@ default (as with #57, #60, #63 and #65), record it and merge.
 description. Carlos starts it on the M3 and says so ("SPRT started on the M3 for #N"). Claude
 then runs `scripts/watch-sprt.sh <N>` in the background: it checks the PR every 10 minutes for
 the comment `mac-sprt.sh` posts and prints it (Carlos approved this polling on 2026-10-12).
+`mac-sprt.sh` also keeps a progress comment on the PR, updated every 2,000 games (Carlos,
+2026-10-14). If it shows 8,000 games or more with no result, the watcher stops early (exit
+3), and Claude proposes stopping the run to Carlos; to keep watching after that, run it again
+with a higher threshold (`scripts/watch-sprt.sh <N> 24 12000`) or none (`… 24 0`).
 On the result, Claude records it and merges, then rebases the next PR in the queue and tells
 Carlos it's ready. If the watcher gives up, ask Carlos for `tail -5 ~/sprt-<N>.log` and
 `pgrep -fl "match|mac-sprt"` on the M3.
@@ -156,7 +160,8 @@ Run the full test suite on every commit you replay, not only at the tip: each be
   worth about half the upper bound is the slowest of all: #70 (history in LMR) sat at +2 ± 5
   after 8,910 games and was stopped with no verdict (Carlos, 2026-10-13) and merged off. If an
   SPRT is still undecided after about 8,000 games with its estimate between the bounds,
-  propose the same.
+  propose the same. It is a proposal, not a rule: #77 (negative extensions) was still going at
+  8,000 games and passed at 14,211 with +4.9 ± 4.0.
 - **The M3's pace varies.** #69 played about 1,390 games an hour; #70 averaged about 760 an
   hour overnight. Something slowed the M3 that night. Since it has a lid, closing it would make
   the Mac sleep even with `caffeinate -i`. Expect fewer games an hour than the estimate above
@@ -196,8 +201,8 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    games; about 255 games an hour on the M3, 10 hours).
 
    Next, in a rough order of value:
-   - **Tuning singular extensions**, #78: `singular_min_depth` 8 → 6 (bench +7%). Then
-     `singular_margin` (2): at 1 the bench is 14% bigger, at 3 4% smaller.
+   - **Tuning singular extensions**, #78: `singular_min_depth` 8 → 6 (bench +2.8%). Then
+     `singular_margin` (2): from depth 6, at 1 the bench is 15% bigger, at 3 11% smaller.
    - **Tuning adaptive time at 40+0.4**: the gain there (about 14 Elo) is smaller than at
      8+0.08 (about 33), and the scale's numbers were set by hand. Each run at 40+0.4 takes
      about 10 hours, so it waits behind cheaper candidates.
