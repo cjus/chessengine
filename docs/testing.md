@@ -112,8 +112,13 @@ performance core minus one under `caffeinate`, and posts the result to the PR as
 with any time losses, illegal moves and failures. The games are kept in
 `target/sprt/pr<PR>-<commit>.pgn` on the test machine.
 
-Claude follows a running SPRT with `scripts/watch-sprt.sh <PR> [hours]`, which checks the PR
-every 10 minutes for the result comment and prints it.
+While the match runs, `mac-sprt.sh` also posts the score so far every 2,000 games
+(`PROGRESS_EVERY`, 0 for none), as one comment it keeps editing.
+
+Claude follows a running SPRT with `scripts/watch-sprt.sh <PR> [hours] [undecided games]`,
+which checks the PR every 10 minutes for the result comment and prints it. If the progress
+comment reaches `undecided games` (default 8,000) first, it prints that and exits 3, so that
+Claude can propose stopping a run that is taking long to decide.
 
 ```sh
 scripts/mac-gauntlet.sh <engines file> <issue or PR number> [games per engine] [tc] [git ref]
