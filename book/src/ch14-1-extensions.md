@@ -93,8 +93,9 @@ That suggested going lower still, and the next two-ply step is depth 4, close to
 Stockfish starts. From there the trees do grow: the test runs almost four times as often as
 from depth 6, the bench is 19% bigger and the depth-10 tree 16%. The evidence gets thinner,
 too. At depth 4 the test is a search of a single ply, against an entry that may come from a
-search of one ply, so "nothing else comes close" means less. Whether the many extra
-extensions and cutoffs are worth it is for the games to say.
+search of one ply, so "nothing else comes close" means less. The games say the many extra
+extensions and cutoffs are worth it all the same: about **+6 Elo** more (see "What it's
+worth").
 
 One effect shows already. The check extension's test position above, Philidor's legacy, is a
 chain of forced moves, each the only good one. With IIR off, singular extensions from depth 4
@@ -359,7 +360,7 @@ that it is small, about **+5 Elo**, and it took over 14,000 of them to say so.
 | History in LMR, second version (history plus continuation history, divisor 128), vs `main` without it (with singular extensions and adaptive time), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+22.2 ± 11.4 Elo** over 1,661 games (+437 −331 =893): passed (LLR 2.95) |
 | Negative extensions vs `main` without them (with adaptive time), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+4.9 ± 4.0 Elo** over 14,211 games (+3518 −3317 =7376): passed (LLR 2.96) |
 | Singular extensions from depth 6 vs `main` (from depth 8, with negative extensions), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+5.0 ± 4.1 Elo** over 12,282 games (+2758 −2580 =6944): passed (LLR 2.97) |
-| Singular extensions from depth 4 vs `main` (from depth 6), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | Waiting for its SPRT (cjus/chessengine#80) |
+| Singular extensions from depth 4 vs `main` (from depth 6), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+6.1 ± 4.8 Elo** over 9,057 games (+2127 −1969 =4961): passed (LLR 2.96) |
 
 ## Further reading
 
