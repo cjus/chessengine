@@ -79,6 +79,8 @@ pub enum Note {
     SingularExtension(Move),
     /// Another move beat beta in the singular extension's search: the node is cut off.
     MultiCut,
+    /// This hash move isn't singular but beats beta: it is searched shallower.
+    NegativeExtension(Move),
 }
 
 /// What happened during a search: counts of each decision.
@@ -126,6 +128,8 @@ pub struct SearchStats {
     pub singular_extensions: u64,
     /// Nodes cut off by multi-cut.
     pub multi_cuts: u64,
+    /// Hash moves searched shallower by a negative extension.
+    pub negative_extensions: u64,
 }
 
 impl SearchStats {
@@ -151,6 +155,7 @@ impl SearchStats {
             Note::SingularSearch(_) => &mut self.singular_searches,
             Note::SingularExtension(_) => &mut self.singular_extensions,
             Note::MultiCut => &mut self.multi_cuts,
+            Note::NegativeExtension(_) => &mut self.negative_extensions,
             Note::BetaCutoff(_, index) => {
                 if index == 1 {
                     self.first_move_cutoffs += 1;
@@ -186,6 +191,7 @@ impl SearchStats {
             singular_searches,
             singular_extensions,
             multi_cuts,
+            negative_extensions,
         } = *other;
         self.nodes += nodes;
         self.qnodes += qnodes;
@@ -208,6 +214,7 @@ impl SearchStats {
         self.singular_searches += singular_searches;
         self.singular_extensions += singular_extensions;
         self.multi_cuts += multi_cuts;
+        self.negative_extensions += negative_extensions;
     }
 }
 
@@ -282,6 +289,7 @@ mod tests {
             Note::SingularSearch(mv),
             Note::SingularExtension(mv),
             Note::MultiCut,
+            Note::NegativeExtension(mv),
             Note::Exit { score: 0 },
         ] {
             stats.count(note);
@@ -293,11 +301,13 @@ mod tests {
         assert_eq!(stats.singular_searches, 2);
         assert_eq!(stats.singular_extensions, 1);
         assert_eq!(stats.multi_cuts, 1);
+        assert_eq!(stats.negative_extensions, 1);
         let mut total = stats;
         total.add(&stats);
         assert_eq!(total.cutoffs, 4);
         assert_eq!(total.singular_searches, 4);
         assert_eq!(total.multi_cuts, 2);
+        assert_eq!(total.negative_extensions, 2);
     }
 
     #[test]
