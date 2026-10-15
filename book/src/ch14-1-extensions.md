@@ -65,8 +65,8 @@ reaches `singular_beta`, the hash move is singular and is searched with one ply 
 ```
 
 The test needs a hash entry worth comparing against: a lower bound or an exact score, at most 3
-plies shallower than the node. It applies from depth 6 on (`singular_min_depth`), so only
-with a good part of the search still to come. And no extension is made beyond twice the root
+plies shallower than the node. It applies from depth 4 on (`singular_min_depth`), so only
+with a few plies of the search still to come. And no extension is made beyond twice the root
 depth, so that a chain of them can't grow the search without limit.
 
 The first version started at depth 8. That is cautious: Stockfish (GPL-3.0) starts lower. Each
@@ -78,7 +78,9 @@ positions of "What it saves" at depth 10, by the depth singular extensions start
 | --- | ---: | ---: | ---: | ---: | ---: |
 | 8 (first version) | 1,100,720 | 668,426 | 485 | 125 | 142 |
 | 7 | 1,031,076 | 630,754 | 808 | 236 | 282 |
-| 6 | 1,131,028 | 647,169 | 1,738 | 708 | 635 |
+| 6 (second version) | 1,131,028 | 647,169 | 1,738 | 708 | 635 |
+| 5 | 1,134,904 | 722,245 | 3,436 | 1,371 | 1,413 |
+| 4 | 1,343,312 | 750,416 | 6,449 | 3,107 | 2,484 |
 
 Starting two plies lower runs the test more than three times as often, but the trees hardly
 grow, and at depth 10 they shrink: the extra tests find multi-cuts as well as extensions, and
@@ -86,6 +88,22 @@ the two pull in opposite directions. (These counts include negative extensions, 
 them, starting from depth 6 made the depth-10 tree 4% bigger, not 3% smaller.) Node counts
 don't say which plays better, so depth 6, the bigger step towards Stockfish's, went to the
 games: about **+5 Elo** (see "What it's worth").
+
+That suggested going lower still, and the next two-ply step is depth 4, close to where
+Stockfish starts. From there the trees do grow: the test runs almost four times as often as
+from depth 6, the bench is 19% bigger and the depth-10 tree 16%. The evidence gets thinner,
+too. At depth 4 the test is a search of a single ply, against an entry that may come from a
+search of one ply, so "nothing else comes close" means less. The games say the many extra
+extensions and cutoffs are worth it all the same: about **+6 Elo** more (see "What it's
+worth").
+
+One effect shows already. The check extension's test position above, Philidor's legacy, is a
+chain of forced moves, each the only good one. With IIR off, singular extensions from depth 4
+find them singular and extend them, so at depth 7 the engine finds the mate with the check
+extension off too; from depth 6 it doesn't. (With IIR on, the defaults, neither finds it at
+depth 7 or 8 without the check extension.) Where it applies, the more general extension does
+the special one's job. The unit test for the check extension now switches singular extensions
+off, as it does IIR.
 
 The same search answers a second question for free. If another move does reach
 `singular_beta`, and `singular_beta` is at least beta, then two moves beat beta: the hash move,
@@ -275,8 +293,8 @@ makes the bench 1.1% bigger, and the six positions at depth 10 3% smaller (674,6
 depth.
 
 Singular extensions don't appear in that table: at depth 8, no node below the root had 8 plies
-left. From depth 6 they do, and make the depth-8 tree 63% bigger (242,552 nodes against
-148,427). At depth 10, starting from depth 8, they made the tree **85% bigger** (694,595 nodes
+left. From depth 4 they do, and make the depth-8 tree 57% bigger (232,328 nodes against
+148,427; from depth 6, 242,552). At depth 10, starting from depth 8, they made the tree **85% bigger** (694,595 nodes
 against 375,334). Over the six positions the search tried 472 hash moves, extended 120 and cut
 off 138 nodes by multi-cut;
 without multi-cut the tree is 7% bigger again. That is the price of extending near the root:
@@ -322,8 +340,8 @@ that it is small, about **+5 Elo**, and it took over 14,000 of them to say so.
   know that it is a different search, or it will mix the two results.
 - **A negative extension trusts the hash score.** It reduces the move the node expects to cut
   off with, on the strength of a score from an earlier search. If that score was too
-  optimistic, the move's shallower search is the one that has to find out. It applies only from
-  depth 6, with an entry at most 3 plies shallower, which keeps the guess well founded.
+  optimistic, the move's shallower search is the one that has to find out. It applies only
+  where the singular test has run, with an entry at most 3 plies shallower than the node.
 - **Two plies back may be a check.** In check, cb2026 computes no static evaluation (it is
   recorded as `-INFINITY`), so a side that was in check two plies ago always counts as
   improving. Some engines look four plies back in that case.
@@ -342,6 +360,7 @@ that it is small, about **+5 Elo**, and it took over 14,000 of them to say so.
 | History in LMR, second version (history plus continuation history, divisor 128), vs `main` without it (with singular extensions and adaptive time), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+22.2 ± 11.4 Elo** over 1,661 games (+437 −331 =893): passed (LLR 2.95) |
 | Negative extensions vs `main` without them (with adaptive time), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+4.9 ± 4.0 Elo** over 14,211 games (+3518 −3317 =7376): passed (LLR 2.96) |
 | Singular extensions from depth 6 vs `main` (from depth 8, with negative extensions), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+5.0 ± 4.1 Elo** over 12,282 games (+2758 −2580 =6944): passed (LLR 2.97) |
+| Singular extensions from depth 4 vs `main` (from depth 6), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+6.1 ± 4.8 Elo** over 9,057 games (+2127 −1969 =4961): passed (LLR 2.96) |
 
 ## Further reading
 

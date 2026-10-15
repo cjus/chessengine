@@ -165,7 +165,7 @@
 //! score less `singular_margin` (2) centipawns per ply of depth. If no other move reaches it,
 //! the hash move is singular. This needs a hash entry that is a lower bound or exact and at
 //! most `singular_tt_depth_margin` (3) plies shallower than the node, from depth
-//! `singular_min_depth` (6) on, and stops at twice the root depth, so that a chain of
+//! `singular_min_depth` (4) on, and stops at twice the root depth, so that a chain of
 //! extensions can't grow without limit.
 //!
 //! That search can also answer a second question. If another move beats `singular_beta` and
@@ -187,7 +187,8 @@
 //! after 1,357 games at 8+0.08 (cjus/chessengine#71). Negative extensions came later: they take
 //! 2.3% off the bench and gained +4.9 ± 4.0 Elo after 14,211 games (cjus/chessengine#77).
 //! Starting the test from depth 6 instead of 8 gained +5.0 ± 4.1 Elo after 12,282 games
-//! (cjus/chessengine#78).
+//! (cjus/chessengine#78), and from depth 4 instead of 6 another +6.1 ± 4.8 after 9,057
+//! (cjus/chessengine#80).
 //!
 //! ## Tablebase probes (stage 18)
 //!
@@ -359,8 +360,8 @@ impl Default for SearchParams {
             delta_margin: 200,
             iir_min_depth: 4,
             // The first version started at 8 (cjus/chessengine#71); 6 gained +5.0 ± 4.1
-            // (cjus/chessengine#78).
-            singular_min_depth: 6,
+            // (cjus/chessengine#78); 4 gained +6.1 ± 4.8 more (cjus/chessengine#80).
+            singular_min_depth: 4,
             singular_tt_depth_margin: 3,
             singular_margin: 2,
             negative_extension_plies: 1,
