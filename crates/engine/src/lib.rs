@@ -802,10 +802,12 @@ mod tests {
         // Philidor's legacy: 1. Nf7+ Kg8 2. Nh6+ Kh8 3. Qg8+ Rxg8 4. Nf7#, every move a check.
         let fen = "4r2k/6pp/8/3Q2N1/8/8/6PP/6K1 w - - 0 1";
         // Internal iterative reductions are off: they shorten some of these lines too, and
-        // the test is about the extension alone.
+        // the test is about the extension alone. So are singular extensions: from depth 4
+        // they find each of these forced moves singular and extend it anyway.
         let mut engine = Engine::new();
         engine.techniques.check_extension = true;
         engine.techniques.iir = false;
+        engine.techniques.singular_extension = false;
         assert_eq!(search_with(&mut engine, fen, 7).score, Score::Mate(4));
         let mut without = engine.clone();
         without.new_game();

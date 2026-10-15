@@ -165,7 +165,7 @@
 //! score less `singular_margin` (2) centipawns per ply of depth. If no other move reaches it,
 //! the hash move is singular. This needs a hash entry that is a lower bound or exact and at
 //! most `singular_tt_depth_margin` (3) plies shallower than the node, from depth
-//! `singular_min_depth` (6) on, and stops at twice the root depth, so that a chain of
+//! `singular_min_depth` (4) on, and stops at twice the root depth, so that a chain of
 //! extensions can't grow without limit.
 //!
 //! That search can also answer a second question. If another move beats `singular_beta` and
@@ -359,8 +359,8 @@ impl Default for SearchParams {
             delta_margin: 200,
             iir_min_depth: 4,
             // The first version started at 8 (cjus/chessengine#71); 6 gained +5.0 ± 4.1
-            // (cjus/chessengine#78).
-            singular_min_depth: 6,
+            // (cjus/chessengine#78). 4 is being tested (cjus/chessengine#80).
+            singular_min_depth: 4,
             singular_tt_depth_margin: 3,
             singular_margin: 2,
             negative_extension_plies: 1,
