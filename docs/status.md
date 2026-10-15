@@ -4,15 +4,15 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-15 (M5: the check extension, IIR and three versions of improving merged,
-with chapter 14.1; improving is off by default and set aside; time losses not reproduced,
-#66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by default after
-no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71; adaptive time
-management merged, +33.5 ± 14.3, #72; history off loses −17.7 ± 9.9, so it stays on, #73;
-history in LMR's second version merged, +22.2 ± 11.4, #74; adaptive time off at 40+0.4
-loses −13.8 ± 8.6, so the gain holds at the long time control, #76; negative extensions
-merged, +4.9 ± 4.0, #77; SPRT progress comments, #79; singular extensions from depth 6
-merged, +5.0 ± 4.1, #78. Nothing is waiting).*
+*Last updated 2026-10-15, 14:30 MDT (M5: the check extension, IIR and three versions of
+improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
+reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
+default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
+adaptive time management merged, +33.5 ± 14.3, #72; history off loses −17.7 ± 9.9, so it stays
+on, #73; history in LMR's second version merged, +22.2 ± 11.4, #74; adaptive time off at 40+0.4
+loses −13.8 ± 8.6, so the gain holds at the long time control, #76; negative extensions merged,
++4.9 ± 4.0, #77; SPRT progress comments, #79; singular extensions from depth 6 merged, +5.0 ±
+4.1, #78; singular extensions from depth 4 running on the M3, #80).*
 
 ## Stages
 
@@ -55,13 +55,23 @@ merged, +5.0 ± 4.1, #78. Nothing is waiting).*
 | M5 experiment: adaptive time off at 40+0.4 (chapter 6.1) | #76 | 1126902 | Merged as a record only: adaptive time off −13.8 ± 8.6, 2,599 games, [−5, 0] at 40+0.4 failed (M3 Max); adaptive time stays on |
 | M5: negative extensions (chapter 14.1) | #77 | 1100720 | Merged: +4.9 ± 4.0, 14,211 games, [0, 5] passed (M3 Max) |
 | M5: singular extensions from depth 6 (chapter 14.1) | #78 | 1131028 | Merged: +5.0 ± 4.1, 12,282 games, [0, 5] passed (M3 Max) |
+| M5: singular extensions from depth 4 (chapter 14.1) | #80, `claude/m5-singular-depth-4` | 1343312 | Draft, its SPRT running on the M3 Max: [0, 5] at 8+0.08 |
 
-Nothing is waiting: every M5 branch so far is merged. When several PRs wait for the M3,
-they run one at a time, and **before each SPRT starts, rebase that PR onto the current
-`main`** and re-measure its `Bench:` line: `scripts/mac-sprt.sh` plays the PR's head against
-`main`, so an unrebased PR would be measured against changes it doesn't have. For each: if it passes, record
-it in its chapter and the ledger, mark it ready and merge; if it fails, switch it off by
-default (as with #57, #60, #63 and #65), record it and merge.
+**Running now: #80** (singular extensions from depth 4, [0, 5] at 8+0.08), started on the M3
+on 2026-10-15 at about 08:40 MDT. Its progress comment read 6,000 games, +4.7 ± 5.9 Elo, LLR
+1.19 at 13:24 MDT, about 1,260 games an hour; if the trend holds it passes near 15,000 games,
+around 21:00 MDT. Carlos chose to let it run past 8,000 games (2026-10-15). A new session
+should restart the watcher with the higher threshold, `scripts/watch-sprt.sh 80 24 16000`, or
+just read #80's comments if the result is already there. Then rebase #80 onto `main` (in
+`docs/status.md` take `main`'s side and edit it), record the result as for #78 (chapter 14.1,
+the module docs and parameter comment, the ledger, this file), and merge. If it fails, put
+`singular_min_depth` back to 6; depth 5 is next.
+
+When several PRs wait for the M3, they run one at a time, and **before each SPRT starts, rebase
+that PR onto the current `main`** and re-measure its `Bench:` line: `scripts/mac-sprt.sh` plays
+the PR's head against `main`, so an unrebased PR would be measured against changes it doesn't
+have. For each: if it passes, record it in its chapter and the ledger, mark it ready and merge;
+if it fails, switch it off by default (as with #57, #60, #63 and #65), record it and merge.
 
 **The SPRT loop with Carlos.** Claude opens the PR as a draft with the M3 command in its
 description. Carlos starts it on the M3 and says so ("SPRT started on the M3 for #N"). Claude
@@ -203,10 +213,10 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    games; about 255 games an hour on the M3, 10 hours).
 
    Next, in a rough order of value:
-   - **Tuning singular extensions, continued**: depth 6 passed (#78), so lower still
-     (`singular_min_depth` 5 or 4, as Stockfish), or `singular_margin` (2): from depth 6, at 1
-     the bench is 15% bigger, at 3 11% smaller. Gains this size take 12,000–14,000 games,
-     10–13 hours on the M3.
+   - **Tuning singular extensions, continued**: depth 6 passed (#78), so #80 tries depth 4
+     (bench +19%); if it fails, depth 5 (bench +0.3%). Then `singular_margin` (2): from depth
+     6, at 1 the bench is 15% bigger, at 3 11% smaller. Gains this size take 12,000–14,000
+     games, 10–13 hours on the M3.
    - **Tuning adaptive time at 40+0.4**: the gain there (about 14 Elo) is smaller than at
      8+0.08 (about 33), and the scale's numbers were set by hand. Each run at 40+0.4 takes
      about 10 hours, so it waits behind cheaper candidates.
