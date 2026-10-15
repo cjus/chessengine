@@ -267,7 +267,8 @@ Negative extensions came later, on top of history in LMR's second version. At de
 six positions tried 485 hash moves for singularity, extended 125, cut off 142 nodes by
 multi-cut and searched 56 hash moves a ply shallower. That takes 0.9% off the tree (668,426
 nodes against 674,643) and 2.3% off the bench: a small change, since it applies only where the
-singular test has already run and the hash move is expected to cut off anyway.
+singular test has already run and the hash move is expected to cut off anyway. The games agree
+that it is small, about **+5 Elo**, and it took over 14,000 of them to say so.
 
 ## Pitfalls
 
@@ -318,7 +319,7 @@ singular test has already run and the hash move is expected to cut off anyway.
 | History in LMR vs `main` without it (with continuation history), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | +2.1 ± 5.0 Elo over 8,910 games (+2188 −2134 =4588): no verdict (LLR −0.30), stopped; off by default |
 | Singular extensions and multi-cut vs `main` without them (with continuation history), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+29.5 ± 13.3 Elo** over 1,357 games (+409 −294 =654): passed (LLR 2.96) |
 | History in LMR, second version (history plus continuation history, divisor 128), vs `main` without it (with singular extensions and adaptive time), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+22.2 ± 11.4 Elo** over 1,661 games (+437 −331 =893): passed (LLR 2.95) |
-| Negative extensions vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | Waiting for its SPRT (cjus/chessengine#77) |
+| Negative extensions vs `main` without them (with adaptive time), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+4.9 ± 4.0 Elo** over 14,211 games (+3518 −3317 =7376): passed (LLR 2.96) |
 
 ## Further reading
 

@@ -10,8 +10,8 @@ with chapter 14.1; improving is off by default and set aside; time losses not re
 no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71; adaptive time
 management merged, +33.5 ± 14.3, #72; history off loses −17.7 ± 9.9, so it stays on, #73;
 history in LMR's second version merged, +22.2 ± 11.4, #74; adaptive time off at 40+0.4
-loses −13.8 ± 8.6, so the gain holds at the long time control, #76; negative extensions wait
-for their SPRT, #77).*
+loses −13.8 ± 8.6, so the gain holds at the long time control, #76; negative extensions
+merged, +4.9 ± 4.0, #77; singular extensions from depth 6 wait for their SPRT, #78).*
 
 ## Stages
 
@@ -52,13 +52,13 @@ for their SPRT, #77).*
 | M5 experiment: history heuristic off (chapter 10.1) | #73 | 1115153 | Merged as a record only: history off −17.7 ± 9.9, 2,124 games, [−5, 0] failed (M3 Max); history stays on |
 | M5: history in LMR, second version (chapter 14.1) | #74 | 1126902 | Merged: +22.2 ± 11.4, 1,661 games, [0, 5] passed (M3 Max) |
 | M5 experiment: adaptive time off at 40+0.4 (chapter 6.1) | #76 | 1126902 | Merged as a record only: adaptive time off −13.8 ± 8.6, 2,599 games, [−5, 0] at 40+0.4 failed (M3 Max); adaptive time stays on |
-| M5: negative extensions (chapter 14.1) | #77, `claude/m5-negative-extensions` | 1100720 | Draft, waiting for its SPRT: [0, 5] at 8+0.08 (M3 Max) |
+| M5: negative extensions (chapter 14.1) | #77 | 1100720 | Merged: +4.9 ± 4.0, 14,211 games, [0, 5] passed (M3 Max) |
+| M5: singular extensions from depth 6 (chapter 14.1) | #78, `claude/m5-singular-depth` | to re-measure on `main` | Draft, waiting for its SPRT: [0, 5] at 8+0.08 (M3 Max) |
 
-Waiting: #77 (negative extensions) for its SPRT on the M3. When several PRs wait for
-the M3, they run one at a time, and **before each SPRT starts, rebase that PR onto the current
-`main`** and
-re-measure its `Bench:` line: `scripts/mac-sprt.sh` plays the PR's head against `main`, so an
-unrebased PR would be measured against changes it doesn't have. For each: if it passes, record
+Waiting: #78 (singular extensions from depth 6) for its SPRT on the M3. When several PRs wait
+for the M3, they run one at a time, and **before each SPRT starts, rebase that PR onto the
+current `main`** and re-measure its `Bench:` line: `scripts/mac-sprt.sh` plays the PR's head
+against `main`, so an unrebased PR would be measured against changes it doesn't have. For each: if it passes, record
 it in its chapter and the ledger, mark it ready and merge; if it fails, switch it off by
 default (as with #57, #60, #63 and #65), record it and merge.
 
@@ -189,19 +189,19 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    calibration script is still to write, using `crates/tools/src/gauntlet.rs`).
 3. More M5 strength work, each change with an SPRT. Passed on 2026-10-13: continuation history
    (#69, +10.7), singular extensions and multi-cut (#71, +29.5), adaptive time management (#72,
-   +33.5), history in LMR's second version (#74, +22.2). No verdict, off: history in LMR's first
-   version (#70). Failed as a simplification, so kept: history off (#73, −17.7) and, on
+   +33.5), history in LMR's second version (#74, +22.2); on 2026-10-14, negative extensions
+   (#77, +4.9 ± 4.0, after 14,211 games and about 13 hours). No verdict, off: history in LMR's
+   first version (#70). Failed as a simplification, so kept: history off (#73, −17.7) and, on
    2026-10-14 at the long time control 40+0.4, adaptive time off (#76, −13.8 ± 8.6 over 2,599
    games; about 255 games an hour on the M3, 10 hours).
 
    Next, in a rough order of value:
-   - **Negative extensions**, #77: a hash move that isn't singular but whose score beats beta
-     is searched a ply shallower (Stockfish, GPL-3.0). Bench −2.3%.
-   - **Tuning singular extensions**: `singular_margin` (2), `singular_min_depth` (8).
+   - **Tuning singular extensions**, #78: `singular_min_depth` 8 → 6 (bench +7%). Then
+     `singular_margin` (2): at 1 the bench is 14% bigger, at 3 4% smaller.
    - **Tuning adaptive time at 40+0.4**: the gain there (about 14 Elo) is smaller than at
      8+0.08 (about 33), and the scale's numbers were set by hand. Each run at 40+0.4 takes
      about 10 hours, so it waits behind cheaper candidates.
-   - **The milestone gauntlets** (item 2): with about +95 Elo of M5 gains since the M2/M3
+   - **The milestone gauntlets** (item 2): with about +100 Elo of M5 gains since the M2/M3
      gates were set, a rating run now would say a lot, once #36 names the reference engines.
 
    Improving is set aside (Carlos, 2026-10-12) after three failed versions (#60, #63, #65). The results point at

@@ -184,7 +184,8 @@
 //! back to Deep Thought (Anantharaman, Campbell and Hsu, 1988).
 //!
 //! They make the bench tree about half as big again, and the engine stronger: +29.5 ± 13.3 Elo
-//! after 1,357 games at 8+0.08 (cjus/chessengine#71).
+//! after 1,357 games at 8+0.08 (cjus/chessengine#71). Negative extensions came later: they take
+//! 2.3% off the bench and gained +4.9 ± 4.0 Elo after 14,211 games (cjus/chessengine#77).
 //!
 //! ## Tablebase probes (stage 18)
 //!
