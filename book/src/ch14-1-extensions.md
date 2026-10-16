@@ -57,7 +57,7 @@ anywhere in its line costs the most, so it is worth a ply more.
 
 Finding out costs a search. Before the moves are searched, the node is searched once more, at
 half the depth, **without the hash move**, with a null window just below the hash move's score:
-`singular_beta`, the hash table's score less 3 centipawns per ply of depth. If no other move
+`singular_beta`, the hash table's score less 4 centipawns per ply of depth. If no other move
 reaches `singular_beta`, the hash move is singular and is searched with one ply more.
 
 ```rust,ignore
@@ -117,15 +117,21 @@ best line after the hash move, so that line needs less care: the hash move is se
 same test that extends a forced move a ply reduces one with good alternatives.
 
 How far `singular_beta` sits below the hash score is `singular_margin`: 2 centipawns per ply
-of depth at first, 3 now. One number moves all three outcomes. A wider margin lowers
-`singular_beta`, so it asks more of a singular move and fewer moves are extended; the lower
-`singular_beta` reaches beta less often, so multi-cut fires less; and more hash moves fall
-between the two, not singular but beating beta, and are searched a ply shallower. From depth 4,
+of depth at first, then 3, now 4. One number moves all three outcomes. A wider margin lowers
+`singular_beta`, so it asks more of a singular move and fewer moves are extended. Multi-cut is
+pulled both ways: another move reaches the lower `singular_beta` more easily, but the lower
+`singular_beta` is at least beta less often. And more hash moves fall between the two, not
+singular but beating beta, and are searched a ply shallower. From depth 4,
 a margin of 3 makes the bench 18% smaller (1,098,926 nodes against 1,343,312), and over the six
 positions of "What it saves" at depth 10 it runs a fifth fewer tests and finds about a quarter
 fewer extensions and multi-cuts. A margin of 1 makes the bench 6% smaller too (1,266,996),
 from the other side: more extensions, but more multi-cuts as well. Node counts don't say which
 plays better, so 3 went to the games: about **+5 Elo** (see "What it's worth").
+
+A margin of 4 makes the bench 8% smaller again (1,006,594), but the six positions at depth 10
+grow by 3%: it extends 4% fewer hash moves than 3 and makes 13% more multi-cuts. That is the
+first pull winning: from 3 to 4, multi-cuts went up, where from 2 to 3 they went down. The
+games decide again (see "What it's worth").
 
 The search without the hash move asks a different question from the node's own search, so it
 must not mix with it. It neither reads nor writes the transposition table (an entry about the
@@ -373,6 +379,7 @@ that it is small, about **+5 Elo**, and it took over 14,000 of them to say so.
 | Singular extensions from depth 6 vs `main` (from depth 8, with negative extensions), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+5.0 ± 4.1 Elo** over 12,282 games (+2758 −2580 =6944): passed (LLR 2.97) |
 | Singular extensions from depth 4 vs `main` (from depth 6), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+6.1 ± 4.8 Elo** over 9,057 games (+2127 −1969 =4961): passed (LLR 2.96) |
 | `singular_margin` 3 vs `main` (2, from depth 4), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+5.2 ± 4.2 Elo** over 11,400 games (+2552 −2381 =6467): passed (LLR 2.96) |
+| `singular_margin` 4 vs `main` (3), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | Waiting for its SPRT (cjus/chessengine#84) |
 
 ## Further reading
 
