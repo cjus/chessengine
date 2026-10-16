@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-16, 01:30 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-16, 08:00 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -13,7 +13,7 @@ on, #73; history in LMR's second version merged, +22.2 ± 11.4, #74; adaptive ti
 loses −13.8 ± 8.6, so the gain holds at the long time control, #76; negative extensions merged,
 +4.9 ± 4.0, #77; SPRT progress comments, #79; singular extensions from depth 6 merged, +5.0 ±
 4.1, #78; singular extensions from depth 4 merged, +6.1 ± 4.8, #80; `singular_margin` 3
-merged, +5.2 ± 4.2, #82. Nothing is waiting).*
+merged, +5.2 ± 4.2, #82; `singular_margin` 4 running on the M3, #84).*
 
 ## Stages
 
@@ -58,8 +58,14 @@ merged, +5.2 ± 4.2, #82. Nothing is waiting).*
 | M5: singular extensions from depth 6 (chapter 14.1) | #78 | 1131028 | Merged: +5.0 ± 4.1, 12,282 games, [0, 5] passed (M3 Max) |
 | M5: singular extensions from depth 4 (chapter 14.1) | #80 | 1343312 | Merged: +6.1 ± 4.8, 9,057 games, [0, 5] passed (M3 Max) |
 | M5: `singular_margin` 3 (chapter 14.1) | #82 | 1098926 | Merged: +5.2 ± 4.2, 11,400 games, [0, 5] passed (M3 Max) |
+| M5: `singular_margin` 4 (chapter 14.1) | #84, `claude/m5-singular-margin-4` | 1006594 | Draft, its SPRT running on the M3 Max: [0, 5] at 8+0.08 |
 
-Nothing is waiting: every M5 branch so far is merged.
+**Running now: #84** (`singular_margin` 4 instead of 3, [0, 5] at 8+0.08), started on the M3
+on 2026-10-16 at about 08:00 MDT. A new session should restart the watcher,
+`scripts/watch-sprt.sh 84`, or just read #84's comments if the result is already there. Then
+rebase #84 onto `main` (in `docs/status.md` take `main`'s side and edit it), record the result
+as for #82 (chapter 14.1, the module docs and parameter comment, the ledger, this file), and
+merge. If it fails, put `singular_margin` back to 3.
 
 When several PRs wait for the M3, they run one at a time, and **before each SPRT starts, rebase
 that PR onto the current `main`** and re-measure its `Bench:` line: `scripts/mac-sprt.sh` plays
@@ -213,8 +219,8 @@ Run the full test suite on every commit you replay, not only at the tip: each be
 
    Next, in a rough order of value:
    - **Tuning singular extensions, continued**: depth 6 passed (#78) and depth 4 too (#80),
-     which is about where Stockfish starts; `singular_margin` 3 passed too (#82). Next could be
-     a margin of 4 (bench 1,006,594, 8% smaller than at 3). Gains this size take 9,000–14,000
+     which is about where Stockfish starts; `singular_margin` 3 passed too (#82). #84 tries a
+     margin of 4 (bench 1,006,594, 8% smaller than at 3). Gains this size take 9,000–14,000
      games, 7–13 hours on the M3.
    - **Tuning adaptive time at 40+0.4**: the gain there (about 14 Elo) is smaller than at
      8+0.08 (about 33), and the scale's numbers were set by hand. Each run at 40+0.4 takes
