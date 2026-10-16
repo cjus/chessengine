@@ -483,8 +483,8 @@ efficiency), 64 GB RAM. This gives:
   Overhead`.
 - `stop` answered within 10 ms; `isready` answered while searching.
 - Searches are deterministic single-threaded for a given node limit, so bugs are reproducible.
-- `unsafe` code only in a few marked modules (SIMD, lock-free hash table), each with a `// SAFETY:`
-  comment; every other crate uses `#![forbid(unsafe_code)]`.
+- `unsafe` code only in a few marked modules (SIMD, lock-free hash table, macOS thread QoS), each
+  with a `// SAFETY:` comment; every other crate uses `#![forbid(unsafe_code)]`.
 
 ## Building it with Claude
 
