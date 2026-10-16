@@ -14,6 +14,10 @@ Like chapter 17's threads, this is about the machine the engine runs on, not che
 stage 20, as strength work towards version 1.0, so no stage tag contains it. Switch it with
 `set ttbuckets on|off`.
 
+**cb2026 ships with it off.** In games it made the engine weaker, about 9 Elo at 8+0.08 (see
+"What it's worth"). The table really does keep more of what it is given, as this chapter shows;
+what that bought in the games was a bigger search, not a better one.
+
 ## Cache lines
 
 A table of 16 MB doesn't fit in the processor's caches, so most probes wait for main memory,
@@ -97,10 +101,14 @@ At 16 MB the tree gets *bigger*. The table keeps more deep entries, and every si
 extension (chapter 14.1) starts from a deep enough entry. At depth 15, with buckets on, the six
 positions run 9% more singular searches (49,042 against 44,877) and extend 12% more hash moves.
 More extensions mean a bigger tree. As chapter 10.1 found, node counts can't say whether that
-makes the engine stronger. Only games can.
+makes the engine stronger. Only games can, and here they said no: about **−9 Elo** at 8+0.08.
+The likeliest reason is the one above. At 16 MB and this time control the table is under little
+pressure, so buckets save few results that matter, and the extra deep entries start extensions
+that cost more time than they repay. That is a reading of the node counts, not something the
+games showed; a test at a longer time control, where the table fills, would say more.
 
-`bench` changes from 1,098,926 nodes to 1,114,877 (+1.5%). With `set ttbuckets off` it is
-1,098,926 again: switched off, the table behaves exactly as before.
+With `set ttbuckets on`, `bench` counts 1,114,877 nodes instead of 1,098,926 (+1.5%). Off, the
+default, the table behaves exactly as in chapter 8, and `bench` is 1,098,926.
 
 ## Pitfalls
 
@@ -119,7 +127,7 @@ makes the engine stronger. Only games can.
 
 | Test | Result |
 | --- | --- |
-| Buckets vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | Waiting for its SPRT |
+| Buckets vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−8.8 ± 8.6 Elo** over 2,685 games (+536 −604 =1545): failed (LLR −2.96); off by default |
 
 ## Further reading
 

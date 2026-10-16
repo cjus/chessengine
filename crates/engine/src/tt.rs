@@ -58,6 +58,11 @@
 //! it. With one slot per key, a deep result and a fresh one compete for that slot and one of
 //! them is lost; a bucket can keep both. Switched off, a key picks a single slot, as in stage 8.
 //!
+//! **Buckets are off by default.** In games they measured weaker, −8.8 ± 8.6 Elo over 2,685
+//! games at 8+0.08 (cjus/chessengine#86): at 16 MB the table keeps more deep entries, singular
+//! extensions start from more of them, and the trees grow. The switch stays, for a test at a
+//! longer time control, where the table fills more.
+//!
 //! Pitfalls:
 //!
 //! - **Other CPUs.** Most x86 and other ARM processors have 64-byte lines, so there a bucket
@@ -272,12 +277,13 @@ fn unpack(key: u64, data: u64) -> Option<Entry> {
 // ANCHOR_END: pack
 
 impl TranspositionTable {
-    /// A table using about `megabytes` of memory (at least one bucket), with buckets on.
+    /// A table using about `megabytes` of memory (at least one bucket), with buckets off, as
+    /// the `tt_buckets` technique is by default.
     pub fn new(megabytes: usize) -> TranspositionTable {
         let count = (megabytes * 1024 * 1024 / std::mem::size_of::<Bucket>()).max(1);
         TranspositionTable {
             buckets: (0..count).map(|_| Bucket::default()).collect(),
-            use_buckets: true,
+            use_buckets: false,
             generation: AtomicU8::new(0),
         }
     }
@@ -519,6 +525,7 @@ mod tests {
     fn a_key_has_a_bucket_or_one_slot_for_any_size() {
         for mb in [0, 1, 3] {
             let mut tt = TranspositionTable::new(mb);
+            tt.set_buckets(true);
             assert_eq!(tt.megabytes(), mb);
             for key in [0, 1, u64::MAX, 0x8000_0000_0000_0000] {
                 // Indexing out of range would panic.
@@ -533,6 +540,7 @@ mod tests {
     #[test]
     fn a_keys_slot_is_inside_its_bucket() {
         let mut tt = TranspositionTable::new(1);
+        tt.set_buckets(true);
         for key in [0, 1, 0x1234_5678_9abc_def0, u64::MAX, 0x8000_0000_0000_0000] {
             let bucket = tt.slots_for(key).as_ptr_range();
             tt.set_buckets(false);
@@ -569,7 +577,8 @@ mod tests {
 
     #[test]
     fn a_full_bucket_replaces_its_least_valuable_entry() {
-        let tt = TranspositionTable::new(0);
+        let mut tt = TranspositionTable::new(0);
+        tt.set_buckets(true);
         // Keys 1 to 8 searched to depths 10 to 17.
         for key in 1..=8 {
             tt.store(key, None, 0, 9 + key as u32, Bound::Exact);
@@ -589,7 +598,8 @@ mod tests {
 
     #[test]
     fn an_old_deep_entry_goes_before_a_fresh_shallow_one() {
-        let tt = TranspositionTable::new(0);
+        let mut tt = TranspositionTable::new(0);
+        tt.set_buckets(true);
         tt.store(1, None, 0, 9, Bound::Exact);
         tt.new_search();
         tt.new_search();

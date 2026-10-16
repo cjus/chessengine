@@ -134,7 +134,7 @@ Commands:
                        Search captures past the horizon (off: evaluate mid-exchange)
   set mvvlva on|off    Search captures first, biggest victim first
   set tt on|off        The transposition table: reuse results for positions seen before
-  set ttbuckets on|off Look for a position in a bucket of 8 slots (one cache line), not one slot
+  set ttbuckets on|off Look in a bucket of 8 slots (one cache line), not one slot (default off)
   set hash <MB>        Transposition table size in megabytes (default 16)
   set threads <N>      Search threads (Lazy SMP, default 1)
   new960 [n]           Chess960 starting position n (0-959, 518 is the standard one;
@@ -1636,6 +1636,12 @@ mod tests {
         assert!(
             shell
                 .execute("set hash 2")
+                .output
+                .contains("Transposition table: on (2 MB, buckets off)")
+        );
+        assert!(
+            shell
+                .execute("set ttbuckets on")
                 .output
                 .contains("Transposition table: on (2 MB, buckets on)")
         );

@@ -458,8 +458,9 @@ impl Default for Techniques {
             quiescence: true,
             mvv_lva: true,
             tt: true,
-            // On for its SPRT.
-            tt_buckets: true,
+            // Off by default: it measured weaker, −8.8 ± 8.6 Elo at 8+0.08
+            // (cjus/chessengine#86, see chapter 8.1).
+            tt_buckets: false,
             killers: true,
             countermoves: true,
             history: true,
