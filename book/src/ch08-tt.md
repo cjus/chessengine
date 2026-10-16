@@ -84,8 +84,9 @@ to an occupied slot:
 
 cb2026 replaces an entry if it is for the same position, from an earlier search, or searched
 no deeper than the new result. Deep results cost the most to recompute, so they're kept until
-they go stale. Stronger engines use buckets of several entries per slot and finer aging. The
-Chess Programming Wiki lists the options.
+they go stale. Stronger engines give each key a bucket of several slots and weigh age against
+depth; chapter 8.1 adds both, which is why the code above picks a slot first. The Chess
+Programming Wiki lists the options.
 
 ## What it saves
 

@@ -51,6 +51,11 @@ pub(crate) const SWITCHES: &[Switch] = &[
         flag: |e| &mut e.techniques.tt,
     },
     Switch {
+        name: "ttbuckets",
+        description: "Transposition table buckets (one cache line of slots per key)",
+        flag: |e| &mut e.techniques.tt_buckets,
+    },
+    Switch {
         name: "pst",
         description: "Piece-square tables",
         flag: |e| &mut e.params.use_pst,

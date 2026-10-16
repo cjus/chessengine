@@ -396,6 +396,10 @@ pub struct Techniques {
     /// The transposition table: reuse results for positions already searched, and search
     /// their best move first. Off, the table is neither read nor written.
     pub tt: bool,
+    /// Transposition table buckets: a key picks a bucket of slots that fills one cache line,
+    /// and a store makes room by replacing the bucket's least valuable entry. Off, a key picks
+    /// a single slot, as in stage 8 (see [`crate::tt`]).
+    pub tt_buckets: bool,
     /// Killer moves: quiet moves that caused a cutoff at the same ply are tried early.
     pub killers: bool,
     /// The countermove heuristic: the quiet move that last refuted the opponent's move is
@@ -454,6 +458,9 @@ impl Default for Techniques {
             quiescence: true,
             mvv_lva: true,
             tt: true,
+            // Off by default: it measured weaker, −8.8 ± 8.6 Elo at 8+0.08
+            // (cjus/chessengine#86, see chapter 8.1).
+            tt_buckets: false,
             killers: true,
             countermoves: true,
             history: true,
