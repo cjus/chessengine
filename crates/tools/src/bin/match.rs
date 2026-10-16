@@ -15,20 +15,24 @@
 //! `--first-option Threads=4` to measure how the engine scales against one thread).
 //!
 //! Results are from the first engine's point of view. The last lines count the games that
-//! ended badly (time losses, illegal moves, crashes), for robustness runs. With
-//! `--sprt elo0 elo1` the match stops as soon as the test passes or fails. Exit status: 0 if
-//! the SPRT passed (or no SPRT was run), 1 if it failed or was inconclusive, 2 for usage
-//! errors.
-//! as soon as the test passes or fails. Exit status: 0 if the SPRT passed (or no SPRT was
-//! run), 1 if it failed or was inconclusive, 2 for usage errors.
+//! ended badly (time losses, illegal moves, crashes, games that couldn't start), by the
+//! engine at fault, for robustness runs. With `--sprt elo0 elo1` the match stops as soon as
+//! the test passes or fails.
+//!
+//! Exit status:
+//!
+//! - 0: the SPRT passed, or, with no SPRT, at least one game was scored;
+//! - 1: the SPRT failed or was inconclusive, or no game was scored;
+//! - 2: a usage error, or a match that couldn't be played in full (an engine that won't
+//!   start, a bad opening, a worker that failed: see `match_runner`).
 
 use std::fs::File;
 use std::io::Write;
 use std::process::ExitCode;
 
 use cb2026_chess::Position;
-use cb2026_tools::game::{Termination, TimeControl};
-use cb2026_tools::match_runner::{MatchSettings, parse_openings, run_match};
+use cb2026_tools::game::{Outcome, TimeControl};
+use cb2026_tools::match_runner::{MatchSettings, Problems, parse_openings, run_match};
 use cb2026_tools::sprt::{Sprt, Verdict};
 
 const USAGE: &str = "Usage: match --engine A --engine B [--tc 8+0.08|40/60|nodes=N|depth=N] \
@@ -148,17 +152,16 @@ fn run() -> Result<ExitCode, String> {
         );
     }
     let mut last_verdict = None;
-    // Games that ended badly, by engine (0 = first) and kind.
-    let mut problems: Vec<(usize, Termination, String)> = Vec::new();
+    let mut problems = Problems::default();
     let score = run_match(&settings, &mut |report| {
-        if report.game.termination != Termination::Normal {
-            // The side that lost caused the problem.
-            let loser_white = report.game.outcome == cb2026_tools::game::Outcome::BlackWins;
-            let first = usize::from(loser_white != report.first_engine_white);
-            problems.push((first, report.game.termination, report.game.reason.clone()));
-        }
+        problems.record(report);
         if let Some(file) = pgn.as_mut() {
             let _ = writeln!(file, "{}", report.game);
+        }
+        if report.game.outcome == Outcome::Aborted {
+            // Not scored, so the score line hasn't changed.
+            println!("  {}", report.game.reason);
+            return;
         }
         last_verdict = report.verdict;
         let n = report.score.games();
@@ -172,22 +175,19 @@ fn run() -> Result<ExitCode, String> {
     })?;
 
     println!("Final: {score}");
-    for (which, name) in settings.engines.iter().enumerate() {
-        let count = |kind: Termination| {
-            problems
-                .iter()
-                .filter(|(w, k, _)| *w == which && *k == kind)
-                .count()
-        };
-        println!(
-            "Problems for {name}: {} time losses, {} illegal moves, {} failures",
-            count(Termination::TimeLoss),
-            count(Termination::IllegalMove),
-            count(Termination::Failure)
-        );
+    for (name, counts) in settings.engines.iter().zip(problems.counts) {
+        println!("Problems for {name}: {counts}");
     }
-    for (_, _, reason) in problems.iter().take(10) {
+    for reason in problems.reasons.iter().take(10) {
         println!("  {reason}");
+    }
+    if score.games() == 0 {
+        // With nothing scored there is no result, whatever was asked for.
+        println!(
+            "{}no games were scored",
+            if sprt.is_some() { "SPRT: " } else { "" }
+        );
+        return Ok(ExitCode::FAILURE);
     }
     let code = match last_verdict {
         Some(Verdict::Pass) => {
@@ -202,6 +202,7 @@ fn run() -> Result<ExitCode, String> {
             println!("SPRT: inconclusive after {} games", score.games());
             ExitCode::FAILURE
         }
+        // No SPRT, and games were scored: the match was played.
         None => ExitCode::SUCCESS,
     };
     Ok(code)

@@ -56,16 +56,25 @@ cargo run --release -p cb2026-tools --bin match -- \
   colours).
 - **`--option Name=Value`** sets a UCI option on both engines; **`--first-option`** only on
   the first (used for thread-scaling tests).
-- **Exit status**: 0 if the SPRT passed, 1 if it failed or was inconclusive.
+- **Exit status**: 0 if the SPRT passed, 1 if it failed or was inconclusive, or if no game
+  was scored; 2 if the match couldn't be played in full (an engine that won't start, a bad
+  opening, a worker that failed).
+
+**When an engine fails** (cjus/chessengine#89): a crash or hang during a game loses it, and that
+worker starts both engines again before its next game, so a dead or hung process never plays
+on. A game that can't start (no answer to `ucinewgame`) is **aborted**: it is listed and saved
+with the result `*`, but not scored, since a draw would add false evidence to the test. Three
+aborted games in a row on one worker stop the match with an error, as does an engine that can't
+be started again.
 
 ## Robustness runs
 
 The PRD asks for zero illegal moves and crashes over 10,000+ games per milestone, and zero time
 losses at 1+0.01, 10+0.1 and 40/60 repeating, with the default `Move Overhead`. The `match`
-tool's last lines count the games that ended badly, per engine:
+tool's last lines count the games that ended badly, by the engine at fault:
 
 ```text
-Problems for target/release/cb2026: 0 time losses, 0 illegal moves, 0 failures
+Problems for target/release/cb2026: 0 time losses, 0 illegal moves, 0 failures, 0 aborted games
 ```
 
 followed by the reasons for the first few. A time loss names the move, how long the engine
@@ -109,8 +118,9 @@ scripts/mac-sprt.sh <PR number> [elo0 elo1] [time control]
 
 This builds the PR and `main` in separate worktrees, runs the SPRT with one game per
 performance core minus one under `caffeinate`, and posts the result to the PR as a comment,
-with any time losses, illegal moves and failures. The games are kept in
-`target/sprt/pr<PR>-<commit>.pgn` on the test machine.
+with any time losses, illegal moves, failures and aborted games. The games are kept in
+`target/sprt/pr<PR>-<commit>.pgn` on the test machine. If the match stops without a result
+(exit status 2), the comment says **SPRT run failed** and quotes the end of the log instead.
 
 While the match runs, `mac-sprt.sh` also posts the score so far every 2,000 games
 (`PROGRESS_EVERY`, 0 for none), as one comment it keeps editing.

@@ -3,12 +3,12 @@
 #
 #   scripts/watch-sprt.sh <PR number> [hours] [undecided games]
 #
-# Checks the PR's comments every 10 minutes for the one marked <!-- sprt -->, for up to
-# `hours` hours (default 24), then exits 1. If the progress comment (<!-- sprt-progress -->)
-# shows `undecided games` games or more (default 8000; 0 turns this off) with no result yet,
-# it prints that comment and exits 3: time to propose stopping the run. Claude runs it in the
-# background after Carlos says an SPRT has started on the test Mac (approved 2026-10-12); it
-# needs only `gh`, logged in.
+# Checks the PR's comments every 10 minutes for the one marked <!-- sprt --> (the result, or
+# "SPRT run failed" with the end of the log), for up to `hours` hours (default 24), then exits
+# 1. If the progress comment (<!-- sprt-progress -->) shows `undecided games` games or more
+# (default 8000; 0 turns this off) with no result yet, it prints that comment and exits 3: time
+# to propose stopping the run. Claude runs it in the background after Carlos says an SPRT has
+# started on the test Mac (approved 2026-10-12); it needs only `gh`, logged in.
 set -euo pipefail
 
 if [[ $# -lt 1 || "$1" == "-h" || "$1" == "--help" ]]; then

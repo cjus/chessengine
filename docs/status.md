@@ -187,6 +187,13 @@ Run the full test suite on every commit you replay, not only at the tip: each be
 - **Thread scaling** (`scripts/mac-smp.sh`) plays one game at a time, about 140 an hour, so its
   bounds default to [0, 25]: it asks whether more threads clearly gain. Stage 17's 4-thread test
   passed in 38 games, 17 minutes.
+- **Engine failures in a match** (#89, sections A and B, fixed 2026-10-16): a crash or hang
+  loses the game and that worker starts both engines again; a game that can't start is
+  aborted, listed (result `*`) and not scored; and a run that breaks posts **SPRT run failed**
+  with the end of its log, never a quiet result. Before, a dead engine's later games counted as
+  draws. Every SPRT comment from #69 on lists 0 failures for both engines, so those results
+  weren't affected; the earlier comments (#46–#65) didn't list failures. The rest of #89
+  (search and protocol findings) is still to review.
 - **Bounds:** gainers use [0, 5]; refactors and anything meant to be neutral use [−5, 0]. A
   result without a verdict is recorded honestly. Stage 16, the check extension and improving
   went in switched off rather than claimed as gains.
