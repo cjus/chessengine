@@ -124,8 +124,8 @@ between the two, not singular but beating beta, and are searched a ply shallower
 a margin of 3 makes the bench 18% smaller (1,098,926 nodes against 1,343,312), and over the six
 positions of "What it saves" at depth 10 it runs a fifth fewer tests and finds about a quarter
 fewer extensions and multi-cuts. A margin of 1 makes the bench 6% smaller too (1,266,996),
-from the other side: more extensions, but more multi-cuts as well. Which plays better is again
-for the games to say; 3 is the one tested (see "What it's worth").
+from the other side: more extensions, but more multi-cuts as well. Node counts don't say which
+plays better, so 3 went to the games: about **+5 Elo** (see "What it's worth").
 
 The search without the hash move asks a different question from the node's own search, so it
 must not mix with it. It neither reads nor writes the transposition table (an entry about the
@@ -372,7 +372,7 @@ that it is small, about **+5 Elo**, and it took over 14,000 of them to say so.
 | Negative extensions vs `main` without them (with adaptive time), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+4.9 ± 4.0 Elo** over 14,211 games (+3518 −3317 =7376): passed (LLR 2.96) |
 | Singular extensions from depth 6 vs `main` (from depth 8, with negative extensions), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+5.0 ± 4.1 Elo** over 12,282 games (+2758 −2580 =6944): passed (LLR 2.97) |
 | Singular extensions from depth 4 vs `main` (from depth 6), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+6.1 ± 4.8 Elo** over 9,057 games (+2127 −1969 =4961): passed (LLR 2.96) |
-| `singular_margin` 3 vs `main` (2, from depth 4), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | Waiting for its SPRT (cjus/chessengine#82) |
+| `singular_margin` 3 vs `main` (2, from depth 4), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+5.2 ± 4.2 Elo** over 11,400 games (+2552 −2381 =6467): passed (LLR 2.96) |
 
 ## Further reading
 

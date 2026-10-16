@@ -188,7 +188,8 @@
 //! 2.3% off the bench and gained +4.9 ± 4.0 Elo after 14,211 games (cjus/chessengine#77).
 //! Starting the test from depth 6 instead of 8 gained +5.0 ± 4.1 Elo after 12,282 games
 //! (cjus/chessengine#78), and from depth 4 instead of 6 another +6.1 ± 4.8 after 9,057
-//! (cjus/chessengine#80).
+//! (cjus/chessengine#80). A `singular_margin` of 3 instead of 2 gained +5.2 ± 4.2 after 11,400
+//! (cjus/chessengine#82).
 //!
 //! ## Tablebase probes (stage 18)
 //!
@@ -363,7 +364,7 @@ impl Default for SearchParams {
             // (cjus/chessengine#78); 4 gained +6.1 ± 4.8 more (cjus/chessengine#80).
             singular_min_depth: 4,
             singular_tt_depth_margin: 3,
-            // 2 until 4 became the start depth; 3 is being tested (cjus/chessengine#82).
+            // 2 until 4 became the start depth; 3 gained +5.2 ± 4.2 (cjus/chessengine#82).
             singular_margin: 3,
             negative_extension_plies: 1,
         }
