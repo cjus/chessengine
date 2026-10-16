@@ -364,7 +364,8 @@ impl Default for SearchParams {
             // (cjus/chessengine#78); 4 gained +6.1 ± 4.8 more (cjus/chessengine#80).
             singular_min_depth: 4,
             singular_tt_depth_margin: 3,
-            // 2 until 4 became the start depth; 3 gained +5.2 ± 4.2 (cjus/chessengine#82).
+            // 2 until 4 became the start depth; 3 gained +5.2 ± 4.2 (cjus/chessengine#82); 4
+            // failed, −1.8 ± 5.3 against 3 (cjus/chessengine#84).
             singular_margin: 3,
             negative_extension_plies: 1,
         }

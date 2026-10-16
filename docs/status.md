@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-16, 08:00 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-16, 14:15 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -13,7 +13,7 @@ on, #73; history in LMR's second version merged, +22.2 ± 11.4, #74; adaptive ti
 loses −13.8 ± 8.6, so the gain holds at the long time control, #76; negative extensions merged,
 +4.9 ± 4.0, #77; SPRT progress comments, #79; singular extensions from depth 6 merged, +5.0 ±
 4.1, #78; singular extensions from depth 4 merged, +6.1 ± 4.8, #80; `singular_margin` 3
-merged, +5.2 ± 4.2, #82; `singular_margin` 4 running on the M3, #84).*
+merged, +5.2 ± 4.2, #82; `singular_margin` 4 failed, −1.8 ± 5.3, so it stays at 3, #84).*
 
 ## Stages
 
@@ -58,14 +58,9 @@ merged, +5.2 ± 4.2, #82; `singular_margin` 4 running on the M3, #84).*
 | M5: singular extensions from depth 6 (chapter 14.1) | #78 | 1131028 | Merged: +5.0 ± 4.1, 12,282 games, [0, 5] passed (M3 Max) |
 | M5: singular extensions from depth 4 (chapter 14.1) | #80 | 1343312 | Merged: +6.1 ± 4.8, 9,057 games, [0, 5] passed (M3 Max) |
 | M5: `singular_margin` 3 (chapter 14.1) | #82 | 1098926 | Merged: +5.2 ± 4.2, 11,400 games, [0, 5] passed (M3 Max) |
-| M5: `singular_margin` 4 (chapter 14.1) | #84, `claude/m5-singular-margin-4` | 1006594 | Draft, its SPRT running on the M3 Max: [0, 5] at 8+0.08 |
+| M5: `singular_margin` 4 (chapter 14.1) | #84 | 1098926 | Merged as a record, the margin back to 3: −1.8 ± 5.3, 7,476 games, [0, 5] failed (M3 Max) |
 
-**Running now: #84** (`singular_margin` 4 instead of 3, [0, 5] at 8+0.08), started on the M3
-on 2026-10-16 at about 08:00 MDT. A new session should restart the watcher,
-`scripts/watch-sprt.sh 84`, or just read #84's comments if the result is already there. Then
-rebase #84 onto `main` (in `docs/status.md` take `main`'s side and edit it), record the result
-as for #82 (chapter 14.1, the module docs and parameter comment, the ledger, this file), and
-merge. If it fails, put `singular_margin` back to 3.
+Nothing on the M3 now: every M5 branch so far is merged.
 
 When several PRs wait for the M3, they run one at a time, and **before each SPRT starts, rebase
 that PR onto the current `main`** and re-measure its `Bench:` line: `scripts/mac-sprt.sh` plays
@@ -212,16 +207,19 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    (#77, +4.9 ± 4.0, after 14,211 games and about 13 hours); on 2026-10-15, singular extensions
    from depth 6 (#78, +5.0 ± 4.1, 12,282 games, about 10 hours) and from depth 4 (#80, +6.1 ±
    4.8, 9,057 games, about 7 hours); on 2026-10-16, `singular_margin` 3 (#82, +5.2 ± 4.2,
-   11,400 games, about 9 hours). No verdict, off: history in
+   11,400 games, about 9 hours). Failed, so not adopted: `singular_margin` 4 (#84, −1.8 ± 5.3
+   against 3, 7,476 games, about 6 hours). No verdict, off: history in
    LMR's first version (#70). Failed as a simplification, so kept: history off (#73, −17.7) and, on
    2026-10-14 at the long time control 40+0.4, adaptive time off (#76, −13.8 ± 8.6 over 2,599
    games; about 255 games an hour on the M3, 10 hours).
 
    Next, in a rough order of value:
    - **Tuning singular extensions, continued**: depth 6 passed (#78) and depth 4 too (#80),
-     which is about where Stockfish starts; `singular_margin` 3 passed too (#82). #84 tries a
-     margin of 4 (bench 1,006,594, 8% smaller than at 3). Gains this size take 9,000–14,000
-     games, 7–13 hours on the M3.
+     which is about where Stockfish starts; `singular_margin` 3 passed too (#82), and 4
+     failed (#84). That settles the start depth and the margin for now. Still untried: the
+     hash entry's depth margin (`singular_tt_depth_margin`, 3) and double extensions, which
+     extend a move two plies when it is singular by a wide margin (as in Stockfish, GPL-3.0).
+     Gains this size take 9,000–14,000 games, 7–13 hours on the M3.
    - **Tuning adaptive time at 40+0.4**: the gain there (about 14 Elo) is smaller than at
      8+0.08 (about 33), and the scale's numbers were set by hand. Each run at 40+0.4 takes
      about 10 hours, so it waits behind cheaper candidates.
