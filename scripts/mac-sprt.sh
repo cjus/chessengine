@@ -13,11 +13,14 @@
 # The games are saved to target/sprt/pr<PR>-<commit>.pgn; time losses, illegal moves and
 # failures are listed in the PR comment. Every PROGRESS_EVERY games (default 2000) it also
 # posts the score so far to the PR, as one comment it keeps editing, so that a long run can be
-# followed and stopped (scripts/watch-sprt.sh reads it). See docs/PRD.md, "Test machine".
+# followed and stopped (scripts/watch-sprt.sh reads it). If the match tool stops without a
+# result (an engine that won't start, a worker that failed: exit status 2), it posts the end of
+# the log instead, so a broken run is never mistaken for a quiet one. See docs/PRD.md, "Test
+# machine".
 set -euo pipefail
 
 if [[ $# -lt 1 || "$1" == "-h" || "$1" == "--help" ]]; then
-  sed -n '2,15p' "$0"
+  sed -n '2,19p' "$0"
   exit 2
 fi
 PR="$1"
@@ -101,7 +104,8 @@ ${KEEP_AWAKE[@]+"${KEEP_AWAKE[@]}"} "$WORK/new/target/release/match" \
   --engine "$WORK/new/target/release/cb2026" \
   --engine "$WORK/base/target/release/cb2026" \
   --tc "$TC" --games 40000 --concurrency "$CONCURRENCY" \
-  --openings "$OPENINGS" --sprt "$ELO0" "$ELO1" --pgn "$PGN" | tee "$LOG"
+  --openings "$OPENINGS" --sprt "$ELO0" "$ELO1" --pgn "$PGN" 2>&1 | tee "$LOG"
+STATUS="${PIPESTATUS[0]}"
 set -e
 if [[ -n "$PROGRESS_PID" ]]; then
   kill "$PROGRESS_PID" 2>/dev/null || true
@@ -109,13 +113,35 @@ if [[ -n "$PROGRESS_PID" ]]; then
   PROGRESS_PID=""
 fi
 
-FINAL="$(grep '^Final:' "$LOG" | tail -1)"
-VERDICT="$(grep '^SPRT:' "$LOG" | tail -1)"
-LAST="$(grep 'LLR' "$LOG" | tail -1)"
+FINAL="$(grep '^Final:' "$LOG" | tail -1)" || true
+# The verdict line, not the "SPRT: H0 elo ..." line the match starts with.
+VERDICT="$(grep -E '^SPRT: (H[01] accepted|inconclusive|no games)' "$LOG" | tail -1)" || true
+LAST="$(grep 'LLR' "$LOG" | tail -1)" || true
+# The engines' paths, replaced by their names.
+names() {
+  sed -e "s|$WORK/new/target/release/cb2026|PR #$PR|g" -e "s|$WORK/base/target/release/cb2026|main|g"
+}
+
+if [[ "$STATUS" -ge 2 || -z "$FINAL" || -z "$VERDICT" ]]; then
+  gh pr comment "$PR" --body "<!-- sprt -->
+**SPRT run failed** (\`scripts/mac-sprt.sh\` on $MACHINE): the match tool stopped with exit status $STATUS before reaching a result, so there is no verdict.
+
+- PR #$PR at \`$NEW_SHA\` vs \`main\` at \`$BASE_SHA\`, bounds [$ELO0, $ELO1], $TC
+- Last score: ${LAST:-none}
+
+The end of the log:
+
+\`\`\`
+$(tail -15 "$LOG" | names)
+\`\`\`
+
+Games: \`target/sprt/pr$PR-$NEW_SHA.pgn\` on the test machine."
+  echo "The match stopped without a result (exit status $STATUS); posted the log's end to PR #$PR."
+  exit 1
+fi
 # The "Problems" lines after the final score, with the engines' paths replaced by their names.
-PROBLEMS="$(sed -n '/^Final:/,$p' "$LOG" | grep -E '^(Problems for |  )' |
-  sed -e "s|$WORK/new/target/release/cb2026|PR #$PR|g" -e "s|$WORK/base/target/release/cb2026|main|g" \
-    -e 's|^Problems for |- |' -e 's|^  |  - |' || true)"
+PROBLEMS="$(sed -n '/^Final:/,$p' "$LOG" | grep -E '^(Problems for |  )' | names |
+  sed -e 's|^Problems for |- |' -e 's|^  |  - |' || true)"
 
 gh pr comment "$PR" --body "<!-- sprt -->
 **SPRT result** (run by \`scripts/mac-sprt.sh\` on $MACHINE)
@@ -126,7 +152,7 @@ gh pr comment "$PR" --body "<!-- sprt -->
 - ${LAST}
 - **${VERDICT#SPRT: }**
 
-Problems (time losses, illegal moves, failures):
+Problems (time losses, illegal moves, failures, aborted games):
 ${PROBLEMS:-- none reported}
 
 Games: \`target/sprt/pr$PR-$NEW_SHA.pgn\` on the test machine."

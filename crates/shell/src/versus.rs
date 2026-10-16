@@ -235,6 +235,16 @@ impl Shell {
                 Outcome::Draw => None,
                 Outcome::WhiteWins => Some(ours_white),
                 Outcome::BlackWins => Some(!ours_white),
+                Outcome::Aborted => {
+                    // An engine couldn't start the game, so it is gone, and the shell doesn't
+                    // start engines again (the `match` tool does). The game isn't scored.
+                    progress(&format!(
+                        "Game {}: {}. Stopping the match.\n",
+                        index + 1,
+                        game.reason
+                    ));
+                    break;
+                }
             };
             match ours_won {
                 Some(true) => score.wins += 1,

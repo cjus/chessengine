@@ -4,6 +4,10 @@
 //! engine to move the full game (`position fen ... moves ...`) and the clocks (`go wtime ...`),
 //! times the reply itself, checks that the move is legal, and ends the game on checkmate,
 //! stalemate, the draw rules, a time loss, an illegal move or a crash.
+//!
+//! A game that can't start (an engine doesn't answer `ucinewgame`) is **aborted**: it has no
+//! result, and a match must not score it. Scoring it as a draw would let a dead engine add
+//! draws to a test's evidence (cjus/chessengine#89).
 
 use std::fmt;
 use std::time::Duration;
@@ -72,6 +76,8 @@ pub enum Outcome {
     BlackWins,
     /// A draw.
     Draw,
+    /// No result: the game couldn't start. It must not be scored.
+    Aborted,
 }
 
 impl Outcome {
@@ -82,12 +88,13 @@ impl Outcome {
         }
     }
 
-    /// The PGN result tag: `1-0`, `0-1` or `1/2-1/2`.
+    /// The PGN result tag: `1-0`, `0-1`, `1/2-1/2`, or `*` (no result) for an aborted game.
     pub fn pgn(self) -> &'static str {
         match self {
             Outcome::WhiteWins => "1-0",
             Outcome::BlackWins => "0-1",
             Outcome::Draw => "1/2-1/2",
+            Outcome::Aborted => "*",
         }
     }
 }
@@ -101,7 +108,8 @@ pub enum Termination {
     TimeLoss,
     /// An engine sent an illegal move.
     IllegalMove,
-    /// An engine crashed, hung or couldn't start the game.
+    /// An engine crashed, hung or couldn't start the game (then the outcome is
+    /// [`Outcome::Aborted`]).
     Failure,
 }
 
@@ -120,6 +128,9 @@ pub struct Game {
     pub reason: String,
     /// What kind of ending it was.
     pub termination: Termination,
+    /// The side whose engine ended the game by a time loss, an illegal move or a failure;
+    /// `None` when it ended by the rules.
+    pub at_fault: Option<Color>,
 }
 
 impl fmt::Display for Game {
@@ -172,6 +183,11 @@ pub const MAX_PLIES: usize = 600;
 pub const TIME_MARGIN: Duration = Duration::from_millis(50);
 
 /// Plays one game from `start_fen`; `engines[0]` plays White.
+///
+/// # Panics
+///
+/// If `start_fen` isn't a valid FEN: callers check their openings first, as
+/// [`run_match`](crate::match_runner::run_match) does.
 pub fn play_game(engines: [&mut UciEngine; 2], start_fen: &str, tc: TimeControl) -> Game {
     play_game_watched(engines, start_fen, tc, &mut |_, _, _| {})
 }
@@ -182,6 +198,10 @@ pub type OnMove<'a> = dyn FnMut(&Position, &[String], Option<[Duration; 2]>) + '
 
 /// [`play_game`], calling `on_move` after each move with the position, the moves so far (in
 /// SAN) and the clocks (White's, Black's) when the game has them.
+///
+/// # Panics
+///
+/// If `start_fen` isn't a valid FEN, as [`play_game`].
 pub fn play_game_watched(
     engines: [&mut UciEngine; 2],
     start_fen: &str,
@@ -201,23 +221,30 @@ pub fn play_game_watched(
     // Moves each side has made, for repeating time controls.
     let mut moves_made = [0u32; 2];
 
-    let finish =
-        |termination: Termination, outcome: Outcome, reason: String, moves: Vec<String>| Game {
-            start_fen: start_fen.to_string(),
-            players: players.clone(),
-            moves,
-            outcome,
-            reason,
-            termination,
-        };
+    // `at_fault` is the side to move for every ending but the rules' own.
+    let finish = |termination: Termination,
+                  outcome: Outcome,
+                  reason: String,
+                  moves: Vec<String>,
+                  at_fault: Option<Color>| Game {
+        start_fen: start_fen.to_string(),
+        players: players.clone(),
+        moves,
+        outcome,
+        reason,
+        termination,
+        at_fault,
+    };
 
-    for engine in engines.iter_mut() {
+    for (engine, color) in engines.iter_mut().zip([Color::White, Color::Black]) {
         if let Err(e) = engine.new_game() {
+            let name = &players[color.index()];
             return finish(
                 Termination::Failure,
-                Outcome::Draw,
-                format!("aborted: {e}"),
+                Outcome::Aborted,
+                format!("aborted: {color} ({name}) couldn't start the game: {e}"),
                 san_moves,
+                Some(color),
             );
         }
     }
@@ -232,6 +259,7 @@ pub fn play_game_watched(
                     Outcome::win_for(!side),
                     "checkmate".into(),
                     san_moves,
+                    None,
                 )
             } else {
                 finish(
@@ -239,6 +267,7 @@ pub fn play_game_watched(
                     Outcome::Draw,
                     "stalemate".into(),
                     san_moves,
+                    None,
                 )
             };
         }
@@ -248,6 +277,7 @@ pub fn play_game_watched(
                 Outcome::Draw,
                 "fifty-move rule".into(),
                 san_moves,
+                None,
             );
         }
         if position.is_insufficient_material() {
@@ -256,6 +286,7 @@ pub fn play_game_watched(
                 Outcome::Draw,
                 "insufficient material".into(),
                 san_moves,
+                None,
             );
         }
         if hashes.iter().filter(|&&h| h == position.hash()).count() >= 3 {
@@ -264,6 +295,7 @@ pub fn play_game_watched(
                 Outcome::Draw,
                 "threefold repetition".into(),
                 san_moves,
+                None,
             );
         }
         if san_moves.len() >= MAX_PLIES {
@@ -272,6 +304,7 @@ pub fn play_game_watched(
                 Outcome::Draw,
                 "adjudicated: game too long".into(),
                 san_moves,
+                None,
             );
         }
 
@@ -320,6 +353,7 @@ pub fn play_game_watched(
                     Outcome::win_for(!side),
                     format!("{side} ({name}) failed: {e}"),
                     san_moves,
+                    Some(side),
                 );
             }
         };
@@ -350,6 +384,7 @@ pub fn play_game_watched(
                         clocks[mover].as_millis()
                     ),
                     san_moves,
+                    Some(side),
                 );
             }
             clocks[mover] = clocks[mover].saturating_sub(reply.elapsed) + added;
@@ -360,6 +395,7 @@ pub fn play_game_watched(
                 Outcome::win_for(!side),
                 format!("{side} ({name}) played an illegal move: {}", reply.uci),
                 san_moves,
+                Some(side),
             );
         };
         san_moves.push(position.to_san(mv));
@@ -416,9 +452,26 @@ mod tests {
             outcome: Outcome::BlackWins,
             reason: "checkmate".into(),
             termination: Termination::Normal,
+            at_fault: None,
         };
         let pgn = game.to_string();
         assert!(pgn.contains("[Result \"0-1\"]"));
         assert!(pgn.ends_with("1. f3 e5 2. g4 Qh4# 0-1\n"), "{pgn}");
+    }
+
+    #[test]
+    fn an_aborted_game_has_no_result() {
+        let game = Game {
+            start_fen: cb2026_chess::STARTING_FEN.to_string(),
+            players: ["A".into(), "B".into()],
+            moves: Vec::new(),
+            outcome: Outcome::Aborted,
+            reason: "aborted: White (A) couldn't start the game: the engine exited".into(),
+            termination: Termination::Failure,
+            at_fault: Some(Color::White),
+        };
+        let pgn = game.to_string();
+        assert!(pgn.contains("[Result \"*\"]"), "{pgn}");
+        assert!(pgn.ends_with("\n*\n"), "{pgn}");
     }
 }

@@ -9,7 +9,9 @@
 //!     [--option Name=Value ...] [--pgn games.pgn]
 //! ```
 //!
-//! `--games` is per opponent. Exit status: 0 when the gauntlet ran, 2 for usage errors.
+//! `--games` is per opponent. After each opponent it lists the games that ended badly (time
+//! losses, illegal moves, crashes, games that couldn't start) for each side. Exit status: 0
+//! when the gauntlet ran, 2 for usage errors or a match that couldn't be played in full.
 
 use std::fs::File;
 use std::io::Write;
@@ -17,7 +19,7 @@ use std::process::ExitCode;
 
 use cb2026_tools::game::TimeControl;
 use cb2026_tools::gauntlet::{GauntletResult, RatingFit, fit_rating};
-use cb2026_tools::match_runner::{MatchSettings, parse_openings, run_match};
+use cb2026_tools::match_runner::{MatchSettings, Problems, parse_openings, run_match};
 
 const USAGE: &str = "Usage: gauntlet --engine PATH --opponent PATH RATING [--opponent PATH RATING ...] \
 [--games N per opponent] [--tc 8+0.08|nodes=N|depth=N] [--concurrency N] [--openings FILE] \
@@ -25,7 +27,7 @@ const USAGE: &str = "Usage: gauntlet --engine PATH --opponent PATH RATING [--opp
 
 fn main() -> ExitCode {
     match run() {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(code) => code,
         Err(message) => {
             eprintln!("gauntlet: {message}\n{USAGE}");
             ExitCode::from(2)
@@ -33,7 +35,7 @@ fn main() -> ExitCode {
     }
 }
 
-fn run() -> Result<(), String> {
+fn run() -> Result<ExitCode, String> {
     let mut engine = None;
     let mut opponents: Vec<(String, f64)> = Vec::new();
     let mut tc = TimeControl::parse("8+0.08").expect("valid default");
@@ -81,7 +83,7 @@ fn run() -> Result<(), String> {
             }
             "-h" | "--help" => {
                 println!("{USAGE}");
-                return Ok(());
+                return Ok(ExitCode::SUCCESS);
             }
             other => return Err(format!("unknown argument '{other}'")),
         }
@@ -112,7 +114,9 @@ fn run() -> Result<(), String> {
             sprt: None,
         };
         let mut name = path.clone();
-        let score = run_match(&settings, &mut |report| {
+        let mut problems = Problems::default();
+        let result = run_match(&settings, &mut |report| {
+            problems.record(report);
             if let Some(file) = pgn.as_mut() {
                 let _ = writeln!(file, "{}", report.game);
             }
@@ -121,8 +125,22 @@ fn run() -> Result<(), String> {
             if n % 50 == 0 {
                 println!("  {}", report.score);
             }
-        })?;
+        });
+        let score = match result {
+            Ok(score) => score,
+            Err(e) => {
+                // Not a usage error, so no usage text: just what went wrong.
+                eprintln!("gauntlet: {path}: {e}");
+                return Ok(ExitCode::from(2));
+            }
+        };
         println!("  Final: {score}");
+        for (side, counts) in [&engine, &name].into_iter().zip(problems.counts) {
+            println!("  Problems for {side}: {counts}");
+        }
+        for reason in problems.reasons.iter().take(10) {
+            println!("    {reason}");
+        }
         results.push(GauntletResult {
             name,
             rating: *rating,
@@ -158,5 +176,5 @@ fn run() -> Result<(), String> {
         }
         None => println!("Rating: no games played"),
     }
-    Ok(())
+    Ok(ExitCode::SUCCESS)
 }
