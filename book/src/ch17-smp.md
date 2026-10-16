@@ -70,6 +70,32 @@ in Elo against a one-thread copy of the same engine, playing on otherwise idle c
 needs a machine with more cores than the cloud sessions have, so it runs on the test Mac
 (`scripts/mac-smp.sh`).
 
+## Asking macOS for the fast cores
+
+*Added after stage 20, in `crates/engine/src/qos.rs`. Switch it with `set qos on|off`.*
+
+Apple Silicon has fast performance cores and slower efficiency cores, and macOS doesn't let a
+program choose between them. It decides from each thread's **quality of service** (QoS) class:
+*user-interactive*, *user-initiated*, *default*, *utility* or *background*. A thread made with
+`std::thread::spawn` starts at *default*, whatever class the thread that made it has. UCI and
+XBoard search on such a thread, and so do the helpers above.
+
+A search a person is waiting for is what Apple calls *user-initiated*, so every search thread asks
+for that class when a search starts, unless it already has a higher one. It's the only `unsafe`
+code in the engine: a declaration of two C functions from the macOS SDK.
+
+```rust,ignore
+{{#include ../../crates/engine/src/qos.rs:raise}}
+```
+
+Asking isn't the same as getting. On the M1 Max, `ps -M` lists each thread's scheduler priority.
+In a test program started from Claude Code's shell, threads that asked for *utility* and
+*background* dropped to 20 and 4, but *user-initiated* and *user-interactive* both stayed at 31,
+the same as *default*: macOS capped them. Against `main` over UCI, idle and alongside 10 or 20
+busy threads, with 1 or 8 search threads, the nodes per second differed by −4% to +9%. Repeated
+runs of the same build differed by up to 12%, so that is noise. Whether a terminal window or a
+chess GUI gets a higher ceiling needs checking on the Mac itself.
+
 ## Pitfalls
 
 - **Non-determinism.** With more than one thread, two runs of the same search can differ, since

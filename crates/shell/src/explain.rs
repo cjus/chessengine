@@ -51,6 +51,11 @@ pub(crate) const SWITCHES: &[Switch] = &[
         flag: |e| &mut e.techniques.tt,
     },
     Switch {
+        name: "qos",
+        description: "Search threads ask macOS for the user-initiated QoS (performance cores)",
+        flag: |e| &mut e.thread_qos,
+    },
+    Switch {
         name: "pst",
         description: "Piece-square tables",
         flag: |e| &mut e.params.use_pst,

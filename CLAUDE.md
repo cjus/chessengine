@@ -19,8 +19,8 @@ changes the picture.
    why it works, its pitfalls and links (Chess Programming Wiki, papers). Every public item has
    rustdoc (`#![deny(missing_docs)]`).
 4. **Clarity first.** Optimise only measured hot spots, and explain the optimisation in a comment.
-5. **`unsafe` only in marked modules** (SIMD, lock-free hash table) with `// SAFETY:` comments;
-   every other crate has `#![forbid(unsafe_code)]`.
+5. **`unsafe` only in marked modules** (SIMD, lock-free hash table, macOS thread QoS) with
+   `// SAFETY:` comments; every other crate has `#![forbid(unsafe_code)]`.
 6. **Credit sources.** When an idea or code comes from a specific engine, name it and its licence
    in a comment. Only GPL-3.0-compatible code. No other engines' nets or training data.
 7. Tunable numbers are named parameters, never magic numbers in logic.

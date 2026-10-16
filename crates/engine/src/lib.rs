@@ -46,6 +46,8 @@
 //! - [`book`]: Polyglot opening books (stage 18).
 //! - [`levels`]: strength levels (stage 19).
 //! - [`time`]: time management: soft and hard limits per move (stage 6).
+//! - [`qos`]: asking macOS to run the search threads as work a person is waiting for, so they
+//!   stay on the performance cores (after stage 20).
 //! - [`bench`](mod@bench): the fixed benchmark behind `cb2026 bench` and every commit's `Bench:` line.
 //!
 //! ## What will live here
@@ -62,9 +64,11 @@
 //!
 //! ## `unsafe` policy
 //!
-//! This crate denies `unsafe` code rather than forbidding it, because two later modules may need
-//! it: SIMD evaluation and the lock-free transposition table. Each such module will opt in with
-//! `#[allow(unsafe_code)]` and justify every `unsafe` block with a `// SAFETY:` comment.
+//! This crate denies `unsafe` code rather than forbidding it, because a few marked modules need
+//! it. Each opts in with `#![allow(unsafe_code)]` and justifies every `unsafe` block with a
+//! `// SAFETY:` comment. Today that is [`qos`], which calls two macOS C functions. SIMD
+//! evaluation may be next. (The lock-free transposition table turned out not to need any: it is
+//! built from atomics.)
 
 #![deny(unsafe_code)]
 
@@ -75,6 +79,7 @@ pub mod eval;
 pub mod hce;
 pub mod levels;
 pub mod ordering;
+pub mod qos;
 pub mod search;
 pub mod see;
 pub mod stats;
@@ -228,6 +233,10 @@ pub struct Engine {
     pub ordering: OrderingTables,
     /// Search threads (Lazy SMP, stage 17): 1 means a single-threaded search.
     pub threads: usize,
+    /// On macOS, search threads ask for the user-initiated quality of service, so the system
+    /// keeps them on the performance cores and ahead of ordinary work (see [`qos`]; shell
+    /// `set qos`). Does nothing on other systems.
+    pub thread_qos: bool,
     /// Endgame tablebases, if any are loaded (stage 18).
     pub tablebase: Option<Arc<dyn Tablebase>>,
     /// When to probe them.
@@ -258,6 +267,7 @@ impl Default for Engine {
             tt: TranspositionTable::default(),
             ordering: OrderingTables::default(),
             threads: 1,
+            thread_qos: true,
             tablebase: None,
             tablebase_params: TablebaseParams::default(),
             tablebase_loader: None,
@@ -431,12 +441,17 @@ impl Engine {
             tt,
             ordering,
             threads,
+            thread_qos,
             tablebase,
             tablebase_params,
             multipv,
             time,
             ..
         } = self;
+        let thread_qos = *thread_qos;
+        // Every search thread asks macOS to treat it as work a person is waiting for; this one
+        // goes back to its old class when the search ends.
+        let _qos = qos::SearchQos::raise(thread_qos);
         let tablebase = tablebase.as_deref();
         let self_multipv = (*multipv).max(1);
         let tablebase_params = *tablebase_params;
@@ -447,6 +462,7 @@ impl Engine {
                 let root_moves = root_moves.clone();
                 let (helpers_stop, helper_nodes) = (&helpers_stop, &helper_nodes);
                 helper_threads.push(scope.spawn(move || {
+                    let _qos = qos::SearchQos::raise(thread_qos);
                     let mut ordering = OrderingTables::default();
                     let mut searcher = Searcher::new(
                         params,
