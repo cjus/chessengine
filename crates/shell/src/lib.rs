@@ -134,6 +134,7 @@ Commands:
                        Search captures past the horizon (off: evaluate mid-exchange)
   set mvvlva on|off    Search captures first, biggest victim first
   set tt on|off        The transposition table: reuse results for positions seen before
+  set ttbuckets on|off Look for a position in a bucket of 8 slots (one cache line), not one slot
   set hash <MB>        Transposition table size in megabytes (default 16)
   set threads <N>      Search threads (Lazy SMP, default 1)
   new960 [n]           Chess960 starting position n (0-959, 518 is the standard one;
@@ -1034,7 +1035,7 @@ impl Shell {
             _ => return Response::text(SET_USAGE),
         }
         Response::text(format!(
-            "Sliding attacks: {}\nEngine moves: {}\nAlpha-beta pruning: {}\nQuiescence search: {}\nMVV-LVA ordering: {}\nTransposition table: {} ({} MB)\nThreads: {}\nPiece-square tables: {}\nTapered evaluation: {}\nMobility, pawns, pieces, king safety, tempo: {}, {}, {}, {}, {}\nKillers, countermoves, history, continuation history: {}, {}, {}, {}\nPVS, aspiration windows: {}, {}\nNull-move pruning: {}\nLate move reductions, adjusted by history, pruning: {}, {}, {}\nReverse futility, razoring, futility: {}, {}, {}\nSEE pruning, delta pruning, SEE ordering: {}, {}, {}",
+            "Sliding attacks: {}\nEngine moves: {}\nAlpha-beta pruning: {}\nQuiescence search: {}\nMVV-LVA ordering: {}\nTransposition table: {} ({} MB, buckets {})\nThreads: {}\nPiece-square tables: {}\nTapered evaluation: {}\nMobility, pawns, pieces, king safety, tempo: {}, {}, {}, {}, {}\nKillers, countermoves, history, continuation history: {}, {}, {}, {}\nPVS, aspiration windows: {}, {}\nNull-move pruning: {}\nLate move reductions, adjusted by history, pruning: {}, {}, {}\nReverse futility, razoring, futility: {}, {}, {}\nSEE pruning, delta pruning, SEE ordering: {}, {}, {}",
             match slider_method() {
                 SliderMethod::Rays => "walking rays",
                 SliderMethod::Magics => "magic bitboards",
@@ -1052,6 +1053,7 @@ impl Shell {
             on_off_text(self.engine.techniques.mvv_lva),
             on_off_text(self.engine.techniques.tt),
             self.engine.tt.megabytes(),
+            on_off_text(self.engine.techniques.tt_buckets),
             self.engine.threads,
             on_off_text(self.engine.params.use_pst),
             on_off_text(self.engine.params.tapered),
@@ -1135,7 +1137,7 @@ fn parse_move(pos: &Position, text: &str) -> Option<Move> {
 }
 
 /// Usage for the `set` command.
-const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set threads <N> | set eval hand|tuned | set alphabeta|quiescence|mvvlva|tt|killers|countermoves|history|conthist|pvs|aspiration|nullmove|lmr|histlmr|lmp|rfp|razoring|futility|seeprune|delta|seeorder|checkext|singular|multicut|negext|iir|improving|tmstability|tmscore|pst|tapered|mobility|pawns|pieces|kingsafety|tempo on|off";
+const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set threads <N> | set eval hand|tuned | set alphabeta|quiescence|mvvlva|tt|ttbuckets|killers|countermoves|history|conthist|pvs|aspiration|nullmove|lmr|histlmr|lmp|rfp|razoring|futility|seeprune|delta|seeorder|checkext|singular|multicut|negext|iir|improving|tmstability|tmscore|pst|tapered|mobility|pawns|pieces|kingsafety|tempo on|off";
 
 /// How long the engine thinks per move by default in the shell.
 const DEFAULT_MOVETIME_MS: u64 = 1000;
@@ -1635,7 +1637,7 @@ mod tests {
             shell
                 .execute("set hash 2")
                 .output
-                .contains("Transposition table: on (2 MB)")
+                .contains("Transposition table: on (2 MB, buckets on)")
         );
         assert!(
             shell

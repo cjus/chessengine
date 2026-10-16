@@ -369,6 +369,7 @@ impl Engine {
         if self.techniques.mvv_lva {
             ordering::order_moves(position, &mut root_moves);
         }
+        self.tt.set_buckets(self.techniques.tt_buckets);
         // The previous search often left a best move for this position.
         self.tt.new_search();
         self.ordering.new_search();
@@ -568,6 +569,7 @@ impl Engine {
         if self.techniques.mvv_lva {
             ordering::order_moves(position, &mut root_moves);
         }
+        self.tt.set_buckets(self.techniques.tt_buckets);
         self.tt.new_search();
         self.ordering.new_search();
         let mut searcher = Searcher::new(

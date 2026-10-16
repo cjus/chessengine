@@ -43,6 +43,33 @@
 //! Two different positions with the *same* key are possible in theory, but with 64-bit keys
 //! the chance is negligible; the stored move is still checked for legality before use.
 //!
+//! ## Buckets
+//!
+//! A table of many megabytes doesn't fit in the CPU's caches, so most probes wait for main
+//! memory, and memory is fetched a whole cache line at a time. Apple Silicon's lines are
+//! [`CACHE_LINE_BYTES`] (128) bytes and a slot is 16, so a probe of a single slot fetches eight
+//! and reads one. With **buckets** (the `tt_buckets` technique, after stage 20), a key picks a
+//! bucket of [`BUCKET_SLOTS`] slots that fills exactly one line, and the position may be in any
+//! of them: eight places for the price of one fetch.
+//!
+//! A store goes to the slot that already holds the position, else to an empty one, else to
+//! the one whose entry is worth least: the shallowest, with each search since it was stored
+//! counting as [`AGE_PLIES`] plies less depth. The rule above then decides whether to replace
+//! it. With one slot per key, a deep result and a fresh one compete for that slot and one of
+//! them is lost; a bucket can keep both. Switched off, a key picks a single slot, as in stage 8.
+//!
+//! Pitfalls:
+//!
+//! - **Other CPUs.** Most x86 and other ARM processors have 64-byte lines, so there a bucket
+//!   spans two. They are next to each other, and many processors fetch such pairs together.
+//!   The bucket size is the same everywhere so that `bench` counts the same nodes on every
+//!   machine.
+//! - **Probing costs more work.** A miss reads all eight slots instead of one. They are already
+//!   in the cache by then, so it costs a few instructions, not another wait for memory.
+//! - **Switching mid-game.** A key's single slot lies inside its bucket (see
+//!   `TranspositionTable::slots_for`), so switching buckets on still finds every entry. Switching
+//!   them off finds only the entries that happen to sit in their key's own slot.
+//!
 //! ## Pitfalls
 //!
 //! - **Repetitions.** The TT doesn't know how a position was reached, so a draw by repetition
@@ -65,6 +92,14 @@ use crate::tablebase::TB_WIN;
 pub const DEFAULT_HASH_MB: usize = 16;
 /// The largest table the UCI `Hash` option allows, in megabytes.
 pub const MAX_HASH_MB: usize = 65_536;
+/// The size of one of Apple Silicon's cache lines, in bytes: the unit memory is fetched in, and
+/// the size of a bucket.
+pub const CACHE_LINE_BYTES: usize = 128;
+/// The slots in a bucket: as many as fill one cache line.
+pub const BUCKET_SLOTS: usize = CACHE_LINE_BYTES / std::mem::size_of::<Slot>();
+/// Choosing which entry of a full bucket to replace, each search since an entry was stored
+/// counts as this many plies less depth.
+pub const AGE_PLIES: i32 = 8;
 
 // ANCHOR: entry
 /// What a stored score means.
@@ -113,24 +148,69 @@ struct Slot {
 }
 // ANCHOR_END: slot
 
+impl Slot {
+    /// The slot's entry if it is for `key`. A torn entry looks like another key's, so it
+    /// isn't returned.
+    fn entry_for(&self, key: u64) -> Option<Entry> {
+        let data = self.data.load(Ordering::Relaxed);
+        if self.key_xor_data.load(Ordering::Relaxed) ^ data != key {
+            return None;
+        }
+        unpack(key, data)
+    }
+
+    /// Whatever the slot holds, if anything.
+    fn entry(&self) -> Option<Entry> {
+        let data = self.data.load(Ordering::Relaxed);
+        let key = self.key_xor_data.load(Ordering::Relaxed) ^ data;
+        unpack(key, data)
+    }
+
+    /// Writes an entry (data from [`pack`]); 0 and 0 empty the slot.
+    fn write(&self, key: u64, data: u64) {
+        self.data.store(data, Ordering::Relaxed);
+        self.key_xor_data.store(key ^ data, Ordering::Relaxed);
+    }
+}
+
+impl Clone for Slot {
+    /// A copy of what the slot holds now (atomics can't simply be copied).
+    fn clone(&self) -> Slot {
+        Slot {
+            key_xor_data: AtomicU64::new(self.key_xor_data.load(Ordering::Relaxed)),
+            data: AtomicU64::new(self.data.load(Ordering::Relaxed)),
+        }
+    }
+}
+
+// ANCHOR: bucket
+/// [`BUCKET_SLOTS`] slots, aligned so that they fill exactly one cache line. (`align` only
+/// takes a number, not a constant; the assertion below checks it matches.)
+#[derive(Clone, Debug, Default)]
+#[repr(align(128))]
+struct Bucket([Slot; BUCKET_SLOTS]);
+// ANCHOR_END: bucket
+
+const _: () = assert!(
+    std::mem::size_of::<Bucket>() == CACHE_LINE_BYTES
+        && std::mem::align_of::<Bucket>() == CACHE_LINE_BYTES
+);
+
 /// The transposition table. It is shared between search threads by reference: all its
-/// methods take `&self`, and every slot is made of atomics.
+/// methods but [`TranspositionTable::set_buckets`] take `&self`, and every slot is made of
+/// atomics.
 pub struct TranspositionTable {
-    slots: Vec<Slot>,
+    buckets: Vec<Bucket>,
+    /// Whether a key picks a whole bucket (`true`) or a single slot.
+    use_buckets: bool,
     generation: AtomicU8,
 }
 
 impl Clone for TranspositionTable {
     fn clone(&self) -> TranspositionTable {
         TranspositionTable {
-            slots: self
-                .slots
-                .iter()
-                .map(|slot| Slot {
-                    key_xor_data: AtomicU64::new(slot.key_xor_data.load(Ordering::Relaxed)),
-                    data: AtomicU64::new(slot.data.load(Ordering::Relaxed)),
-                })
-                .collect(),
+            buckets: self.buckets.clone(),
+            use_buckets: self.use_buckets,
             generation: AtomicU8::new(self.generation.load(Ordering::Relaxed)),
         }
     }
@@ -140,7 +220,8 @@ impl std::fmt::Debug for TranspositionTable {
     /// A summary: printing millions of slots helps nobody.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TranspositionTable")
-            .field("slots", &self.slots.len())
+            .field("slots", &self.len())
+            .field("use_buckets", &self.use_buckets)
             .field("generation", &self.generation.load(Ordering::Relaxed))
             .finish()
     }
@@ -191,37 +272,47 @@ fn unpack(key: u64, data: u64) -> Option<Entry> {
 // ANCHOR_END: pack
 
 impl TranspositionTable {
-    /// A table using about `megabytes` of memory (at least one slot).
+    /// A table using about `megabytes` of memory (at least one bucket), with buckets on.
     pub fn new(megabytes: usize) -> TranspositionTable {
-        let slot_size = std::mem::size_of::<Slot>();
-        let count = (megabytes * 1024 * 1024 / slot_size).max(1);
+        let count = (megabytes * 1024 * 1024 / std::mem::size_of::<Bucket>()).max(1);
         TranspositionTable {
-            slots: (0..count).map(|_| Slot::default()).collect(),
+            buckets: (0..count).map(|_| Bucket::default()).collect(),
+            use_buckets: true,
             generation: AtomicU8::new(0),
         }
     }
 
     /// The table's size in megabytes, rounded to the nearest.
     pub fn megabytes(&self) -> usize {
-        let bytes = self.slots.len() * std::mem::size_of::<Slot>();
+        let bytes = self.buckets.len() * std::mem::size_of::<Bucket>();
         (bytes + 512 * 1024) / (1024 * 1024)
     }
 
     /// The number of slots.
     pub fn len(&self) -> usize {
-        self.slots.len()
+        self.buckets.len() * BUCKET_SLOTS
     }
 
-    /// Whether the table has no slots (never true: it always has at least one).
+    /// Whether the table has no slots (never true: it always has at least one bucket).
     pub fn is_empty(&self) -> bool {
-        self.slots.is_empty()
+        self.buckets.is_empty()
+    }
+
+    /// Every slot, in order.
+    fn slots(&self) -> impl Iterator<Item = &Slot> {
+        self.buckets.iter().flat_map(|bucket| &bucket.0)
+    }
+
+    /// Switches buckets on or off (the `tt_buckets` technique). The entries stay where they
+    /// are; see the module docs for what each direction still finds.
+    pub fn set_buckets(&mut self, on: bool) {
+        self.use_buckets = on;
     }
 
     /// Empties the table (a new game, or the UCI `Clear Hash` button).
     pub fn clear(&self) {
-        for slot in &self.slots {
-            slot.key_xor_data.store(0, Ordering::Relaxed);
-            slot.data.store(0, Ordering::Relaxed);
+        for slot in self.slots() {
+            slot.write(0, 0);
         }
         self.generation.store(0, Ordering::Relaxed);
     }
@@ -231,37 +322,41 @@ impl TranspositionTable {
         self.generation.fetch_add(1, Ordering::Relaxed);
     }
 
-    /// The slot for `key`.
+    // ANCHOR: slots_for
+    /// The slots where the position with `key` may be stored: its bucket, or with buckets off
+    /// a single slot.
     ///
     /// Taking the key modulo the table size would work, but division is slow. Instead the key
-    /// is treated as a fraction of 2^64 and scaled to the table size: `(key × len) >> 64`.
-    /// It is one multiplication, works for any table size, and spreads keys evenly because
-    /// Zobrist keys are uniformly random. (Daniel Lemire, "A fast alternative to the modulo
-    /// reduction", 2016.)
-    fn index(&self, key: u64) -> usize {
-        ((key as u128 * self.slots.len() as u128) >> 64) as usize
+    /// is treated as a fraction of 2^64 and scaled to the number of buckets (or slots):
+    /// `(key × count) >> 64`. It is one multiplication, works for any table size, and spreads
+    /// keys evenly because Zobrist keys are uniformly random. (Daniel Lemire, "A fast
+    /// alternative to the modulo reduction", 2016.) There are [`BUCKET_SLOTS`] times as many
+    /// slots as buckets, so a key's slot is always one of the slots of its bucket.
+    fn slots_for(&self, key: u64) -> &[Slot] {
+        let scale = |count: usize| ((key as u128 * count as u128) >> 64) as usize;
+        if self.use_buckets {
+            &self.buckets[scale(self.buckets.len())].0
+        } else {
+            let index = scale(self.len());
+            std::slice::from_ref(&self.buckets[index / BUCKET_SLOTS].0[index % BUCKET_SLOTS])
+        }
     }
+    // ANCHOR_END: slots_for
 
     /// The entry stored for `key`, if there is one (and it wasn't torn by a concurrent write).
     pub fn probe(&self, key: u64) -> Option<Entry> {
-        let slot = &self.slots[self.index(key)];
-        let data = slot.data.load(Ordering::Relaxed);
-        let key_xor_data = slot.key_xor_data.load(Ordering::Relaxed);
-        if key_xor_data ^ data != key {
-            return None;
-        }
-        unpack(key, data)
+        self.slots_for(key)
+            .iter()
+            .find_map(|slot| slot.entry_for(key))
     }
 
     // ANCHOR: store
     /// Stores a search result for the position with `key`.
     pub fn store(&self, key: u64, best_move: Option<Move>, score: i32, depth: u32, bound: Bound) {
-        let slot = &self.slots[self.index(key)];
         let generation = self.generation.load(Ordering::Relaxed);
         let depth = depth.min(u8::MAX as u32) as u8;
-        let old_data = slot.data.load(Ordering::Relaxed);
-        let old_key = slot.key_xor_data.load(Ordering::Relaxed) ^ old_data;
-        let old = unpack(old_key, old_data);
+        let slot = self.slot_to_store(key, generation);
+        let old = slot.entry();
         let replace = match old {
             None => true,
             Some(old) => old.key == key || old.generation != generation || depth >= old.depth,
@@ -272,10 +367,25 @@ impl TranspositionTable {
                 old.filter(|old| old.key == key)
                     .and_then(|old| old.best_move)
             });
-            let data = pack(best_move, score, depth, bound, generation);
-            slot.data.store(data, Ordering::Relaxed);
-            slot.key_xor_data.store(key ^ data, Ordering::Relaxed);
+            slot.write(key, pack(best_move, score, depth, bound, generation));
         }
+    }
+
+    /// Where a result for `key` goes: the slot that already holds the position, else an empty
+    /// one, else the one whose entry is worth least (see [`worth`]). With buckets off there is
+    /// only one candidate.
+    fn slot_to_store(&self, key: u64, generation: u8) -> &Slot {
+        let slots = self.slots_for(key);
+        slots
+            .iter()
+            .find(|slot| slot.entry_for(key).is_some())
+            .unwrap_or_else(|| {
+                // `min_by_key` returns the first of equals, so the first empty slot.
+                slots
+                    .iter()
+                    .min_by_key(|slot| slot.entry().map_or(i32::MIN, |e| worth(e, generation)))
+                    .expect("a key always has at least one slot")
+            })
     }
     // ANCHOR_END: store
 
@@ -283,9 +393,10 @@ impl TranspositionTable {
     /// `info hashfull`). Only entries from the current search count.
     pub fn hashfull(&self) -> u32 {
         let generation = self.generation.load(Ordering::Relaxed);
-        let sample = self.slots.len().min(1000);
-        let used = self.slots[..sample]
-            .iter()
+        let sample = self.len().min(1000);
+        let used = self
+            .slots()
+            .take(sample)
             .filter(|slot| {
                 unpack(0, slot.data.load(Ordering::Relaxed))
                     .is_some_and(|e| e.generation == generation)
@@ -293,6 +404,15 @@ impl TranspositionTable {
             .count();
         (used * 1000 / sample.max(1)) as u32
     }
+}
+
+/// How much an entry is worth keeping when a full bucket needs room: its depth, less
+/// [`AGE_PLIES`] for each search since it was stored. Deep results cost the most to search
+/// again; old ones are the least likely to be needed. The weighting is Stockfish's (GPL-3.0),
+/// where an entry one search old also counts as 8 plies shallower; the code is cb2026's own.
+fn worth(entry: Entry, generation: u8) -> i32 {
+    let age = generation.wrapping_sub(entry.generation);
+    i32::from(entry.depth) - AGE_PLIES * i32::from(age)
 }
 
 /// Converts a score at `ply` from the root to the form stored in the table: mate scores count
@@ -348,9 +468,10 @@ mod tests {
 
     #[test]
     fn keeps_deeper_results_from_the_same_search() {
-        // One slot, so every key collides.
-        let tt = TranspositionTable::new(0);
-        assert_eq!(tt.len(), 1);
+        // One bucket and buckets off: small keys all land in the first slot.
+        let mut tt = TranspositionTable::new(0);
+        tt.set_buckets(false);
+        assert_eq!(tt.len(), BUCKET_SLOTS);
         tt.store(1, None, 10, 8, Bound::Exact);
         tt.store(2, None, 20, 3, Bound::Exact);
         assert_eq!(tt.probe(1).unwrap().score, 10);
@@ -395,13 +516,90 @@ mod tests {
     }
 
     #[test]
-    fn index_is_in_range_for_any_size() {
+    fn a_key_has_a_bucket_or_one_slot_for_any_size() {
         for mb in [0, 1, 3] {
-            let tt = TranspositionTable::new(mb);
+            let mut tt = TranspositionTable::new(mb);
+            assert_eq!(tt.megabytes(), mb);
             for key in [0, 1, u64::MAX, 0x8000_0000_0000_0000] {
-                assert!(tt.index(key) < tt.len());
+                // Indexing out of range would panic.
+                assert_eq!(tt.slots_for(key).len(), BUCKET_SLOTS);
+                tt.set_buckets(false);
+                assert_eq!(tt.slots_for(key).len(), 1);
+                tt.set_buckets(true);
             }
         }
+    }
+
+    #[test]
+    fn a_keys_slot_is_inside_its_bucket() {
+        let mut tt = TranspositionTable::new(1);
+        for key in [0, 1, 0x1234_5678_9abc_def0, u64::MAX, 0x8000_0000_0000_0000] {
+            let bucket = tt.slots_for(key).as_ptr_range();
+            tt.set_buckets(false);
+            assert!(bucket.contains(&tt.slots_for(key).as_ptr()));
+            tt.set_buckets(true);
+        }
+    }
+
+    #[test]
+    fn buckets_are_one_cache_line() {
+        assert_eq!(BUCKET_SLOTS, 8);
+        let tt = TranspositionTable::new(1);
+        let address = tt.buckets.as_ptr() as usize;
+        assert_eq!(address % CACHE_LINE_BYTES, 0);
+    }
+
+    #[test]
+    fn a_bucket_holds_positions_that_one_slot_cannot() {
+        // One bucket: small keys all share the first slot with buckets off.
+        let mut tt = TranspositionTable::new(0);
+        tt.set_buckets(false);
+        tt.store(1, None, 10, 5, Bound::Exact);
+        tt.store(2, None, 20, 5, Bound::Exact);
+        assert_eq!(tt.probe(1), None);
+        tt.set_buckets(true);
+        tt.clear();
+        for key in 1..=8 {
+            tt.store(key, None, key as i32, 5, Bound::Exact);
+        }
+        for key in 1..=8 {
+            assert_eq!(tt.probe(key).unwrap().score, key as i32);
+        }
+    }
+
+    #[test]
+    fn a_full_bucket_replaces_its_least_valuable_entry() {
+        let tt = TranspositionTable::new(0);
+        // Keys 1 to 8 searched to depths 10 to 17.
+        for key in 1..=8 {
+            tt.store(key, None, 0, 9 + key as u32, Bound::Exact);
+        }
+        // Too shallow to replace even the shallowest entry from this search.
+        tt.store(9, None, 0, 3, Bound::Exact);
+        assert_eq!(tt.probe(9), None);
+        // As deep as the shallowest: it goes.
+        tt.store(9, None, 0, 10, Bound::Exact);
+        assert_eq!(tt.probe(1), None);
+        assert!((2..=9).all(|key| tt.probe(key).is_some()));
+        // A position already in the bucket is updated in its own slot.
+        tt.store(5, None, 55, 1, Bound::Upper);
+        assert_eq!(tt.probe(5).unwrap().score, 55);
+        assert!((2..=9).all(|key| tt.probe(key).is_some()));
+    }
+
+    #[test]
+    fn an_old_deep_entry_goes_before_a_fresh_shallow_one() {
+        let tt = TranspositionTable::new(0);
+        tt.store(1, None, 0, 9, Bound::Exact);
+        tt.new_search();
+        tt.new_search();
+        for key in 2..=8 {
+            tt.store(key, None, 0, 2, Bound::Exact);
+        }
+        // Key 1 is worth 9 - 2 × 8 = -7, the others 2.
+        tt.store(9, None, 0, 2, Bound::Exact);
+        assert_eq!(tt.probe(1), None);
+        assert!((2..=9).all(|key| tt.probe(key).is_some()));
     }
 
     #[test]
@@ -409,7 +607,7 @@ mod tests {
         let tt = TranspositionTable::new(0);
         assert_eq!(tt.hashfull(), 0);
         tt.store(5, None, 0, 1, Bound::Exact);
-        assert_eq!(tt.hashfull(), 1000);
+        assert_eq!(tt.hashfull(), 1000 / BUCKET_SLOTS as u32);
         tt.new_search();
         assert_eq!(tt.hashfull(), 0);
     }

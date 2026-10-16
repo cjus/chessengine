@@ -17,6 +17,7 @@
     - [Spending time where it's needed](ch06-1-adaptive-time.md)
 - [Quiescence search and MVV-LVA](ch07-quiescence.md)
 - [The transposition table](ch08-tt.md)
+    - [Buckets: one cache line per key](ch08-1-tt-buckets.md)
 - [Piece-square tables and tapered evaluation](ch09-pst.md)
 - [Move ordering](ch10-ordering.md)
     - [Continuation history](ch10-1-continuation-history.md)
