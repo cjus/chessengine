@@ -27,7 +27,7 @@ const USAGE: &str = "Usage: gauntlet --engine PATH --opponent PATH RATING [--opp
 
 fn main() -> ExitCode {
     match run() {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(code) => code,
         Err(message) => {
             eprintln!("gauntlet: {message}\n{USAGE}");
             ExitCode::from(2)
@@ -35,7 +35,7 @@ fn main() -> ExitCode {
     }
 }
 
-fn run() -> Result<(), String> {
+fn run() -> Result<ExitCode, String> {
     let mut engine = None;
     let mut opponents: Vec<(String, f64)> = Vec::new();
     let mut tc = TimeControl::parse("8+0.08").expect("valid default");
@@ -83,7 +83,7 @@ fn run() -> Result<(), String> {
             }
             "-h" | "--help" => {
                 println!("{USAGE}");
-                return Ok(());
+                return Ok(ExitCode::SUCCESS);
             }
             other => return Err(format!("unknown argument '{other}'")),
         }
@@ -115,7 +115,7 @@ fn run() -> Result<(), String> {
         };
         let mut name = path.clone();
         let mut problems = Problems::default();
-        let score = run_match(&settings, &mut |report| {
+        let result = run_match(&settings, &mut |report| {
             problems.record(report);
             if let Some(file) = pgn.as_mut() {
                 let _ = writeln!(file, "{}", report.game);
@@ -125,7 +125,15 @@ fn run() -> Result<(), String> {
             if n % 50 == 0 {
                 println!("  {}", report.score);
             }
-        })?;
+        });
+        let score = match result {
+            Ok(score) => score,
+            Err(e) => {
+                // Not a usage error, so no usage text: just what went wrong.
+                eprintln!("gauntlet: {path}: {e}");
+                return Ok(ExitCode::from(2));
+            }
+        };
         println!("  Final: {score}");
         for (side, counts) in [&engine, &name].into_iter().zip(problems.counts) {
             println!("  Problems for {side}: {counts}");
@@ -168,5 +176,5 @@ fn run() -> Result<(), String> {
         }
         None => println!("Rating: no games played"),
     }
-    Ok(())
+    Ok(ExitCode::SUCCESS)
 }

@@ -114,7 +114,8 @@ if [[ -n "$PROGRESS_PID" ]]; then
 fi
 
 FINAL="$(grep '^Final:' "$LOG" | tail -1)" || true
-VERDICT="$(grep '^SPRT:' "$LOG" | tail -1)" || true
+# The verdict line, not the "SPRT: H0 elo ..." line the match starts with.
+VERDICT="$(grep -E '^SPRT: (H[01] accepted|inconclusive|no games)' "$LOG" | tail -1)" || true
 LAST="$(grep 'LLR' "$LOG" | tail -1)" || true
 # The engines' paths, replaced by their names.
 names() {

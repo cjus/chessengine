@@ -7,22 +7,28 @@
 # "SPRT run failed" with the end of the log), for up to `hours` hours (default 24), then exits
 # 1. If the progress comment (<!-- sprt-progress -->) shows `undecided games` games or more
 # (default 8000; 0 turns this off) with no result yet, it prints that comment and exits 3: time
-# to propose stopping the run. Claude runs it in the background after Carlos says an SPRT has
-# started on the test Mac (approved 2026-10-12); it needs only `gh`, logged in.
+# to propose stopping the run. Only comments created since it started count, so an earlier
+# run's result or failure on the same PR isn't taken for this one's; set SINCE to an ISO time
+# (2026-10-16T20:00:00Z) to look further back, or SINCE=0 for every comment. Claude runs it in
+# the background after Carlos says an SPRT has started on the test Mac (approved 2026-10-12);
+# it needs only `gh`, logged in.
 set -euo pipefail
 
 if [[ $# -lt 1 || "$1" == "-h" || "$1" == "--help" ]]; then
-  sed -n '2,11p' "$0"
+  sed -n '2,14p' "$0"
   exit 2
 fi
 PR="$1"
 HOURS="${2:-24}"
 UNDECIDED="${3:-8000}"
+# GitHub's times are UTC in this form, so they compare as strings.
+SINCE="${SINCE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 
-# The body of the PR's last comment containing `marker`, or nothing.
+# The body of the PR's last comment containing `marker` created since SINCE, or nothing.
 last_comment() {
   gh pr view "$PR" --json comments \
-    --jq "[.comments[] | select(.body | contains(\"$1\"))] | last | .body // empty" \
+    --jq "[.comments[] | select(.body | contains(\"$1\")) | select(.createdAt >= \"$SINCE\")]
+          | last | .body // empty" \
     2>/dev/null || true
 }
 

@@ -58,7 +58,8 @@ cargo run --release -p cb2026-tools --bin match -- \
   the first (used for thread-scaling tests).
 - **Exit status**: 0 if the SPRT passed, 1 if it failed or was inconclusive, or if no game
   was scored; 2 if the match couldn't be played in full (an engine that won't start, a bad
-  opening, a worker that failed).
+  or already-drawn opening, a worker that failed). A panic aborts a release build, with
+  status 134.
 
 **When an engine fails** (cjus/chessengine#89): a crash or hang during a game loses it, and that
 worker starts both engines again before its next game, so a dead or hung process never plays
@@ -128,7 +129,10 @@ While the match runs, `mac-sprt.sh` also posts the score so far every 2,000 game
 Claude follows a running SPRT with `scripts/watch-sprt.sh <PR> [hours] [undecided games]`,
 which checks the PR every 10 minutes for the result comment and prints it. If the progress
 comment reaches `undecided games` (default 8,000) first, it prints that and exits 3, so that
-Claude can propose stopping a run that is taking long to decide.
+Claude can propose stopping a run that is taking long to decide. It only reads comments
+created after it started, so an earlier run's result on the same PR (a failed run, or the
+short time control before the long one) isn't taken for this one's; `SINCE=<ISO time>` or
+`SINCE=0` looks further back.
 
 ```sh
 scripts/mac-gauntlet.sh <engines file> <issue or PR number> [games per engine] [tc] [git ref]

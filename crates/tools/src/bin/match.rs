@@ -24,7 +24,8 @@
 //! - 0: the SPRT passed, or, with no SPRT, at least one game was scored;
 //! - 1: the SPRT failed or was inconclusive, or no game was scored;
 //! - 2: a usage error, or a match that couldn't be played in full (an engine that won't
-//!   start, a bad opening, a worker that failed: see `match_runner`).
+//!   start, a bad opening, a worker that failed: see `match_runner`);
+//! - 134: a panic, which aborts a release build.
 
 use std::fs::File;
 use std::io::Write;
@@ -153,7 +154,7 @@ fn run() -> Result<ExitCode, String> {
     }
     let mut last_verdict = None;
     let mut problems = Problems::default();
-    let score = run_match(&settings, &mut |report| {
+    let result = run_match(&settings, &mut |report| {
         problems.record(report);
         if let Some(file) = pgn.as_mut() {
             let _ = writeln!(file, "{}", report.game);
@@ -172,7 +173,15 @@ fn run() -> Result<ExitCode, String> {
             });
             println!("{}{llr}", report.score);
         }
-    })?;
+    });
+    let score = match result {
+        Ok(score) => score,
+        Err(e) => {
+            // Not a usage error, so no usage text: just what went wrong.
+            eprintln!("match: {e}");
+            return Ok(ExitCode::from(2));
+        }
+    };
 
     println!("Final: {score}");
     for (name, counts) in settings.engines.iter().zip(problems.counts) {

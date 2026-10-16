@@ -6,19 +6,34 @@ use std::process::Command;
 
 use cb2026_tools::game::{Outcome, Termination, TimeControl};
 use cb2026_tools::match_runner::{GameReport, MatchSettings, Problems, run_match};
-use cb2026_tools::sprt::Score;
+use cb2026_tools::sprt::{Score, Sprt, Verdict};
 
 const FAKE: &str = env!("CARGO_BIN_EXE_fake-uci");
 
-/// An empty directory of its own for a test's counter files.
-fn scratch(test: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "cb2026-match-failures-{}-{test}",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("the temporary directory is writable");
-    dir
+/// An empty directory of a test's own for the fake's counter files, removed afterwards.
+struct Scratch(PathBuf);
+
+impl Scratch {
+    fn new(test: &str) -> Scratch {
+        let dir = std::env::temp_dir().join(format!(
+            "cb2026-match-failures-{}-{test}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("the temporary directory is writable");
+        Scratch(dir)
+    }
+
+    /// The fake's `Counter` option.
+    fn counter(&self) -> String {
+        self.0.join("fake").display().to_string()
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
 }
 
 /// `games` games between two fakes, one at a time; the first fake gets `first_options`.
@@ -64,11 +79,8 @@ fn two_fakes_play_normal_games() {
 #[test]
 fn a_crash_loses_the_game_and_the_next_games_are_played() {
     // The first fake crashes at its third move of the match, in game 1 (it has White).
-    let counter = scratch("crash").join("fake");
-    let options = [
-        ("FailGo", "3".to_string()),
-        ("Counter", counter.display().to_string()),
-    ];
+    let scratch = Scratch::new("crash");
+    let options = [("FailGo", "3".to_string()), ("Counter", scratch.counter())];
     let (result, problems, reports) = play(&settings(4, &options));
     let score = result.unwrap();
     assert_eq!(reports[0].game.termination, Termination::Failure);
@@ -90,10 +102,10 @@ fn a_crash_loses_the_game_and_the_next_games_are_played() {
 #[test]
 fn a_game_that_cannot_start_is_aborted_and_not_scored() {
     // The first fake dies on its second `ucinewgame`: game 2, where it has Black.
-    let counter = scratch("abort").join("fake");
+    let scratch = Scratch::new("abort");
     let options = [
         ("FailNewGame", "2".to_string()),
-        ("Counter", counter.display().to_string()),
+        ("Counter", scratch.counter()),
     ];
     let (result, problems, reports) = play(&settings(4, &options));
     let score = result.unwrap();
@@ -122,16 +134,34 @@ fn aborted_games_in_a_row_stop_the_match() {
 fn an_engine_that_will_not_start_again_stops_the_match() {
     // The first fake crashes in game 1, then can't be started again: its first two starts
     // are the runner's check and the worker's.
-    let counter = scratch("restart").join("fake");
+    let scratch = Scratch::new("restart");
     let options = [
         ("FailGo", "3".to_string()),
         ("FailStart", "3+".to_string()),
-        ("Counter", counter.display().to_string()),
+        ("Counter", scratch.counter()),
     ];
     let (result, _, reports) = play(&settings(4, &options));
     let e = result.unwrap_err();
     assert!(e.starts_with(FAKE), "{e}");
     assert_eq!(reports.len(), 1);
+}
+
+#[test]
+fn several_workers_stop_at_the_verdict() {
+    // The first fake crashes at each of its moves, so it loses every game and the SPRT soon
+    // fails. The games the other workers are still playing then end badly too; that must not
+    // throw the verdict away.
+    let mut settings = settings(1000, &[("FailGo", "1+".to_string())]);
+    settings.concurrency = 3;
+    settings.sprt = Some(Sprt::new(0.0, 5.0));
+    let (result, problems, reports) = play(&settings);
+    let score = result.unwrap();
+    assert_eq!(reports.last().unwrap().verdict, Some(Verdict::Fail));
+    assert_eq!((score.wins, score.draws), (0, 0));
+    // Only the games up to the verdict are counted, and each is the first fake's failure.
+    assert_eq!(score.games() as usize, reports.len());
+    assert_eq!(problems.counts[0].failures, reports.len());
+    assert!(reports.len() < 1000);
 }
 
 #[test]

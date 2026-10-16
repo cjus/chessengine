@@ -15,11 +15,17 @@
 //!   a hung one may still answer the last `go`, with a `bestmove` the next game would take for
 //!   its own.
 //! - A game that can't start is aborted ([`Outcome::Aborted`]). It is reported, but not
-//!   scored: counting it as a draw would let a dead engine add evidence to a test.
+//!   scored: counting it as a draw would let a dead engine add evidence to a test. Its opening
+//!   isn't played again, so that opening's pair is left one-sided; aborts should be rare, and
 //!   [`MAX_ABORTS_IN_A_ROW`] aborted games in a row on one worker stop the match.
 //! - The openings are checked before any game starts, and a worker that can't start its
-//!   engines, or panics, stops the match with an error, instead of leaving it short of games
-//!   without a word.
+//!   engines stops the match with an error, instead of leaving it short of games without a
+//!   word. So does a worker that panics, in a debug build or a test; a release build aborts
+//!   on a panic (`panic = "abort"` in the workspace `Cargo.toml`), which ends the process with
+//!   status 134, and `scripts/mac-sprt.sh` reports that as a failed run too.
+//! - Once the match stops (a verdict, or another worker's error), a worker finishes its game
+//!   and quits: it starts no engines and raises no error after that, so a game that ends badly
+//!   after the verdict can't throw the verdict away.
 
 use std::any::Any;
 use std::fmt;
@@ -53,8 +59,10 @@ pub fn parse_openings(text: &str) -> Vec<String> {
         .collect()
 }
 
-/// Checks that there are openings and that a game can start from each, so that a bad line in
-/// an opening file stops the match before it starts, not a worker in the middle of it.
+/// Checks that there are openings and that a game can start from each: a valid position the
+/// rules haven't already ended. A bad line in an opening file then stops the match before it
+/// starts, not a worker in the middle of it, and an opening that is already a draw can't add
+/// draws no engine played.
 pub fn check_openings(openings: &[String]) -> Result<(), String> {
     if openings.is_empty() {
         return Err("no opening positions".to_string());
@@ -62,7 +70,10 @@ pub fn check_openings(openings: &[String]) -> Result<(), String> {
     for (i, fen) in openings.iter().enumerate() {
         let position =
             Position::from_fen(fen).map_err(|e| format!("opening {}, '{fen}': {e}", i + 1))?;
-        if position.legal_moves().is_empty() {
+        if position.legal_moves().is_empty()
+            || position.is_insufficient_material()
+            || position.halfmove_clock() >= 100
+        {
             return Err(format!(
                 "opening {}, '{fen}': the game is already over",
                 i + 1
@@ -291,7 +302,8 @@ fn play_games(
             aborts_in_a_row = 0;
         }
         let reason = game.reason.clone();
-        if sender.send((game, first_white)).is_err() {
+        if sender.send((game, first_white)).is_err() || stop.load(Ordering::Relaxed) {
+            // The match is over: nothing this game did matters to it any more.
             break;
         }
         if aborts_in_a_row >= MAX_ABORTS_IN_A_ROW {
@@ -359,11 +371,19 @@ mod tests {
         ];
         let e = check_openings(&malformed).unwrap_err();
         assert!(e.starts_with("opening 2, '8/8/8 w'"), "{e}");
-        // Fool's mate: White is checkmated, so no game can start.
+        // Fool's mate: White is checkmated, so no game can start. Two bare kings and a
+        // spent fifty-move clock are draws already.
         let over =
             vec!["rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3".to_string()];
         let e = check_openings(&over).unwrap_err();
         assert!(e.ends_with("the game is already over"), "{e}");
+        for drawn in [
+            "8/8/8/8/8/8/8/K6k w - - 0 1",
+            "8/8/8/8/8/8/R7/K6k w - - 100 80",
+        ] {
+            let e = check_openings(&[drawn.to_string()]).unwrap_err();
+            assert!(e.ends_with("the game is already over"), "{e}");
+        }
     }
 
     fn report(outcome: Outcome, termination: Termination, at_fault: Option<Color>) -> GameReport {
