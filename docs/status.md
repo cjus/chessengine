@@ -13,7 +13,9 @@ on, #73; history in LMR's second version merged, +22.2 ± 11.4, #74; adaptive ti
 loses −13.8 ± 8.6, so the gain holds at the long time control, #76; negative extensions merged,
 +4.9 ± 4.0, #77; SPRT progress comments, #79; singular extensions from depth 6 merged, +5.0 ±
 4.1, #78; singular extensions from depth 4 merged, +6.1 ± 4.8, #80; `singular_margin` 3
-merged, +5.2 ± 4.2, #82; `singular_margin` 4 running on the M3, #84).*
+merged, +5.2 ± 4.2, #82; `singular_margin` 4 running on the M3, #84; thread QoS on macOS
+measured no effect from Claude Code's shell, so #87 waits on Carlos's check in Terminal.app and a
+GUI, #88).*
 
 ## Stages
 
@@ -59,6 +61,7 @@ merged, +5.2 ± 4.2, #82; `singular_margin` 4 running on the M3, #84).*
 | M5: singular extensions from depth 4 (chapter 14.1) | #80 | 1343312 | Merged: +6.1 ± 4.8, 9,057 games, [0, 5] passed (M3 Max) |
 | M5: `singular_margin` 3 (chapter 14.1) | #82 | 1098926 | Merged: +5.2 ± 4.2, 11,400 games, [0, 5] passed (M3 Max) |
 | M5: `singular_margin` 4 (chapter 14.1) | #84, `claude/m5-singular-margin-4` | 1006594 | Draft, its SPRT running on the M3 Max: [0, 5] at 8+0.08 |
+| Thread QoS on macOS (chapter 17) | #87, `claude/thread-qos` | 1098926 | Draft, no functional change. From Claude Code's shell macOS capped the request at the default priority and speed didn't change; waits on #88. If the priority is 31 everywhere, close it |
 
 **Running now: #84** (`singular_margin` 4 instead of 3, [0, 5] at 8+0.08), started on the M3
 on 2026-10-16 at about 08:00 MDT. A new session should restart the watcher,
@@ -113,6 +116,8 @@ The open [`needs-carlos` issues](https://github.com/cjus/chessengine/issues?q=is
 - #36: choose the gauntlet reference engines; run the M2/M3 gauntlets.
 - #37: GUI compatibility matrix; Lichess bot account.
 - #24 (M1 GUI games).
+- #88: run `scripts/qos-check.sh` in Terminal.app and `ps -M` on the engine under a GUI, to see
+  whether macOS honours #87's user-initiated QoS outside Claude Code.
 
 On hold: #61, running long tests on AWS Batch (closed 2026-10-12; reopen it if the M3 can't keep
 up with the test queue).
