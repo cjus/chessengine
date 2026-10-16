@@ -151,7 +151,7 @@ gh pr comment "$PR" --body "<!-- sprt -->
 - ${LAST}
 - **${VERDICT#SPRT: }**
 
-Problems (time losses, illegal moves, failures):
+Problems (time losses, illegal moves, failures, aborted games):
 ${PROBLEMS:-- none reported}
 
 Games: \`target/sprt/pr$PR-$NEW_SHA.pgn\` on the test machine."
