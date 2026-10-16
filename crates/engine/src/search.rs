@@ -458,9 +458,9 @@ impl Default for Techniques {
             quiescence: true,
             mvv_lva: true,
             tt: true,
-            // Off by default: it measured weaker, −8.8 ± 8.6 Elo at 8+0.08
-            // (cjus/chessengine#86, see chapter 8.1).
-            tt_buckets: false,
+            // Off after it measured weaker, −8.8 ± 8.6 Elo at 8+0.08 (cjus/chessengine#86, see
+            // chapter 8.1); on again for a test at 40+0.4 (cjus/chessengine#92).
+            tt_buckets: true,
             killers: true,
             countermoves: true,
             history: true,

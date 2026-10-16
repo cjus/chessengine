@@ -16,7 +16,8 @@ stage 20, as strength work towards version 1.0, so no stage tag contains it. Swi
 
 **cb2026 ships with it off.** In games it made the engine weaker, about 9 Elo at 8+0.08 (see
 "What it's worth"). The table really does keep more of what it is given, as this chapter shows;
-what that bought in the games was a bigger search, not a better one.
+what that bought in the games was a bigger search, not a better one. A test at 40+0.4, where
+the table fills more, has it switched on again (cjus/chessengine#92).
 
 ## Cache lines
 
@@ -128,6 +129,7 @@ default, the table behaves exactly as in chapter 8, and `bench` is 1,098,926.
 | Test | Result |
 | --- | --- |
 | Buckets vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−8.8 ± 8.6 Elo** over 2,685 games (+536 −604 =1545): failed (LLR −2.96); off by default |
+| Buckets vs `main` without them, 40+0.4, test Mac (M3 Max), SPRT [0, 5] | Waiting for its SPRT (cjus/chessengine#92) |
 
 ## Further reading
 

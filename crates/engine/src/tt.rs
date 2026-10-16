@@ -58,10 +58,10 @@
 //! it. With one slot per key, a deep result and a fresh one compete for that slot and one of
 //! them is lost; a bucket can keep both. Switched off, a key picks a single slot, as in stage 8.
 //!
-//! **Buckets are off by default.** In games they measured weaker, −8.8 ± 8.6 Elo over 2,685
-//! games at 8+0.08 (cjus/chessengine#86): at 16 MB the table keeps more deep entries, singular
-//! extensions start from more of them, and the trees grow. The switch stays, for a test at a
-//! longer time control, where the table fills more.
+//! In games at 8+0.08 buckets measured weaker, −8.8 ± 8.6 Elo over 2,685 games
+//! (cjus/chessengine#86): at 16 MB the table keeps more deep entries, singular extensions start
+//! from more of them, and the trees grow. They are on by default again for a test at 40+0.4,
+//! where the table fills more (cjus/chessengine#92).
 //!
 //! Pitfalls:
 //!
@@ -277,8 +277,8 @@ fn unpack(key: u64, data: u64) -> Option<Entry> {
 // ANCHOR_END: pack
 
 impl TranspositionTable {
-    /// A table using about `megabytes` of memory (at least one bucket), with buckets off, as
-    /// the `tt_buckets` technique is by default.
+    /// A table using about `megabytes` of memory (at least one bucket), with buckets off. The
+    /// engine sets them from the `tt_buckets` technique at the start of each search.
     pub fn new(megabytes: usize) -> TranspositionTable {
         let count = (megabytes * 1024 * 1024 / std::mem::size_of::<Bucket>()).max(1);
         TranspositionTable {
