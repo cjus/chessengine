@@ -162,7 +162,7 @@
 //! forced (a recapture, the one defence to a threat), and a mistake in its line costs the most,
 //! so it is searched a ply deeper. To find out, the node is searched again first, at half the
 //! depth and without the hash move, with a null window at `singular_beta`, the hash move's
-//! score less `singular_margin` (4) centipawns per ply of depth. If no other move reaches it,
+//! score less `singular_margin` (3) centipawns per ply of depth. If no other move reaches it,
 //! the hash move is singular. This needs a hash entry that is a lower bound or exact and at
 //! most `singular_tt_depth_margin` (3) plies shallower than the node, from depth
 //! `singular_min_depth` (4) on, and stops at twice the root depth, so that a chain of
@@ -364,9 +364,9 @@ impl Default for SearchParams {
             // (cjus/chessengine#78); 4 gained +6.1 ± 4.8 more (cjus/chessengine#80).
             singular_min_depth: 4,
             singular_tt_depth_margin: 3,
-            // 2 until 4 became the start depth; 3 gained +5.2 ± 4.2 (cjus/chessengine#82). 4
-            // is being tested (cjus/chessengine#84).
-            singular_margin: 4,
+            // 2 until 4 became the start depth; 3 gained +5.2 ± 4.2 (cjus/chessengine#82); 4
+            // failed, −1.8 ± 5.3 against 3 (cjus/chessengine#84).
+            singular_margin: 3,
             negative_extension_plies: 1,
         }
     }
