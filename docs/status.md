@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-16, 14:15 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-16, 14:55 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -13,7 +13,8 @@ on, #73; history in LMR's second version merged, +22.2 ± 11.4, #74; adaptive ti
 loses −13.8 ± 8.6, so the gain holds at the long time control, #76; negative extensions merged,
 +4.9 ± 4.0, #77; SPRT progress comments, #79; singular extensions from depth 6 merged, +5.0 ±
 4.1, #78; singular extensions from depth 4 merged, +6.1 ± 4.8, #80; `singular_margin` 3
-merged, +5.2 ± 4.2, #82; `singular_margin` 4 failed, −1.8 ± 5.3, so it stays at 3, #84).*
+merged, +5.2 ± 4.2, #82; `singular_margin` 4 failed, −1.8 ± 5.3, so it stays at 3, #84;
+transposition table buckets running on the M3, #86).*
 
 ## Stages
 
@@ -59,8 +60,16 @@ merged, +5.2 ± 4.2, #82; `singular_margin` 4 failed, −1.8 ± 5.3, so it stays
 | M5: singular extensions from depth 4 (chapter 14.1) | #80 | 1343312 | Merged: +6.1 ± 4.8, 9,057 games, [0, 5] passed (M3 Max) |
 | M5: `singular_margin` 3 (chapter 14.1) | #82 | 1098926 | Merged: +5.2 ± 4.2, 11,400 games, [0, 5] passed (M3 Max) |
 | M5: `singular_margin` 4 (chapter 14.1) | #84 | 1098926 | Merged as a record, the margin back to 3: −1.8 ± 5.3, 7,476 games, [0, 5] failed (M3 Max) |
+| M5: transposition table buckets (chapter 8.1) | #86, `claude/tt-buckets` | 1114877 | Draft, its SPRT running on the M3 Max: [0, 5] at 8+0.08 |
 
-Nothing on the M3 now: every M5 branch so far is merged.
+**Running now: #86** (transposition table buckets: eight 16-byte slots per key, one 128-byte
+Apple Silicon cache line, switch `tt_buckets`; [0, 5] at 8+0.08), started on the M3 on
+2026-10-16 at about 14:50 MDT. A new session should restart the watcher,
+`scripts/watch-sprt.sh 86`, or just read #86's comments if the result is already there. Then
+rebase #86 onto `main` (in `docs/status.md` take `main`'s side and edit it), record the result
+in chapter 8.1, the ledger and this file, and merge. If it fails, switch `tt_buckets` off by
+default, record it and merge. With no verdict, a run at 40+0.4 is the next step: the table
+fills more at the long time control, where buckets should matter more.
 
 When several PRs wait for the M3, they run one at a time, and **before each SPRT starts, rebase
 that PR onto the current `main`** and re-measure its `Bench:` line: `scripts/mac-sprt.sh` plays
@@ -214,6 +223,7 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    games; about 255 games an hour on the M3, 10 hours).
 
    Next, in a rough order of value:
+   - **Transposition table buckets** (#86, chapter 8.1), running on the M3.
    - **Tuning singular extensions, continued**: depth 6 passed (#78) and depth 4 too (#80),
      which is about where Stockfish starts; `singular_margin` 3 passed too (#82), and 4
      failed (#84). That settles the start depth and the margin for now. Still untried: the
