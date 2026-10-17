@@ -135,14 +135,29 @@ short time control before the long one) isn't taken for this one's; `SINCE=<ISO 
 `SINCE=0` looks further back.
 
 ```sh
+scripts/fetch-gauntlet-engines.sh [directory]
+```
+
+Builds the reference engines (see `docs/PRD.md`, "Testing and strength measurement") from
+source, each at the commit CCRL rated, checks that each one plays the match tool's handshake
+and a move, and writes the engines file, `gauntlet.txt`, with their CCRL Blitz ratings. The
+default directory is `~/engines/gauntlet`; engines already built there are kept. It needs Go
+and cargo as well as a C compiler, and takes under a minute.
+
+```sh
 scripts/mac-gauntlet.sh <engines file> <issue or PR number> [games per engine] [tc] [git ref]
 ```
 
 A rating gauntlet: `main` (or the given ref) plays each reference engine in the file (one
 `rating path` per line) and the `gauntlet` tool fits cb2026's rating on the reference list's
 scale (maximum likelihood with the reference ratings held fixed, see
-`crates/tools/src/gauntlet.rs`). The result is posted to the issue or PR. Run it at each
-milestone gate (see `docs/PRD.md`, "Testing and strength measurement").
+`crates/tools/src/gauntlet.rs`). Only cb2026 is built at the ref: the gauntlet tool and the
+openings come from `main`, so a stage tag, which predates them, works too, with main's match
+runner. The result is posted to the issue or PR, with any time losses, illegal moves,
+failures and aborted games; a run that breaks posts **Gauntlet run failed** and the end of its
+log. Run it at each milestone gate (see `docs/PRD.md`, "Testing and strength measurement"). With
+the seven engines at 800 games each, a gauntlet is 5,600 games: about 4.5 hours on the M3 at
+8+0.08.
 
 ```sh
 scripts/mac-smp.sh <PR number> [threads] [time control] [elo0 elo1]
