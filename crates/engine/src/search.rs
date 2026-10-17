@@ -176,11 +176,18 @@
 //! line matters less: it is searched `negative_extension_plies` (1) shallower instead, a
 //! **negative extension**.
 //!
+//! And a fourth. The search's score is the best any other move managed, so it says by how much
+//! the hash move is singular. If no other move comes within `double_extension_margin` (20)
+//! centipawns of `singular_beta` either, the hash move is close to the only move, and at a node
+//! off the principal variation it is searched two plies deeper instead of one: a **double
+//! extension**. A line can have at most `double_extension_limit` (6) of them, on top of the
+//! limit of twice the root depth that every extension has.
+//!
 //! The search without the hash move is a search of a different question, so it neither reads
 //! nor writes the transposition table, tries no null move and does no IIR. If the hash move is
 //! the only legal move, it fails low: nothing else comes close.
 //!
-//! All three are as in Stockfish (GPL-3.0); the code is cb2026's own. Singular extensions go
+//! All four are as in Stockfish (GPL-3.0); the code is cb2026's own. Singular extensions go
 //! back to Deep Thought (Anantharaman, Campbell and Hsu, 1988).
 //!
 //! They make the bench tree about half as big again, and the engine stronger: +29.5 ± 13.3 Elo
@@ -189,7 +196,8 @@
 //! Starting the test from depth 6 instead of 8 gained +5.0 ± 4.1 Elo after 12,282 games
 //! (cjus/chessengine#78), and from depth 4 instead of 6 another +6.1 ± 4.8 after 9,057
 //! (cjus/chessengine#80). A `singular_margin` of 3 instead of 2 gained +5.2 ± 4.2 after 11,400
-//! (cjus/chessengine#82).
+//! (cjus/chessengine#82). Double extensions make the bench 14% bigger; they wait for their SPRT
+//! (cjus/chessengine#96).
 //!
 //! ## Tablebase probes (stage 18)
 //!
@@ -320,6 +328,11 @@ pub struct SearchParams {
     pub singular_tt_depth_margin: u32,
     /// ...and no other move comes within this many centipawns per ply of depth of its score.
     pub singular_margin: i32,
+    /// A singular hash move is searched two plies deeper if no other move comes within this
+    /// many centipawns of `singular_beta` either (a double extension)...
+    pub double_extension_margin: i32,
+    /// ...at most this many times along a line.
+    pub double_extension_limit: u32,
     /// A hash move that isn't singular but whose hash score beats beta is searched this many
     /// plies shallower (a negative extension).
     pub negative_extension_plies: u32,
@@ -367,6 +380,8 @@ impl Default for SearchParams {
             // 2 until 4 became the start depth; 3 gained +5.2 ± 4.2 (cjus/chessengine#82); 4
             // failed, −1.8 ± 5.3 against 3 (cjus/chessengine#84).
             singular_margin: 3,
+            double_extension_margin: 20,
+            double_extension_limit: 6,
             negative_extension_plies: 1,
         }
     }
@@ -439,6 +454,9 @@ pub struct Techniques {
     pub check_extension: bool,
     /// Singular extensions: search the hash move a ply deeper when no other move comes close.
     pub singular_extension: bool,
+    /// Double extensions: search a singular hash move two plies deeper when no other move
+    /// comes close by a wide margin (needs singular extensions).
+    pub double_extension: bool,
     /// Multi-cut: when the singular extension's search finds another move that beats beta
     /// too, cut the node off (needs singular extensions).
     pub multi_cut: bool,
@@ -482,6 +500,7 @@ impl Default for Techniques {
             // Off by default: it didn't measure stronger (see the module documentation).
             check_extension: false,
             singular_extension: true,
+            double_extension: true,
             multi_cut: true,
             negative_extension: true,
             iir: true,
@@ -510,6 +529,7 @@ impl Techniques {
             delta_pruning: false,
             check_extension: false,
             singular_extension: false,
+            double_extension: false,
             multi_cut: false,
             negative_extension: false,
             iir: false,
@@ -584,6 +604,9 @@ pub(crate) struct Searcher<'a> {
     excluded: Vec<Option<Move>>,
     /// The depth of the current iteration, which limits how far extensions can reach.
     root_depth: u32,
+    /// Double extensions on the line from the root to the current node, which
+    /// `double_extension_limit` limits.
+    double_extensions: u32,
     /// Late move reductions by depth and move number (see [`lmr_table`]).
     lmr: Vec<[u8; LMR_TABLE_SIZE]>,
     /// A counter shared with other threads, which this search adds its nodes to.
@@ -662,6 +685,7 @@ impl<'a> Searcher<'a> {
             evals: vec![-INFINITY; MAX_PLY as usize + 1],
             excluded: vec![None; MAX_PLY as usize + 1],
             root_depth: 0,
+            double_extensions: 0,
             lmr: lmr_table(&search_params),
             shared_nodes: None,
             tablebase: None,
@@ -958,6 +982,7 @@ impl<'a> Searcher<'a> {
         // below the hash move's score. If no other move reaches it, the hash move is probably
         // forced, and it is searched a ply deeper.
         let mut singular_move = None;
+        let mut double_move = None;
         let mut shallower_move = None;
         if self.techniques.singular_extension
             && depth >= p.singular_min_depth
@@ -989,6 +1014,18 @@ impl<'a> Searcher<'a> {
                 if score < singular_beta {
                     self.note(Note::SingularExtension(hash_move));
                     singular_move = Some(hash_move);
+                    // Double extension: nothing else comes close even well below
+                    // `singular_beta`, so the hash move is searched a second ply deeper. Only
+                    // off the principal variation, and only a few times along a line, so that
+                    // the search can't explode.
+                    if self.techniques.double_extension
+                        && !pv_node
+                        && score < singular_beta - p.double_extension_margin
+                        && self.double_extensions < p.double_extension_limit
+                    {
+                        self.note(Note::DoubleExtension(hash_move));
+                        double_move = Some(hash_move);
+                    }
                 } else if self.techniques.multi_cut && singular_beta >= beta {
                     // Multi-cut: the hash move beat beta, and another move beats it too even
                     // at half the depth. With two moves that good, the node is a cutoff.
@@ -1128,11 +1165,12 @@ impl<'a> Searcher<'a> {
 
             // ANCHOR: check_extension
             // Check extension: a move that gives check is searched one ply deeper. So is a
-            // singular hash move (above).
+            // singular hash move (above), and one singular by a wide margin a ply more.
+            let doubled = Some(mv) == double_move;
             let extension = u32::from(
                 (self.techniques.check_extension && gives_check && ply < MAX_PLY / 2)
                     || Some(mv) == singular_move,
-            );
+            ) + u32::from(doubled);
             // A hash move that isn't singular but beats beta is searched shallower (above).
             let shallower = if Some(mv) == shallower_move {
                 p.negative_extension_plies
@@ -1144,7 +1182,9 @@ impl<'a> Searcher<'a> {
             searched += 1;
             self.push_move(pos, Some(mv));
             let child_depth = (depth - 1 + extension).saturating_sub(shallower);
+            self.double_extensions += u32::from(doubled);
             let score = self.search_move(&child, child_depth, alpha, beta, how, &mut child_pv);
+            self.double_extensions -= u32::from(doubled);
             self.pop_move();
             if self.aborted {
                 break;
@@ -2001,5 +2041,54 @@ mod tests {
         let (alpha, beta) = (1000, 1001);
         assert_eq!(searcher.negamax(&pos, 4, 1, alpha, beta, &mut pv), alpha);
         assert!(tt.probe(pos.hash()).is_none());
+    }
+
+    #[test]
+    fn double_extensions_extend_singular_moves_within_the_limit() {
+        // Depths 1 to 8, as iterative deepening searches them, so that the table has entries
+        // for the singular test; the counts at the end.
+        let counts = |techniques: Techniques, search_params: SearchParams| {
+            let pos = Position::from_fen(
+                "r2q1rk1/pp2bppp/2n1pn2/3p4/3P4/2NBPN2/PP3PPP/R2Q1RK1 w - - 0 10",
+            )
+            .unwrap();
+            let params = EvalParams::material_only();
+            let stop = AtomicBool::new(false);
+            let tt = TranspositionTable::new(1);
+            let mut ordering = OrderingTables::default();
+            let mut searcher = Searcher::new(
+                &params,
+                search_params,
+                &tt,
+                &mut ordering,
+                techniques,
+                StopConditions {
+                    stop: &stop,
+                    deadline: None,
+                    max_nodes: None,
+                },
+                &[],
+            );
+            let mut moves: Vec<Move> = pos.legal_moves().iter().copied().collect();
+            for depth in 1..=8 {
+                searcher.search_depth(&pos, &mut moves, depth, None);
+            }
+            // Every double extension counted on the way down is taken off on the way up.
+            assert_eq!(searcher.double_extensions, 0);
+            searcher.stats()
+        };
+        let on = counts(Techniques::default(), SearchParams::default());
+        assert!(on.double_extensions > 0);
+        assert!(on.double_extensions <= on.singular_extensions);
+        let off = Techniques {
+            double_extension: false,
+            ..Techniques::default()
+        };
+        assert_eq!(counts(off, SearchParams::default()).double_extensions, 0);
+        let no_room = SearchParams {
+            double_extension_limit: 0,
+            ..SearchParams::default()
+        };
+        assert_eq!(counts(Techniques::default(), no_room).double_extensions, 0);
     }
 }
