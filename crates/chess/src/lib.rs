@@ -20,6 +20,8 @@
 //! - [`perft`]: counting positions to prove move generation correct.
 //! - [`zobrist`]: 64-bit hash keys for positions, updated incrementally.
 //! - [`san`]: standard algebraic notation (`Nf3`, `exd5`, `O-O`), written and read.
+//! - [`pgn`]: Portable Game Notation, the format games are saved in.
+//! - [`game`]: a game from start to end: its moves, takebacks, and when it is over.
 //!
 //! ## Further reading
 //!
@@ -33,6 +35,7 @@ pub mod attacks;
 pub mod bitboard;
 pub mod castling;
 pub mod fen;
+pub mod game;
 pub mod magic;
 pub mod makemove;
 pub mod movegen;

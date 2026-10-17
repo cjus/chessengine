@@ -78,6 +78,7 @@ use cb2026_chess::attacks::{
     SliderMethod, bishop_attacks, king_attacks, knight_attacks, pawn_attacks, queen_attacks,
     rook_attacks, set_slider_method, slider_method,
 };
+use cb2026_chess::game::Game;
 use cb2026_chess::magic::{self, Magic};
 use cb2026_chess::perft::{divide, perft};
 use cb2026_chess::zobrist;
@@ -93,7 +94,7 @@ use cb2026_engine::tablebase::{self, TbWdl};
 use cb2026_engine::tt::MAX_HASH_MB;
 use cb2026_engine::{Engine, Limits, MAX_THREADS, NAME, Score, SearchInfo, bench, eval, search};
 pub use cb2026_protocol::Protocol;
-use game::{Clock, Outcome, Played};
+use game::Clock;
 pub use render::Style;
 
 /// The help text for the `help` command.
@@ -220,16 +221,13 @@ impl Response {
     }
 }
 
-/// The shell's state: the current position, the moves that led to it, and how to draw it.
+/// The shell's state: the game being played, and how to draw it.
 #[derive(Clone, Debug)]
 pub struct Shell {
-    position: Position,
-    /// The moves played so far, for `undo`, the display and PGN.
-    history: Vec<Played>,
+    /// The game: the current position, the moves that led to it, and whether it is over.
+    game: Game,
     /// Moves taken back with `undo`, most recent last, for `redo`.
     future: Vec<Move>,
-    /// How the game ended, if it ended by resignation, agreement or time.
-    outcome: Option<Outcome>,
     /// The chess clocks, if the game has them.
     clock: Option<Clock>,
     style: Style,
@@ -255,10 +253,8 @@ impl Shell {
     /// A shell using `engine` (tests pass a seeded engine for repeatable games).
     pub fn with_engine(style: Style, engine: Engine) -> Shell {
         Shell {
-            position: Position::startpos(),
-            history: Vec::new(),
+            game: Game::new(),
             future: Vec::new(),
-            outcome: None,
             clock: None,
             style,
             engine,
@@ -272,7 +268,7 @@ impl Shell {
 
     /// The current position.
     pub fn position(&self) -> &Position {
-        &self.position
+        self.game.position()
     }
 
     /// The engine, with the settings made in the shell.
@@ -332,7 +328,7 @@ impl Shell {
                 response.output = format!("Chess960 position {number}\n{}", response.output);
                 response
             }
-            "fen" if args.is_empty() => Response::text(self.position.to_fen()),
+            "fen" if args.is_empty() => Response::text(self.game.position().to_fen()),
             "fen" => match Position::from_fen(args) {
                 Ok(position) => {
                     self.set_position(position);
@@ -374,11 +370,9 @@ impl Shell {
                 ),
             },
             "move" | "m" => self.play(args),
-            "undo" => match self.history.pop() {
+            "undo" => match self.game.undo() {
                 Some(played) => {
-                    self.position = played.before;
                     self.future.push(played.mv);
-                    self.outcome = None;
                     self.show()
                 }
                 None => Response::text("Nothing to undo."),
@@ -456,7 +450,7 @@ impl Shell {
             },
             "book" => self.book_moves(),
             // Anything else that is a legal move is played.
-            other if parse_move(&self.position, other).is_some() => self.play(line),
+            other if parse_move(self.game.position(), other).is_some() => self.play(line),
             other => Response::text(format!(
                 "Unknown command '{other}'. Type 'help' for a list."
             )),
@@ -464,14 +458,14 @@ impl Shell {
     }
 
     fn show(&self) -> Response {
-        let last = self.history.last().map(|played| {
+        let last = self.game.last_move().map(|played| {
             let number = played.before.fullmove_number();
             match played.before.side_to_move() {
                 Color::White => format!("{number}. {}", played.san),
                 Color::Black => format!("{number}... {}", played.san),
             }
         });
-        let mut board = render::board(&self.position, self.style, last.as_deref());
+        let mut board = render::board(self.game.position(), self.style, last.as_deref());
         if let Some(clocks) = self.clock_line() {
             board.push_str(&clocks);
             board.push('\n');
@@ -481,10 +475,13 @@ impl Shell {
 
     /// Starts over from `position`, forgetting the move history.
     fn set_position(&mut self, position: Position) {
-        self.position = position;
-        self.history.clear();
+        self.set_game(Game::from_position(position));
+    }
+
+    /// Carries on with `game` (a new one, or one loaded from PGN), with fresh clocks.
+    fn set_game(&mut self, game: Game) {
+        self.game = game;
         self.future.clear();
-        self.outcome = None;
         if let Some(clock) = self.clock.as_mut() {
             clock.restart();
         }
@@ -500,7 +497,7 @@ impl Shell {
             if let Some(result) = self.game_over() {
                 return Response::text(format!("The game is over: {result} Type 'new' or 'undo'."));
             }
-            let Some(mv) = parse_move(&self.position, text) else {
+            let Some(mv) = parse_move(self.game.position(), text) else {
                 let mut response = self.show();
                 response.output.push_str(&format!(
                     "'{text}' is not a legal move here. Type 'legal' to list them.\n"
@@ -512,35 +509,33 @@ impl Shell {
         self.engine_replies(String::new())
     }
 
-    /// Plays `mv` (with a comment for PGN), stopping the mover's clock and recording it for
-    /// `undo` and the move display.
+    /// Plays `mv` (with a comment for PGN), stopping the mover's clock. Callers pass a legal
+    /// move in a game that isn't over.
     fn make_move(&mut self, mv: Move, comment: Option<String>) {
         self.run_clock();
+        if self.game.outcome().is_some() {
+            // The mover's flag fell: the move came too late to count.
+            return;
+        }
         // Replaying the move `undo` took back keeps the rest of the `redo` list.
         if self.future.last() == Some(&mv) {
             self.future.pop();
         } else {
             self.future.clear();
         }
-        let san = self.position.to_san(mv);
-        self.history.push(Played {
-            before: self.position.clone(),
-            mv,
-            san,
-            comment,
-        });
-        self.position.make_move(mv);
+        self.game
+            .play_with_comment(mv, comment)
+            .expect("the shell plays only legal moves, and only while the game goes on");
     }
 
     /// The engine's choice in the current position, with its thinking (one line per depth,
     /// if `think` is on) and a summary.
     fn engine_move(&mut self, limits: &Limits) -> Option<(Move, String, Option<String>)> {
-        let hashes: Vec<u64> = self.history.iter().map(|p| p.before.hash()).collect();
         let stop = AtomicBool::new(false);
         let mut infos: Vec<SearchInfo> = Vec::new();
         let result = self.engine.search(
-            &self.position,
-            &hashes,
+            self.game.position(),
+            &self.game.history_hashes(),
             limits,
             &stop,
             &mut |info: &SearchInfo| infos.push(info.clone()),
@@ -561,11 +556,11 @@ impl Shell {
                     score_text(info.score),
                     info.nodes,
                     info.time.as_millis(),
-                    pv_san(&self.position, &info.pv)
+                    pv_san(self.game.position(), &info.pv)
                 ));
             }
         }
-        let san = self.position.to_san(mv);
+        let san = self.game.position().to_san(mv);
         // The summary describes the main line (a weaker level may still play another move).
         let main = infos.iter().rev().find(|info| info.multipv == 1);
         let comment = main.map(|info| format!("{}/{}", score_text(info.score), info.depth));
@@ -600,7 +595,8 @@ impl Shell {
     /// Lets the engine move while it is the engine's turn and the game isn't over, then shows
     /// the board (after `log`, the moves already reported).
     fn engine_replies(&mut self, mut log: String) -> Response {
-        while self.game_over().is_none() && self.engine_plays[self.position.side_to_move().index()]
+        while self.game_over().is_none()
+            && self.engine_plays[self.game.position().side_to_move().index()]
         {
             let limits = self.default_limits();
             let Some((mv, summary, comment)) = self.engine_move(&limits) else {
@@ -663,40 +659,16 @@ impl Shell {
 
     /// Why the game is over in the current position, if it is.
     fn game_over(&self) -> Option<String> {
-        if let Some(outcome) = &self.outcome {
-            return Some(outcome.reason.clone());
-        }
-        let pos = &self.position;
-        if pos.legal_moves().is_empty() {
-            return Some(if pos.in_check() {
-                format!("Checkmate: {} wins.", !pos.side_to_move())
-            } else {
-                "Stalemate: the game is a draw.".to_string()
-            });
-        }
-        if pos.halfmove_clock() >= 100 {
-            return Some("Draw by the fifty-move rule.".to_string());
-        }
-        if pos.is_insufficient_material() {
-            return Some("Draw: neither side has enough material to mate.".to_string());
-        }
-        let repetitions = self
-            .history
-            .iter()
-            .filter(|played| played.before.hash() == pos.hash())
-            .count();
-        if repetitions >= 2 {
-            return Some("Draw by threefold repetition.".to_string());
-        }
-        None
+        self.game.outcome().map(|outcome| outcome.to_string())
     }
 
     fn legal(&self) -> Response {
         let mut moves: Vec<String> = self
-            .position
+            .game
+            .position()
             .legal_moves()
             .iter()
-            .map(|&mv| self.position.to_san(mv))
+            .map(|&mv| self.game.position().to_san(mv))
             .collect();
         moves.sort();
         let mut out = format!("{} legal move{}", moves.len(), plural(moves.len()));
@@ -715,7 +687,7 @@ impl Shell {
         let start = Instant::now();
         let mut out = String::new();
         let nodes = if split {
-            let mut lines: Vec<(String, u64)> = divide(&self.position, depth)
+            let mut lines: Vec<(String, u64)> = divide(self.game.position(), depth)
                 .into_iter()
                 .map(|(mv, n)| (mv.to_string(), n))
                 .collect();
@@ -725,7 +697,7 @@ impl Shell {
             }
             lines.iter().map(|(_, n)| n).sum()
         } else {
-            perft(&self.position, depth)
+            perft(self.game.position(), depth)
         };
         let seconds = start.elapsed().as_secs_f64();
         out.push_str(&format!(
@@ -738,7 +710,7 @@ impl Shell {
     /// Shows each step of the magic lookup for a rook and a bishop on `square`, using the
     /// current position's occupied squares.
     fn magic(&self, square: Square) -> Response {
-        let occupied = self.position.occupied();
+        let occupied = self.game.position().occupied();
         let mut out = String::new();
         let sliders: [(&str, Magic, Bitboard); 2] = [
             (
@@ -800,7 +772,7 @@ impl Shell {
         let Some(book) = &self.engine.book else {
             return Response::text("No opening book loaded (set book <path>).");
         };
-        let moves = book.moves(&self.position);
+        let moves = book.moves(self.game.position());
         if moves.is_empty() {
             return Response::text("The book has no moves for this position.");
         }
@@ -810,7 +782,7 @@ impl Shell {
             let share = u32::from(m.weight) * 100 / total.max(1);
             out.push_str(&format!(
                 "  {:<8} weight {:>5}  ({share}%)\n",
-                self.position.to_san(m.mv),
+                self.game.position().to_san(m.mv),
                 m.weight
             ));
         }
@@ -827,7 +799,7 @@ impl Shell {
         let Some(tb) = &self.engine.tablebase else {
             return Response::text("No tablebases loaded (set syzygy <path>).");
         };
-        let pos = &self.position;
+        let pos = self.game.position();
         if !tablebase::covers(tb.as_ref(), &self.engine.tablebase_params, pos) {
             return Response::text(format!(
                 "Not in the tablebases: they cover up to {} pieces without castling rights.",
@@ -858,7 +830,7 @@ impl Shell {
     /// `eval`: the static evaluation, term by term, for both sides.
     fn eval(&self) -> Response {
         let params = &self.engine.params;
-        let t = eval::trace(&self.position, params);
+        let t = eval::trace(self.game.position(), params);
         let blend = |(mg, eg): (i32, i32)| {
             if params.tapered {
                 (mg * t.phase + eg * (eval::MAX_PHASE - t.phase)) / eval::MAX_PHASE
@@ -898,17 +870,17 @@ impl Shell {
                 " (tapering off: middlegame values only)"
             },
         ));
-        let side = self.position.side_to_move();
+        let side = self.game.position().side_to_move();
         out.push_str(&format!(
             "Total: {} for White, so {} for {side} to move",
             pawns(t.total),
-            pawns(eval::evaluate(&self.position, params)),
+            pawns(eval::evaluate(self.game.position(), params)),
         ));
         Response::text(out)
     }
 
     fn zobrist(&self) -> Response {
-        let pos = &self.position;
+        let pos = self.game.position();
         let mut out = String::from("The key is the XOR of one random number per feature:\n");
         let mut total = 0u64;
         let mut add = |label: String, key: u64| {
@@ -1082,7 +1054,7 @@ impl Shell {
     }
 
     fn attacks(&self, square: Square, attackers: bool) -> Response {
-        let pos = &self.position;
+        let pos = self.game.position();
         if attackers {
             let bb = pos.attackers_to(square, pos.occupied());
             let mut out = format!("Pieces attacking {square}:\n");
@@ -1108,7 +1080,7 @@ impl Shell {
 
     /// The bitboard a `bb` argument names, if any.
     fn named_bitboard(&self, name: &str) -> Option<Bitboard> {
-        let pos = &self.position;
+        let pos = self.game.position();
         match name {
             "occupied" | "all" => Some(pos.occupied()),
             "empty" => Some(!pos.occupied()),
@@ -1264,10 +1236,10 @@ mod tests {
         shell.execute("e4 e5 Nf3");
         shell.execute("undo");
         shell.execute("undo");
-        assert_eq!(shell.history.len(), 1);
+        assert_eq!(shell.game.moves().len(), 1);
         shell.execute("redo");
         shell.execute("redo");
-        assert_eq!(shell.history.len(), 3);
+        assert_eq!(shell.game.moves().len(), 3);
         assert_eq!(shell.execute("redo").output, "Nothing to redo.");
         // A different move forgets the moves taken back.
         shell.execute("undo");
@@ -1281,15 +1253,15 @@ mod tests {
         shell.execute("e4");
         assert_eq!(
             shell.execute("resign").output,
-            "Black resigned: White wins."
+            "Black resigned. White wins."
         );
         assert!(shell.execute("e5").output.starts_with("The game is over"));
-        assert_eq!(shell.result_code(), "1-0");
+        assert_eq!(shell.game.to_pgn().result, "1-0");
         shell.execute("undo");
-        assert_eq!(shell.result_code(), "*");
+        assert_eq!(shell.game.to_pgn().result, "*");
         // Between two people, a draw offer is accepted.
         assert_eq!(shell.execute("draw").output, "Draw agreed.");
-        assert_eq!(shell.result_code(), "1/2-1/2");
+        assert_eq!(shell.game.to_pgn().result, "1/2-1/2");
         // The engine, a queen up, declines.
         shell.execute("fen 4k3/8/8/8/8/8/8/3QK3 b - - 0 1");
         shell.execute("set depth 3");
@@ -1305,7 +1277,7 @@ mod tests {
         shell.execute("set depth 3");
         let hint = shell.execute("hint").output;
         assert!(hint.starts_with("Hint: Re8#"), "{hint}");
-        assert!(shell.history.is_empty());
+        assert!(shell.game.moves().is_empty());
     }
 
     #[test]
@@ -1332,7 +1304,7 @@ mod tests {
         let loaded = shell.execute(&format!("pgn load {path}")).output;
         assert!(loaded.starts_with("Loaded Player vs cb2026"), "{loaded}");
         assert_eq!(shell.position().to_fen(), fen);
-        assert_eq!(shell.history.len(), 2);
+        assert_eq!(shell.game.moves().len(), 2);
         std::fs::remove_file(path).unwrap();
         assert!(
             shell
@@ -1353,7 +1325,7 @@ mod tests {
         std::thread::sleep(Duration::from_millis(50));
         let out = shell.execute("e5").output;
         assert!(out.contains("Black lost on time."), "{out}");
-        assert_eq!(shell.result_code(), "1-0");
+        assert_eq!(shell.game.to_pgn().result, "1-0");
         assert_eq!(shell.execute("time off").output, "Clocks off.");
         assert!(shell.execute("time fast").output.starts_with("Usage"));
     }
@@ -1580,7 +1552,7 @@ mod tests {
         assert!(out.contains("cb2026 plays Re8#"), "{out}");
         assert!(out.contains("#1"), "the score is mate in one: {out}");
         assert!(out.contains("depth  1"), "the thinking is shown: {out}");
-        assert!(out.contains("Checkmate: White wins."));
+        assert!(out.contains("Checkmate. White wins."));
     }
 
     #[test]
@@ -1767,7 +1739,7 @@ mod tests {
     fn reports_checkmate() {
         let mut shell = ascii_shell();
         let response = shell.execute("move f2f3 e7e5 g2g4 d8h4");
-        assert!(response.output.contains("Checkmate: Black wins."));
+        assert!(response.output.contains("Checkmate. Black wins."));
     }
 
     #[test]

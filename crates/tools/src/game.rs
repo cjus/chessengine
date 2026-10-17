@@ -3,7 +3,8 @@
 //! The referee (this code) keeps the real board and the clocks. Before each move it sends the
 //! engine to move the full game (`position fen ... moves ...`) and the clocks (`go wtime ...`),
 //! times the reply itself, checks that the move is legal, and ends the game on checkmate,
-//! stalemate, the draw rules, a time loss, an illegal move or a crash.
+//! stalemate, the draw rules, a time loss, an illegal move or a crash. The board and the rules
+//! that end a game on it are a [`rules::Game`] from `cb2026-chess`.
 //!
 //! A game that can't start (an engine doesn't answer `ucinewgame`) is **aborted**: it has no
 //! result, and a match must not score it. Scoring it as a draw would let a dead engine add
@@ -12,6 +13,7 @@
 use std::fmt;
 use std::time::Duration;
 
+use cb2026_chess::game as rules;
 use cb2026_chess::{Color, Position};
 
 use crate::uci_client::UciEngine;
@@ -210,10 +212,9 @@ pub fn play_game_watched(
 ) -> Game {
     let players = [engines[0].name.clone(), engines[1].name.clone()];
     let mut engines = engines;
-    let mut position = Position::from_fen(start_fen).expect("opening FENs are valid");
+    let mut game = rules::Game::from_fen(start_fen).expect("opening FENs are valid");
     let mut uci_moves: Vec<String> = Vec::new();
     let mut san_moves: Vec<String> = Vec::new();
-    let mut hashes = vec![position.hash()];
     let mut clocks = match tc {
         TimeControl::Clock { base, .. } | TimeControl::Repeating { base, .. } => [base, base],
         _ => [Duration::ZERO; 2],
@@ -251,53 +252,17 @@ pub fn play_game_watched(
 
     loop {
         // The rules first: is the game already over?
-        let side = position.side_to_move();
-        if position.legal_moves().is_empty() {
-            return if position.in_check() {
-                finish(
-                    Termination::Normal,
-                    Outcome::win_for(!side),
-                    "checkmate".into(),
-                    san_moves,
-                    None,
-                )
-            } else {
-                finish(
-                    Termination::Normal,
-                    Outcome::Draw,
-                    "stalemate".into(),
-                    san_moves,
-                    None,
-                )
-            };
-        }
-        if position.halfmove_clock() >= 100 {
+        if let Some(over) = game.outcome() {
+            let outcome = over.winner().map_or(Outcome::Draw, Outcome::win_for);
             return finish(
                 Termination::Normal,
-                Outcome::Draw,
-                "fifty-move rule".into(),
+                outcome,
+                over.to_string(),
                 san_moves,
                 None,
             );
         }
-        if position.is_insufficient_material() {
-            return finish(
-                Termination::Normal,
-                Outcome::Draw,
-                "insufficient material".into(),
-                san_moves,
-                None,
-            );
-        }
-        if hashes.iter().filter(|&&h| h == position.hash()).count() >= 3 {
-            return finish(
-                Termination::Normal,
-                Outcome::Draw,
-                "threefold repetition".into(),
-                san_moves,
-                None,
-            );
-        }
+        let side = game.position().side_to_move();
         if san_moves.len() >= MAX_PLIES {
             return finish(
                 Termination::Normal,
@@ -389,7 +354,7 @@ pub fn play_game_watched(
             }
             clocks[mover] = clocks[mover].saturating_sub(reply.elapsed) + added;
         }
-        let Some(mv) = position.parse_uci_move(&reply.uci) else {
+        let Some(mv) = game.position().parse_uci_move(&reply.uci) else {
             return finish(
                 Termination::IllegalMove,
                 Outcome::win_for(!side),
@@ -398,12 +363,13 @@ pub fn play_game_watched(
                 Some(side),
             );
         };
-        san_moves.push(position.to_san(mv));
+        let played = game
+            .play(mv)
+            .expect("the move was parsed as legal, and the game isn't over");
+        san_moves.push(played.san.clone());
         uci_moves.push(reply.uci);
-        position.make_move(mv);
-        hashes.push(position.hash());
         let clocks = matches!(tc, TimeControl::Clock { .. }).then_some(clocks);
-        on_move(&position, &san_moves, clocks);
+        on_move(game.position(), &san_moves, clocks);
     }
 }
 
