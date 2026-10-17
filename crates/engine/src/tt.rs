@@ -58,10 +58,12 @@
 //! it. With one slot per key, a deep result and a fresh one compete for that slot and one of
 //! them is lost; a bucket can keep both. Switched off, a key picks a single slot, as in stage 8.
 //!
-//! In games at 8+0.08 buckets measured weaker, −8.8 ± 8.6 Elo over 2,685 games
-//! (cjus/chessengine#86): at 16 MB the table keeps more deep entries, singular extensions start
-//! from more of them, and the trees grow. They are on by default again for a test at 40+0.4,
-//! where the table fills more (cjus/chessengine#92).
+//! **Buckets are off by default.** In games they measured weaker, −8.8 ± 8.6 Elo over 2,685
+//! games at 8+0.08 (cjus/chessengine#86): at 16 MB the table keeps more deep entries, singular
+//! extensions start from more of them, and the trees grow. At 40+0.4, where the table fills
+//! more, they came out about even: +1.6 ± 6.3 over 4,630 games, stopped with no verdict
+//! (cjus/chessengine#92). The switch stays, for tests where the table is under more pressure
+//! (a smaller hash, more threads).
 //!
 //! Pitfalls:
 //!

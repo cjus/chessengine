@@ -14,10 +14,10 @@ Like chapter 17's threads, this is about the machine the engine runs on, not che
 stage 20, as strength work towards version 1.0, so no stage tag contains it. Switch it with
 `set ttbuckets on|off`.
 
-**cb2026 ships with it off.** In games it made the engine weaker, about 9 Elo at 8+0.08 (see
-"What it's worth"). The table really does keep more of what it is given, as this chapter shows;
-what that bought in the games was a bigger search, not a better one. A test at 40+0.4, where
-the table fills more, has it switched on again (cjus/chessengine#92).
+**cb2026 ships with it off.** In games it made the engine weaker, about 9 Elo at 8+0.08, and at
+40+0.4 it came out about even (see "What it's worth"). The table really does keep more of what
+it is given, as this chapter shows; what that bought in the games was a bigger search, not a
+better one.
 
 ## Cache lines
 
@@ -106,7 +106,12 @@ makes the engine stronger. Only games can, and here they said no: about **−9 E
 The likeliest reason is the one above. At 16 MB and this time control the table is under little
 pressure, so buckets save few results that matter, and the extra deep entries start extensions
 that cost more time than they repay. That is a reading of the node counts, not something the
-games showed; a test at a longer time control, where the table fills, would say more.
+games showed.
+
+A test at 40+0.4 fits it, without proving it. With five times as long per move the table fills
+more, and the loss went away: **+1.6 ± 6.3 Elo** after 4,630 games, stopped with no verdict
+either way. It looks as if what buckets save there is worth about what the bigger trees cost,
+and the difference is too small to measure in 18 hours of games.
 
 With `set ttbuckets on`, `bench` counts 1,114,877 nodes instead of 1,098,926 (+1.5%). Off, the
 default, the table behaves exactly as in chapter 8, and `bench` is 1,098,926.
@@ -122,14 +127,15 @@ default, the table behaves exactly as in chapter 8, and `bench` is 1,098,926.
 - **Nodes aren't Elo.** See above: a better table made the 16 MB tree bigger.
 - **Light pressure in short games.** At 8+0.08 a move searches a few hundred thousand nodes,
   and the default table has about a million slots. Buckets matter more when the table fills:
-  longer time controls, more threads, or a smaller `Hash`.
+  longer time controls, more threads, or a smaller `Hash`. Even at 40+0.4 they weren't worth
+  a measurable gain; a smaller `Hash` at 8+0.08 would be the cheaper way to test a full table.
 
 ## What it's worth
 
 | Test | Result |
 | --- | --- |
 | Buckets vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−8.8 ± 8.6 Elo** over 2,685 games (+536 −604 =1545): failed (LLR −2.96); off by default |
-| Buckets vs `main` without them, 40+0.4, test Mac (M3 Max), SPRT [0, 5] | Waiting for its SPRT (cjus/chessengine#92) |
+| Buckets vs `main` without them, 40+0.4, test Mac (M3 Max), SPRT [0, 5] | **+1.6 ± 6.3 Elo** over 4,630 games (+916 −895 =2819): no verdict (LLR −0.45), stopped; off by default (cjus/chessengine#92) |
 
 ## Further reading
 
