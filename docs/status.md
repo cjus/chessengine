@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-17, 12:05 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-17, 15:04 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -18,7 +18,8 @@ transposition table buckets failed, −8.8 ± 8.6, so they are off by default, #
 failures in matches can no longer count as draws, #91). 2026-10-17: one `Game` type in
 `cb2026-chess` decides when every game is over, for the shell, the match tool, self-play and
 chessgui, #94, merged; buckets at 40+0.4 about even, +1.6 ± 6.3 with no verdict, so they stay
-off, #92; double extensions running on the M3, #96.*
+off, #92; double extensions running on the M3, #96; the gauntlet reference engines chosen,
+built by `scripts/fetch-gauntlet-engines.sh`, #36.*
 
 ## Stages
 
@@ -122,7 +123,8 @@ wait on rating gauntlets or GUI checks.
 
 The open [`needs-carlos` issues](https://github.com/cjus/chessengine/issues?q=is%3Aopen+label%3Aneeds-carlos):
 
-- #36: choose the gauntlet reference engines; run the M2/M3 gauntlets.
+- #36: run the M2/M3 gauntlets on the M3, after #96's SPRT. The engines are chosen (2026-10-17)
+  and `scripts/fetch-gauntlet-engines.sh` builds them; the steps are in the issue.
 - #37: GUI compatibility matrix; Lichess bot account.
 - #24 (M1 GUI games).
 
@@ -223,8 +225,13 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    Carlos's working machine. Nothing to fix now. If a loss happens again, #67's details (move,
    time taken, clock) say which kind it is, and every SPRT comment lists them. The M5 robustness
    run (10,000+ games at 1+0.01, 10+0.1 and 40/60) is the final check.
-2. Milestone gates, once #36 is answered: gauntlets for M2–M4, level calibration (the
-   calibration script is still to write, using `crates/tools/src/gauntlet.rs`).
+2. Milestone gates: the reference engines are chosen (#36, 2026-10-17; `docs/PRD.md`,
+   "Testing and strength measurement"), and `scripts/fetch-gauntlet-engines.sh` builds them. Next,
+   Carlos runs the M2 and M3 gauntlets on the M3 (the stage 14 and 16 tags), then one on `main`.
+   A smoke test of 2 games per engine on the M1 Max found no time losses, illegal moves or
+   failures, and gave stage 14 2338 ± 158 and `main` 2706 ± 165: too few games to mean much,
+   but the list brackets both. Level calibration's script is still to write, using
+   `crates/tools/src/gauntlet.rs` and the same engines.
 3. More M5 strength work, each change with an SPRT. Passed on 2026-10-13: continuation history
    (#69, +10.7), singular extensions and multi-cut (#71, +29.5), adaptive time management (#72,
    +33.5), history in LMR's second version (#74, +22.2); on 2026-10-14, negative extensions
@@ -255,7 +262,7 @@ Run the full test suite on every commit you replay, not only at the tip: each be
      about even at 40+0.4. A small table at 8+0.08 would test a full table cheaply, but a gain
      there would say little about the default 16 MB.
    - **The milestone gauntlets** (item 2): with about +115 Elo of M5 gains since the M2/M3
-     gates were set, a rating run now would say a lot, once #36 names the reference engines.
+     gates were set, a rating run now would say a lot. #36 has the engines; it waits for the M3.
 
    Improving is set aside (Carlos, 2026-10-12) after three failed versions (#60, #63, #65). The results point at
    reverse futility pruning, and the late-move-pruning part may have helped, so later

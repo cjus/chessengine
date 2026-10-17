@@ -429,11 +429,30 @@ sequential probability ratio test, against the current `main`:
 Every commit message carries `Bench: <nodes>`. A PR changing search or evaluation includes its
 SPRT result (Elo ± error, games played, LLR) or says "No functional change" with an unchanged bench.
 
-**Rating.** At each gate, a gauntlet of several thousand games against 4–6 open-source engines
-whose CCRL Blitz ratings bracket our target (candidates: versions of Stash, Rustic, Blunder,
-Fruit 2.1, Ethereal and Berserk versions; final list chosen in M0), with Ordo to estimate our
-rating. These engines are downloaded (or built from source for Apple Silicon) by a script for
-testing only and are never included in the repo.
+**Rating.** At each gate, a gauntlet of several thousand games against open-source engines
+whose CCRL Blitz ratings bracket our target. The `gauntlet` tool holds their ratings fixed and
+fits cb2026's by maximum likelihood. The engines, chosen on 2026-10-17 (cjus/chessengine#36),
+with their CCRL Blitz ratings that day:
+
+| Engine | CCRL Blitz | Language |
+| --- | ---: | --- |
+| Blunder 5.0.0 | 2018 ± 20 | Go |
+| Stash 15.3 | 2174 ± 19 | C |
+| Zahak 3.0 | 2364 ± 19 | Go |
+| Velvet 1.0.0 | 2513 ± 17 | Rust |
+| Blunder 8.5.5 | 2663 ± 11 | Go |
+| Weiss 1.0 | 2896 ± 17 | C |
+| Stash 27.0 | 3049 ± 16 | C |
+
+They are about 150 Elo apart, by five authors, and cover every gate from M2 (about 2200) to
+the v1.0 goal (2600+). Of the first candidates, Rustic (its best version is 1794), Fruit 2.1 (not
+on the Blitz list) and Ethereal (open-source versions from 3333) don't fit the range.
+`scripts/fetch-gauntlet-engines.sh` builds them from source at pinned commits, for testing
+only; they are never included in the repo. CCRL rated x86 builds, so each version was checked
+to behave the same built for Apple Silicon (the script says how); Weiss 0.10 and Berserk 2.0.0,
+the first choices for two of the places, failed that check. The gauntlets run at 8+0.08, much
+faster than CCRL Blitz's 2'+1", so their ratings are approximate; a run at 40+0.4 is closer and
+takes five times as long.
 
 ### Test machine
 
@@ -663,6 +682,9 @@ about 26 s, and the M1 Max played about 970 games an hour.
       still works for anyone who prefers it (2026-10-10).
 - [x] `main` protected by the ruleset `main: PR + CI`: PR required, three CI checks required,
       no force pushes or deletion (cjus/chessengine#5, 2026-10-10).
+- [x] Gauntlet reference engines: seven open-source versions from 2018 to 3049 CCRL Blitz,
+      built from source by `scripts/fetch-gauntlet-engines.sh` (see "Testing and strength
+      measurement"; cjus/chessengine#36, 2026-10-17).
 
 ## Open questions
 
