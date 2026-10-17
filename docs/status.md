@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-17, 11:45 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-17, 12:05 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -18,7 +18,7 @@ transposition table buckets failed, −8.8 ± 8.6, so they are off by default, #
 failures in matches can no longer count as draws, #91). 2026-10-17: one `Game` type in
 `cb2026-chess` decides when every game is over, for the shell, the match tool, self-play and
 chessgui, #94, merged; buckets at 40+0.4 about even, +1.6 ± 6.3 with no verdict, so they stay
-off, #92.*
+off, #92; double extensions running on the M3, #96.*
 
 ## Stages
 
@@ -67,8 +67,17 @@ off, #92.*
 | M5: transposition table buckets (chapter 8.1) | #86 | 1098926 (1114877 with buckets on) | Merged, off by default: −8.8 ± 8.6, 2,685 games, [0, 5] failed (M3 Max) |
 | M5: transposition table buckets at 40+0.4 (chapter 8.1) | #92 | 1098926 (1114877 with buckets on) | Merged as a record, off by default: +1.6 ± 6.3, 4,630 games, [0, 5] at 40+0.4 no verdict (LLR −0.45), stopped (M3 Max) |
 | `cb2026_chess::game::Game`: one record of a game and one set of end-of-game rules, moved from chessgui and used by the shell, the match tool and self-play | #94 | 1098926 | Merged, no functional change; chessgui uses it from cjus/chessgui#31 |
+| M5: double extensions (chapter 14.1) | #96, `claude/m5-double-extensions` | 1248666 | Draft, its SPRT running on the M3 Max: [0, 5] at 8+0.08 |
 
-Nothing on the M3 now: every M5 branch so far is merged.
+**Running now: #96** (double extensions: a singular hash move that no other move comes within
+20 centipawns of `singular_beta` is searched two plies deeper, off the principal variation, at
+most 6 times a line), started on the M3 on 2026-10-17 at about 12:00 MDT. A new session should
+restart the watcher, `scripts/watch-sprt.sh 96`, or just read #96's comments if the result is
+already there. Then rebase #96 onto `main` (in `docs/status.md` take `main`'s side and edit
+it), record the result in chapter 14.1, the module docs, the ledger and this file, and merge.
+If it fails, switch `double_extension` off by default (with its comment, and the shell's help)
+and merge as a record; a wider margin (50 makes the depth-10 tree 30% bigger instead of 44%)
+would be the next try.
 
 When several PRs wait for the M3, they run one at a time, and **before each SPRT starts, rebase
 that PR onto the current `main`** and re-measure its `Bench:` line: `scripts/mac-sprt.sh` plays
@@ -234,10 +243,11 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    Next, in a rough order of value:
    - **Tuning singular extensions, continued**: depth 6 passed (#78) and depth 4 too (#80),
      which is about where Stockfish starts; `singular_margin` 3 passed too (#82), and 4
-     failed (#84). That settles the start depth and the margin for now. Still untried: the
-     hash entry's depth margin (`singular_tt_depth_margin`, 3) and double extensions, which
-     extend a move two plies when it is singular by a wide margin (as in Stockfish, GPL-3.0).
-     Gains this size take 9,000–14,000 games, 7–13 hours on the M3.
+     failed (#84). That settles the start depth and the margin for now. Double extensions,
+     which extend a move two plies when it is singular by a wide margin (as in Stockfish,
+     GPL-3.0), are running now, #96. Still untried: the hash entry's depth margin
+     (`singular_tt_depth_margin`, 3). Gains this size take 9,000–14,000 games, 7–13 hours on
+     the M3.
    - **Tuning adaptive time at 40+0.4**: the gain there (about 14 Elo) is smaller than at
      8+0.08 (about 33), and the scale's numbers were set by hand. Each run at 40+0.4 takes
      about 10 hours, so it waits behind cheaper candidates.
