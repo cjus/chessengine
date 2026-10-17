@@ -35,6 +35,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc;
 use std::thread;
 
+use cb2026_chess::game as rules;
 use cb2026_chess::{Color, Position};
 
 use crate::game::{Game, Outcome, Termination, TimeControl, play_game};
@@ -70,10 +71,7 @@ pub fn check_openings(openings: &[String]) -> Result<(), String> {
     for (i, fen) in openings.iter().enumerate() {
         let position =
             Position::from_fen(fen).map_err(|e| format!("opening {}, '{fen}': {e}", i + 1))?;
-        if position.legal_moves().is_empty()
-            || position.is_insufficient_material()
-            || position.halfmove_clock() >= 100
-        {
+        if rules::Game::from_position(position).outcome().is_some() {
             return Err(format!(
                 "opening {}, '{fen}': the game is already over",
                 i + 1

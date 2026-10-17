@@ -20,6 +20,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::thread;
 
+use cb2026_chess::game::Game;
 use cb2026_chess::{Color, Move, Position};
 use cb2026_engine::{Engine, Limits, Score};
 
@@ -111,32 +112,23 @@ pub fn play_game(engine: &mut Engine, start: &Position, nodes: u64) -> Vec<Sampl
         nodes: Some(nodes),
         ..Limits::default()
     };
-    let mut position = start.clone();
-    let mut hashes = vec![position.hash()];
+    let mut game = Game::from_position(start.clone());
     let mut recorded = Vec::new();
     let mut quiet_plies = 0;
 
     let result = loop {
         // The rules: is the game over?
-        if position.legal_moves().is_empty() {
-            break if position.in_check() {
-                winner(!position.side_to_move())
-            } else {
-                0.5
-            };
+        if let Some(outcome) = game.outcome() {
+            break outcome.winner().map_or(0.5, winner);
         }
-        let repeated = hashes.iter().filter(|&&h| h == position.hash()).count() >= 3;
-        if position.halfmove_clock() >= 100
-            || position.is_insufficient_material()
-            || repeated
-            || hashes.len() > MAX_PLIES
-        {
+        if game.moves().len() >= MAX_PLIES {
             break 0.5;
         }
 
+        let position = game.position();
         let mut score = None;
-        let history = &hashes[..hashes.len() - 1];
-        let reply = engine.search(&position, history, &limits, &stop, &mut |info| {
+        let history = game.history_hashes();
+        let reply = engine.search(position, &history, &limits, &stop, &mut |info| {
             score = Some(info.score)
         });
         let Some(mv) = reply.best_move else {
@@ -149,7 +141,7 @@ pub fn play_game(engine: &mut Engine, start: &Position, nodes: u64) -> Vec<Sampl
                 break winner(if moves > 0 { mover } else { !mover });
             }
             Some(Score::Centipawns(cp)) => {
-                if is_quiet(&position, mv) && cp.abs() < RECORD_SCORE_LIMIT {
+                if is_quiet(position, mv) && cp.abs() < RECORD_SCORE_LIMIT {
                     recorded.push(position.to_fen());
                 }
                 quiet_plies = if cp.abs() <= DRAW_ADJUDICATION_SCORE {
@@ -157,14 +149,15 @@ pub fn play_game(engine: &mut Engine, start: &Position, nodes: u64) -> Vec<Sampl
                 } else {
                     0
                 };
-                if hashes.len() > DRAW_ADJUDICATION_PLY && quiet_plies >= DRAW_ADJUDICATION_LENGTH {
+                if game.moves().len() >= DRAW_ADJUDICATION_PLY
+                    && quiet_plies >= DRAW_ADJUDICATION_LENGTH
+                {
                     break 0.5;
                 }
             }
             None => {}
         }
-        position.make_move(mv);
-        hashes.push(position.hash());
+        game.play(mv).expect("the engine plays legal moves");
     };
 
     recorded

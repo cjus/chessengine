@@ -1,10 +1,12 @@
 //! Playing complete games in the shell: clocks, hints, resigning and draws, taking moves back
-//! and forward, and saving and loading games as PGN.
+//! and forward, and saving and loading games as PGN. The game itself, and whether it is over,
+//! is a [`Game`] from `cb2026-chess`.
 
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use cb2026_chess::Color;
+use cb2026_chess::game::Game;
 use cb2026_chess::pgn::PgnGame;
-use cb2026_chess::{Color, Move, Position};
 use cb2026_engine::{Limits, Score, id_name};
 
 use crate::{Response, Shell, pv_san, score_text};
@@ -12,28 +14,6 @@ use crate::{Response, Shell, pv_san, score_text};
 /// The engine accepts a draw offer when it doesn't think it's better than this (centipawns,
 /// from its own side).
 const DRAW_ACCEPT_CP: i32 = 0;
-
-/// A move played in the shell's game.
-#[derive(Clone, Debug)]
-pub(crate) struct Played {
-    /// The position before the move.
-    pub(crate) before: Position,
-    /// The move.
-    pub(crate) mv: Move,
-    /// The move in SAN.
-    pub(crate) san: String,
-    /// For the engine's moves, its score and depth (`+0.35/18`), saved in PGN.
-    pub(crate) comment: Option<String>,
-}
-
-/// How a game ended (when it didn't end on the board): resignation, agreement or time.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Outcome {
-    /// `1-0`, `0-1` or `1/2-1/2`.
-    pub(crate) code: &'static str,
-    /// Why, for people.
-    pub(crate) reason: String,
-}
 
 /// The chess clocks, when the game is played with them (`time 5+3`).
 #[derive(Clone, Debug)]
@@ -83,14 +63,6 @@ fn clock_text(time: Duration) -> String {
     }
 }
 
-/// Winning for `color`, as a PGN result.
-fn win_for(color: Color) -> &'static str {
-    match color {
-        Color::White => "1-0",
-        Color::Black => "0-1",
-    }
-}
-
 /// Today's date as PGN writes it, `YYYY.MM.DD` (UTC).
 fn today() -> String {
     let days = SystemTime::now()
@@ -113,7 +85,7 @@ impl Shell {
     /// Charges the time since the last move to the side that just moved (before `mv` is made),
     /// adds its increment, and records a loss on time if its clock ran out.
     pub(crate) fn run_clock(&mut self) {
-        let mover = self.position.side_to_move();
+        let mover = self.game.position().side_to_move();
         let Some(clock) = self.clock.as_mut() else {
             return;
         };
@@ -121,10 +93,7 @@ impl Shell {
         let left = &mut clock.remaining[mover.index()];
         if used > *left {
             *left = Duration::ZERO;
-            self.outcome = Some(Outcome {
-                code: win_for(!mover),
-                reason: format!("{mover} lost on time."),
-            });
+            self.game.lose_on_time(mover);
         } else {
             *left = *left - used + clock.increment;
         }
@@ -134,7 +103,7 @@ impl Shell {
     /// Search limits from the clock, when the game has one.
     pub(crate) fn clock_limits(&self) -> Option<Limits> {
         let clock = self.clock.as_ref()?;
-        let to_move = self.position.side_to_move();
+        let to_move = self.game.position().side_to_move();
         Some(Limits {
             time: [
                 Some(clock.left(Color::White, to_move)),
@@ -148,7 +117,7 @@ impl Shell {
     /// The clocks, for the board display.
     pub(crate) fn clock_line(&self) -> Option<String> {
         let clock = self.clock.as_ref()?;
-        let to_move = self.position.side_to_move();
+        let to_move = self.game.position().side_to_move();
         Some(format!(
             "Clocks: White {} · Black {}",
             clock_text(clock.left(Color::White, to_move)),
@@ -189,8 +158,11 @@ impl Shell {
 
     /// `redo`: plays the last move taken back.
     pub(crate) fn redo(&mut self) -> Response {
+        if let Some(over) = self.game_over() {
+            return Response::text(format!("The game is over: {over}"));
+        }
         match self.future.last().copied() {
-            Some(mv) if self.position.legal_moves().contains(&mv) => {
+            Some(mv) if self.game.position().legal_moves().contains(&mv) => {
                 self.make_move(mv, None);
                 self.show()
             }
@@ -209,10 +181,10 @@ impl Shell {
         match (mv, info) {
             (Some(mv), Some(info)) => Response::text(format!(
                 "Hint: {} ({}, depth {}): {}",
-                self.position.to_san(mv),
+                self.game.position().to_san(mv),
                 score_text(info.score),
                 info.depth,
-                pv_san(&self.position, &info.pv)
+                pv_san(self.game.position(), &info.pv)
             )),
             _ => Response::text("No hint: no legal moves."),
         }
@@ -223,12 +195,8 @@ impl Shell {
         if let Some(over) = self.game_over() {
             return Response::text(format!("The game is over: {over}"));
         }
-        let us = self.position.side_to_move();
-        self.outcome = Some(Outcome {
-            code: win_for(!us),
-            reason: format!("{us} resigned."),
-        });
-        Response::text(format!("{us} resigned: {} wins.", !us))
+        self.game.resign(self.game.position().side_to_move());
+        Response::text(self.game_over().unwrap_or_default())
     }
 
     /// `draw`: the side to move offers a draw. The engine, if it plays the other side, accepts
@@ -237,7 +205,7 @@ impl Shell {
         if let Some(over) = self.game_over() {
             return Response::text(format!("The game is over: {over}"));
         }
-        let us = self.position.side_to_move();
+        let us = self.game.position().side_to_move();
         if self.engine_plays[(!us).index()] {
             let mut engine = self.lab_engine();
             let limits = self.default_limits();
@@ -257,41 +225,19 @@ impl Shell {
                 ));
             }
         }
-        self.outcome = Some(Outcome {
-            code: "1/2-1/2",
-            reason: "Draw agreed.".to_string(),
-        });
-        Response::text("Draw agreed.")
-    }
-
-    /// The game's result in PGN: `1-0`, `0-1`, `1/2-1/2`, or `*` while it goes on.
-    pub(crate) fn result_code(&self) -> &'static str {
-        if let Some(outcome) = &self.outcome {
-            return outcome.code;
-        }
-        if self.game_over().is_none() {
-            return "*";
-        }
-        let pos = &self.position;
-        if pos.legal_moves().is_empty() && pos.in_check() {
-            win_for(!pos.side_to_move())
-        } else {
-            "1/2-1/2"
-        }
+        self.game.agree_draw();
+        Response::text(self.game_over().unwrap_or_default())
     }
 
     /// The game so far as PGN.
     fn to_pgn(&self) -> PgnGame {
-        let start = self
-            .history
-            .first()
-            .map_or_else(|| self.position.clone(), |p| p.before.clone());
-        let mut game = PgnGame::new(start);
+        let mut pgn = self.game.to_pgn();
         // A side is the engine's if the engine plays it, or made all of its moves (with `go`):
         // only the engine's moves carry a comment.
         let player = |color: Color| {
             let mut moves = self
-                .history
+                .game
+                .moves()
                 .iter()
                 .filter(|p| p.before.side_to_move() == color)
                 .peekable();
@@ -302,27 +248,22 @@ impl Shell {
                 "Player".to_string()
             }
         };
-        game.set_tag("Event", "Game in the cb2026 shell");
-        game.set_tag("Site", "cb2026 shell");
-        game.set_tag("Date", &today());
-        game.set_tag("Round", "-");
-        game.set_tag("White", &player(Color::White));
-        game.set_tag("Black", &player(Color::Black));
+        pgn.set_tag("Event", "Game in the cb2026 shell");
+        pgn.set_tag("Site", "cb2026 shell");
+        pgn.set_tag("Date", &today());
+        pgn.set_tag("Round", "-");
+        pgn.set_tag("White", &player(Color::White));
+        pgn.set_tag("Black", &player(Color::Black));
         if let Some(clock) = &self.clock {
-            game.set_tag(
+            pgn.set_tag(
                 "TimeControl",
                 &format!("{}+{}", clock.base.as_secs(), clock.increment.as_secs_f64()),
             );
         }
-        if let Some(outcome) = &self.outcome {
-            game.set_tag("Termination", &outcome.reason);
+        if let Some(over) = self.game_over() {
+            pgn.set_tag("Termination", &over);
         }
-        for played in &self.history {
-            game.moves.push(played.mv);
-            game.comments.push(played.comment.clone());
-        }
-        game.result = self.result_code().to_string();
-        game
+        pgn
     }
 
     /// `pgn`, `pgn save <file>`, `pgn load <file>`.
@@ -334,41 +275,30 @@ impl Shell {
             ("save", false) => match std::fs::write(path, self.to_pgn().to_pgn()) {
                 Ok(()) => Response::text(format!(
                     "Saved the game ({} moves) to {path}.",
-                    self.history.len()
+                    self.game.moves().len()
                 )),
                 Err(e) => Response::text(format!("Couldn't save to {path}: {e}")),
             },
             ("load", false) => {
-                let game = match std::fs::read_to_string(path)
+                let pgn = match std::fs::read_to_string(path)
                     .map_err(|e| e.to_string())
                     .and_then(|text| PgnGame::parse(&text))
                 {
-                    Ok(game) => game,
+                    Ok(pgn) => pgn,
                     Err(e) => return Response::text(format!("Couldn't load {path}: {e}")),
                 };
-                self.set_position(game.start.clone());
-                for (&mv, comment) in game.moves.iter().zip(&game.comments) {
-                    self.make_move(mv, comment.clone());
-                }
-                if game.result != "*" && self.game_over().is_none() {
-                    let code = match game.result.as_str() {
-                        "1-0" => "1-0",
-                        "0-1" => "0-1",
-                        _ => "1/2-1/2",
-                    };
-                    self.outcome = Some(Outcome {
-                        code,
-                        reason: format!("The game ended {code}."),
-                    });
+                match Game::from_pgn(&pgn) {
+                    Ok(game) => self.set_game(game),
+                    Err(e) => return Response::text(format!("Couldn't load {path}: {e}")),
                 }
                 let mut response = self.show();
                 response.output.insert_str(
                     0,
                     &format!(
                         "Loaded {} vs {}, {} moves.\n",
-                        game.tag("White").unwrap_or("?"),
-                        game.tag("Black").unwrap_or("?"),
-                        game.moves.len()
+                        pgn.tag("White").unwrap_or("?"),
+                        pgn.tag("Black").unwrap_or("?"),
+                        pgn.moves.len()
                     ),
                 );
                 response

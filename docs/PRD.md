@@ -90,7 +90,9 @@ logic testable and lets UCI, XBoard and the shell share exactly the same engine.
 ```
 crates/
   chess/      board, bitboards, magic tables, move generation, make/unmake,
-              Zobrist hashing, FEN, SAN/UCI move notation, perft. No dependencies.
+              Zobrist hashing, FEN, SAN/UCI move notation, PGN, perft, and the
+              game (`Game`: moves played, takebacks, when it is over, shared by
+              the shell, the match tool and chessgui). No dependencies.
   engine/     search, evaluation (HCE; NNUE later), transposition table,
               time management, threads (Lazy SMP), tablebases, opening book,
               strength limiting. Exposes an Engine API with an info callback.

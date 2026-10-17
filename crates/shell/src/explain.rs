@@ -257,10 +257,6 @@ impl Shell {
         engine
     }
 
-    fn history_hashes(&self) -> Vec<u64> {
-        self.history.iter().map(|p| p.before.hash()).collect()
-    }
-
     /// Searches the current position with `engine`, returning the last main-line report and
     /// the move chosen.
     pub(crate) fn lab_search(
@@ -271,8 +267,8 @@ impl Shell {
         let stop = AtomicBool::new(false);
         let mut last = None;
         let result = engine.search(
-            &self.position,
-            &self.history_hashes(),
+            self.game.position(),
+            &self.game.history_hashes(),
             limits,
             &stop,
             &mut |info: &SearchInfo| {
@@ -296,7 +292,7 @@ impl Shell {
             Some(Ok(d)) if (1..=20).contains(&d) => d,
             _ => return Response::text(usage),
         };
-        if self.position.legal_moves().is_empty() {
+        if self.game.position().legal_moves().is_empty() {
             return Response::text("No legal moves.");
         }
         let mut out = format!(
@@ -316,7 +312,7 @@ impl Shell {
                 if on { "on" } else { "off" },
                 nodes[i],
                 time.as_secs_f64(),
-                mv.map_or("-".to_string(), |mv| self.position.to_san(mv)),
+                mv.map_or("-".to_string(), |mv| self.game.position().to_san(mv)),
                 info.map_or("-".to_string(), |i| score_text(i.score)),
             ));
         }
@@ -388,10 +384,10 @@ impl Shell {
 
     /// `explain <move>`: searches the move and compares it with the engine's choice.
     pub(crate) fn explain(&mut self, args: &str) -> Response {
-        let Some(mv) = parse_move(&self.position, args) else {
+        let Some(mv) = parse_move(self.game.position(), args) else {
             return Response::text("Usage: explain <move>   (a legal move, like Nf3 or g1f3)");
         };
-        let san = self.position.to_san(mv);
+        let san = self.game.position().to_san(mv);
         let limits = self.default_limits();
         let mut engine = self.lab_engine();
         let (best, best_move, mut stats) = self.lab_search(&mut engine, &limits);
@@ -410,7 +406,7 @@ impl Shell {
                 "{} (depth {}): {}",
                 score_text(info.score),
                 info.depth,
-                pv_san(&self.position, &info.pv)
+                pv_san(self.game.position(), &info.pv)
             )
         };
         let mut out = format!("Engine's choice {}\n", line(&best));
@@ -423,18 +419,18 @@ impl Shell {
                     out.push_str(&format!(
                         "{san} is {:.2} pawns worse than {}.",
                         f64::from(a - b) / 100.0,
-                        self.position.to_san(best_move)
+                        self.game.position().to_san(best_move)
                     ));
                 }
                 _ => out.push_str(&format!(
                     "{san} scores {}, {} scores {}.",
                     score_text(mine.score),
-                    self.position.to_san(best_move),
+                    self.game.position().to_san(best_move),
                     score_text(best.score)
                 )),
             }
             if mine.pv.len() > 1 {
-                let mut after = self.position.clone();
+                let mut after = self.game.position().clone();
                 after.make_move(mv);
                 out.push_str(&format!(
                     " The engine's answer to it: {}",
@@ -447,14 +443,14 @@ impl Shell {
 
     /// `eval diff <move>`: which evaluation terms the move changes, from White's side.
     pub(crate) fn eval_diff(&self, args: &str) -> Response {
-        let Some(mv) = parse_move(&self.position, args) else {
+        let Some(mv) = parse_move(self.game.position(), args) else {
             return Response::text("Usage: eval diff <move>");
         };
         let params = &self.engine.params;
-        let mut after = self.position.clone();
+        let mut after = self.game.position().clone();
         after.make_move(mv);
         let (t0, t1) = (
-            eval::trace(&self.position, params),
+            eval::trace(self.game.position(), params),
             eval::trace(&after, params),
         );
         let blend = |phase: i32, (mg, eg): (i32, i32)| {
@@ -466,7 +462,7 @@ impl Shell {
         };
         let mut out = format!(
             "What {} changes, in pawns, from White's point of view:\n  {:<16}{:>9}{:>9}{:>9}\n",
-            self.position.to_san(mv),
+            self.game.position().to_san(mv),
             "",
             "Before",
             "After",
@@ -496,10 +492,10 @@ impl Shell {
 
     /// `see <move>`: the static exchange evaluation.
     pub(crate) fn see_move(&self, args: &str) -> Response {
-        let Some(mv) = parse_move(&self.position, args) else {
+        let Some(mv) = parse_move(self.game.position(), args) else {
             return Response::text("Usage: see <move>");
         };
-        let value = see::see(&self.position, mv);
+        let value = see::see(self.game.position(), mv);
         let verdict = match value {
             v if v > 0 => "wins material",
             0 => "breaks even",
@@ -507,7 +503,7 @@ impl Shell {
         };
         Response::text(format!(
             "SEE of {}: {} ({verdict} once the captures on {} are played out, cheapest piece first)",
-            self.position.to_san(mv),
+            self.game.position().to_san(mv),
             pawns(value),
             mv.to()
         ))
@@ -526,13 +522,13 @@ impl Shell {
             Some(Ok(p)) if (1..=4).contains(&p) => p,
             _ => return Response::text(usage),
         };
-        if self.position.legal_moves().is_empty() {
+        if self.game.position().legal_moves().is_empty() {
             return Response::text("No legal moves.");
         }
         let mut engine = self.lab_engine();
         let (tree, info) = engine.search_tree(
-            &self.position,
-            &self.history_hashes(),
+            self.game.position(),
+            &self.game.history_hashes(),
             depth,
             plies,
             TREE_MAX_EVENTS,
@@ -541,12 +537,12 @@ impl Shell {
             "Search tree of the depth-{depth} iteration (the earlier ones ran first), {plies} plies shown.\n\
              Windows and scores are from the side to move's point of view at each node.\n\n"
         );
-        out.push_str(&render_tree(&self.position, &tree));
+        out.push_str(&render_tree(self.game.position(), &tree));
         out.push_str(&format!(
             "\nResult: {} (depth {depth}, {} nodes): {}",
             score_text(info.score),
             info.nodes,
-            pv_san(&self.position, &info.pv)
+            pv_san(self.game.position(), &info.pv)
         ));
         Response::text(out)
     }

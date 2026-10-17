@@ -16,7 +16,8 @@ loses −13.8 ± 8.6, so the gain holds at the long time control, #76; negative 
 merged, +5.2 ± 4.2, #82; `singular_margin` 4 failed, −1.8 ± 5.3, so it stays at 3, #84;
 transposition table buckets failed, −8.8 ± 8.6, so they are off by default, #86; engine
 failures in matches can no longer count as draws, #91; buckets at 40+0.4 running on the M3,
-#92).*
+#92). 2026-10-17: one `Game` type in `cb2026-chess` decides when every game is over, for the
+shell, the match tool, self-play and chessgui, `claude/game-type`.*
 
 ## Stages
 
@@ -64,6 +65,7 @@ failures in matches can no longer count as draws, #91; buckets at 40+0.4 running
 | M5: `singular_margin` 4 (chapter 14.1) | #84 | 1098926 | Merged as a record, the margin back to 3: −1.8 ± 5.3, 7,476 games, [0, 5] failed (M3 Max) |
 | M5: transposition table buckets (chapter 8.1) | #86 | 1098926 (1114877 with buckets on) | Merged, off by default: −8.8 ± 8.6, 2,685 games, [0, 5] failed (M3 Max) |
 | M5: transposition table buckets at 40+0.4 (chapter 8.1) | #92, `claude/tt-buckets-ltc` | 1114877 | Draft, its SPRT running on the M3 Max: [0, 5] at 40+0.4 |
+| `cb2026_chess::game::Game`: one record of a game and one set of end-of-game rules, moved from chessgui and used by the shell, the match tool and self-play | `claude/game-type` | 1098926 | Open, no functional change |
 
 **Running now: #92** (transposition table buckets on again, [0, 5] at 40+0.4, to see whether
 #86's loss at 8+0.08 holds at the long time control), started on the M3 on 2026-10-16 at about
