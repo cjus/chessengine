@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-16, 17:30 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-16, 18:20 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -15,7 +15,8 @@ loses −13.8 ± 8.6, so the gain holds at the long time control, #76; negative 
 4.1, #78; singular extensions from depth 4 merged, +6.1 ± 4.8, #80; `singular_margin` 3
 merged, +5.2 ± 4.2, #82; `singular_margin` 4 failed, −1.8 ± 5.3, so it stays at 3, #84;
 transposition table buckets failed, −8.8 ± 8.6, so they are off by default, #86; engine
-failures in matches can no longer count as draws, #91).*
+failures in matches can no longer count as draws, #91; buckets at 40+0.4 running on the M3,
+#92).*
 
 ## Stages
 
@@ -62,8 +63,18 @@ failures in matches can no longer count as draws, #91).*
 | M5: `singular_margin` 3 (chapter 14.1) | #82 | 1098926 | Merged: +5.2 ± 4.2, 11,400 games, [0, 5] passed (M3 Max) |
 | M5: `singular_margin` 4 (chapter 14.1) | #84 | 1098926 | Merged as a record, the margin back to 3: −1.8 ± 5.3, 7,476 games, [0, 5] failed (M3 Max) |
 | M5: transposition table buckets (chapter 8.1) | #86 | 1098926 (1114877 with buckets on) | Merged, off by default: −8.8 ± 8.6, 2,685 games, [0, 5] failed (M3 Max) |
+| M5: transposition table buckets at 40+0.4 (chapter 8.1) | #92, `claude/tt-buckets-ltc` | 1114877 | Draft, its SPRT running on the M3 Max: [0, 5] at 40+0.4 |
 
-Nothing on the M3 now: every M5 branch so far is merged.
+**Running now: #92** (transposition table buckets on again, [0, 5] at 40+0.4, to see whether
+#86's loss at 8+0.08 holds at the long time control), started on the M3 on 2026-10-16 at about
+17:50 MDT. At about 255 games an hour, expect 10–15 hours, longer if the change is near zero.
+A new session should restart the watcher, `scripts/watch-sprt.sh 92 48 3000`, or just read
+#92's comments if the result is already there. (The progress comment comes every 2,000 games,
+so the watcher's 3,000-game stop shows at 4,000, about 16 hours in: then propose stopping the
+run to Carlos.) Then rebase #92 onto `main` (in `docs/status.md` take `main`'s side and edit
+it) and record the result in chapter 8.1, the ledger and this file. If it passes, merge with
+buckets on; if it fails, switch `tt_buckets` off again (the default and its comment, the
+`tt.rs` docs, the shell's help and its settings test) and merge as a record.
 
 When several PRs wait for the M3, they run one at a time, and **before each SPRT starts, rebase
 that PR onto the current `main`** and re-measure its `Bench:` line: `scripts/mac-sprt.sh` plays
@@ -235,8 +246,7 @@ Run the full test suite on every commit you replay, not only at the tip: each be
      8+0.08 (about 33), and the scale's numbers were set by hand. Each run at 40+0.4 takes
      about 10 hours, so it waits behind cheaper candidates.
    - **Transposition table buckets at 40+0.4** (off since #86 lost at 8+0.08): the table
-     fills more at the long time control, where buckets should matter more. Another 10-hour
-     run, so it waits with adaptive time's.
+     fills more at the long time control, where buckets should matter more. Running now, #92.
    - **The milestone gauntlets** (item 2): with about +115 Elo of M5 gains since the M2/M3
      gates were set, a rating run now would say a lot, once #36 names the reference engines.
 
