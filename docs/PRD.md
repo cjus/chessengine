@@ -586,6 +586,12 @@ which it beat 96.4% of the time, where a rating says least) to 2695 (Stash 27.0)
 above stage 14, close to the +192 ± 45 that stage 15's SPRT measured in self-play. cb2026 again
 had no time losses, illegal moves or failures; Stash 15.3 had one time loss and one failure.
 
+`main` (at `40751d9`) rated **2714 ± 10** in the same gauntlet on 2026-10-18 (+3181 −1513 =906;
+cjus/chessengine#36), above the v1.0 rating gate (2400 or more, goal 2600+); the release
+measures it again with the robustness run. That is only 45 ± 14 above stage 16. The M5 changes
+that passed their SPRTs add up to about +136 Elo in self-play, so against other engines they
+gained about a third of that: self-play SPRTs find gains reliably but overstate their size.
+
 ## Risks
 
 | Risk | Impact | Mitigation |
