@@ -578,6 +578,14 @@ CCRL's (see "Rating"). cb2026 had no time losses, illegal moves or failures; Sta
 one time loss and five failures. Stages 8–14 each have an SPRT result in
 `docs/elo-ledger.md`.
 
+M3 passed on 2026-10-18: `stage-16-tuning` rated **2669 ± 10** in the same gauntlet (5,600
+games, +2998 −1708 =894; cjus/chessengine#36), against a gate of 2400 or more. Stage 16's
+default evaluation is stage 15's hand-set one (the tuned values weren't adopted), so this rates
+the full hand-crafted evaluation. Its performances ranged from 2588 (against Blunder 5.0.0,
+which it beat 96.4% of the time, where a rating says least) to 2695 (Stash 27.0). That is 227
+above stage 14, close to the +192 ± 45 that stage 15's SPRT measured in self-play. cb2026 again
+had no time losses, illegal moves or failures; Stash 15.3 had one time loss and one failure.
+
 ## Risks
 
 | Risk | Impact | Mitigation |
