@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-18, 10:30 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-18, 09:50 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -23,7 +23,7 @@ off, #92; the gauntlet reference engines chosen, built by `scripts/fetch-gauntle
 gauntlets running on the M3, #36; **M2 passed**, stage 14 rated 2442 ± 11 by gauntlet, #36.
 2026-10-18: **M3 passed**, stage 16 rated 2669 ± 10, #36; `main` rated 2714 ± 10, #36; five
 engines from 1058 to 1794 chosen for the level calibration, #101, and `scripts/mac-levels.sh`
-written; the calibration waits for the M3, #103.*
+written, #104; the level calibration running on the M3, #103.*
 
 ## Stages
 
@@ -74,16 +74,22 @@ written; the calibration waits for the M3, #103.*
 | `cb2026_chess::game::Game`: one record of a game and one set of end-of-game rules, moved from chessgui and used by the shell, the match tool and self-play | #94 | 1098926 | Merged, no functional change; chessgui uses it from cjus/chessgui#31 |
 | M5: double extensions (chapter 14.1) | #96 | 1098926 (1248666 with double extensions on) | Merged, off by default: +3.6 ± 4.9, 8,670 games, [0, 5] no verdict (LLR 0.92), stopped (M3 Max) |
 
-**Nothing is running on the M3.** The rating gauntlets (#36) finished on 2026-10-18 at 06:50
-MDT, 800 games against each of the seven reference engines at 8+0.08, about 4 hours a version:
-stage 14 **2442 ± 11** (M2 passed), stage 16 **2669 ± 10** (M3 passed), and `main` **2714 ±
-10**, all recorded in the PRD's "Milestones" and the ledger. `main` is only 45 ± 14 above stage
-16, though the M5 SPRTs that passed add up to about +136 in self-play: self-play overstates
-gains against other engines about threefold here. Next for the M3: the level calibration
-(#103, about 8–11 hours: `scripts/mac-levels.sh` rates Skill Levels 0–19 against the engines
-in `levels.txt`), or another M5 SPRT (item 3 below). When #103's result comment arrives, fit
-`level_for_elo` in `crates/engine/src/levels.rs` to the ratings, put the table in the book's
-levels chapter, and record the M4 levels gate.
+**Running now: the level calibration (#103)**, started on the M3 on 2026-10-18 at about 09:45
+MDT: `scripts/mac-levels.sh` rates Skill Levels 0–19, 200 games against each of the 4 engines
+in `levels.txt` nearest each level's expected rating, 16,000 games in about 8–11 hours. It
+updates a progress comment on #103 after each level and posts the result table when it ends. A
+new session should restart the watcher (the poll in the last session read #103's comments every
+10 minutes) or just read #103. On the result: fit `level_for_elo` in
+`crates/engine/src/levels.rs` to the ratings, put the table in the book's levels chapter, and
+record the M4 levels gate. If it stops early, ask Carlos for `tail -20 ~/levels.log` and
+`pgrep -fl "gauntlet|cb2026|mac-levels"` on the M3.
+
+The rating gauntlets (#36) finished on 2026-10-18 at 06:50 MDT, 800 games against each of the
+seven reference engines at 8+0.08, about 4 hours a version: stage 14 **2442 ± 11** (M2 passed),
+stage 16 **2669 ± 10** (M3 passed), and `main` **2714 ± 10**, all recorded in the PRD's
+"Milestones" and the ledger. `main` is only 45 ± 14 above stage 16, though the M5 SPRTs that
+passed add up to about +136 in self-play: self-play overstates gains against other engines about
+threefold here. After the calibration, the M3's next job is another M5 SPRT (item 3 below).
 
 When several PRs wait for the M3, they run one at a time, and **before each SPRT starts, rebase
 that PR onto the current `main`** and re-measure its `Bench:` line: `scripts/mac-sprt.sh` plays
@@ -128,7 +134,7 @@ passed; the rest wait on GUI checks, level calibration or the v1.0 work.
 
 The open [`needs-carlos` issues](https://github.com/cjus/chessengine/issues?q=is%3Aopen+label%3Aneeds-carlos):
 
-- #103: run the level calibration on the M3 (`scripts/mac-levels.sh`, about 8–11 hours).
+- #103: the level calibration, running on the M3 since 2026-10-18 (see "Running now").
 - #37: GUI compatibility matrix; Lichess bot account.
 - #24 (M1 GUI games).
 
