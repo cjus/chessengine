@@ -55,24 +55,70 @@ full search, so three lines take about three times as long.
 | Option | What it does |
 | --- | --- |
 | `Skill Level` 0–20 | The level; 20 is full strength |
-| `UCI_LimitStrength` + `UCI_Elo` 1000–2400 | Limit to an Elo rating; mapped onto a level |
+| `UCI_LimitStrength` + `UCI_Elo` 1000–2400 | Limit to an Elo rating; mapped onto the levels' measured ratings (below) |
 | `MultiPV` 1–256 | Lines searched and reported |
 
-In the shell, `level 5`, `elo 1500` and `elo off` do the same.
+In the shell, `level 5`, `elo 1500` and `elo off` do the same, and say what the engine now
+plays at:
 
 ```text
 > level 5
-Strength: level 5: 3037 nodes per move, choosing among the best 4 moves
+Strength: level 5, about 1052 Elo: 3037 nodes per move, choosing among the best 4 moves
+> level 20
+Strength: full, about 2714 Elo
+> elo 1500
+Strength: level 9.7, about 1500 Elo: 20562 nodes per move, choosing among the best 4 moves
 ```
+
+`Skill Level` caps `UCI_Elo`: with `level 5` set, `elo 1500` still plays at level 5.
 
 ## Calibration
 
 What Elo is level 5? Nobody knows until it plays. The PRD requires the levels to be
-**calibrated**: each one plays a few hundred games against reference engines with known ratings
-on the CCRL list, and the `UCI_Elo` → level table is fitted to the results. Until then, the
-mapping is a straight line from 1000 Elo at level 0 to 2400 at level 19, and the shell calls it
-"provisional". Calibration needs the reference engines and a few hours of games, so it runs on
-the test Mac together with the rating gauntlets.
+**calibrated**: each one plays games against reference engines with known ratings on the CCRL
+list, and `UCI_Elo` is fitted to the results.
+
+`scripts/mac-levels.sh` did that on the test Mac on 2026-10-18 (cjus/chessengine#103). Each
+level from 0 to 19 played 200 games at 8+0.08 against each of the four reference engines
+nearest its expected strength, chosen from twelve open-source engines rated 1058 to 3049 on CCRL
+Blitz (the PRD lists them). The gauntlet tool fitted each level's rating on their scale, holding
+theirs fixed. That was 16,000 games, in about six and a half hours:
+
+| Level | Nodes per move | Rating | | Level | Nodes per move | Rating |
+| ---: | ---: | --- | --- | ---: | ---: | --- |
+| 0 | 400 | 752 ± 41 | | 10 | 23,066 | 1534 ± 25 |
+| 1 | 600 | 823 ± 35 | | 11 | 34,599 | 1642 ± 26 |
+| 2 | 900 | 851 ± 34 | | 12 | 51,898 | 1783 ± 28 |
+| 3 | 1,350 | 927 ± 30 | | 13 | 77,847 | 1924 ± 30 |
+| 4 | 2,025 | 999 ± 30 | | 14 | 116,771 | 2106 ± 27 |
+| 5 | 3,037 | 1052 ± 27 | | 15 | 175,157 | 2240 ± 26 |
+| 6 | 4,556 | 1131 ± 25 | | 16 | 262,736 | 2368 ± 24 |
+| 7 | 6,834 | 1242 ± 24 | | 17 | 394,104 | 2475 ± 24 |
+| 8 | 10,251 | 1307 ± 24 | | 18 | 591,156 | 2533 ± 25 |
+| 9 | 15,377 | 1414 ± 24 | | 19 | 886,735 | 2599 ± 22 |
+
+Full strength rated 2714 ± 10 in the gauntlet of the same day, so level 19 plays about 115
+below it. The table goes into the code as it was measured:
+
+```rust,ignore
+{{#include ../../crates/engine/src/levels.rs:ratings}}
+```
+
+The guess it replaces, a straight line from 1000 at level 0 to 2400 at level 19, was too flat:
+the bottom levels are about 250 weaker than it said, and the top ones about 200 stronger. A
+level gains about 60 points at the bottom, where the randomness dominates, 110 to 180 in the
+middle, and 60 again at 18 and 19, which already find most of what full strength finds.
+
+`UCI_Elo` maps onto the table. Between two levels, the strength is in between too: the node
+count, margin and temperature are smooth in the level, so `settings_at` takes a fractional one,
+and an Elo of 1500, between level 9 (1414) and level 10 (1534), plays at level 9.7:
+
+```rust,ignore
+{{#include ../../crates/engine/src/levels.rs:level_for_elo}}
+```
+
+The `UCI_Elo` range, 1000 to 2400, covers levels 4.0 to 16.3. Levels 0 to 3 and 17 to 19 are
+there through `Skill Level`.
 
 The ratings are on the CCRL scale (engine against engine, at blitz). That isn't the same as a
 FIDE or Lichess rating, and a human's experience against a level depends on more than its
@@ -87,11 +133,22 @@ rating: how it plays, as above.
   would be noise. With `temperature` 0, the choice is the first line.
 - **Repeating the same game.** The dice come from the clock and the position, so a weak level
   varies its play from game to game.
+- **A level doesn't get stronger with more time.** It limits nodes, not time, so it plays the
+  same at any time control, while its opponents use theirs. The calibration ran at 8+0.08, far
+  faster than CCRL's 2'+1"; at CCRL's own time control the reference engines would play
+  stronger and the levels would rate lower. By how much needs a run at a slower time control.
+- **Level 0 is rated from above.** It is weaker than every reference engine: it scored 12.5%
+  against the weakest (1058) and almost nothing against the rest, so its rating has the widest
+  margin. No engine below 1000 passed the checks for the reference list.
+- **The reference engines have bugs too.** Walleye 1.3.0 ignores an en passant capture in the
+  moves it is sent, so its board goes wrong and it later plays an illegal move: about 1% of its
+  games, which it loses. CCRL's games saw the same bug, so its rating includes it.
 
 ## What it's worth
 
-At full strength nothing changes (the bench is unchanged). The levels' strengths are measured
-in the calibration run on the test Mac.
+At full strength nothing changes (the bench is unchanged). The levels span 752 to 2599 on the
+CCRL Blitz scale at 8+0.08, from a beginner's engine to a strong one, and `UCI_Elo` now means
+what it says, within each level's margin of about 25 points.
 
 ## Further reading
 

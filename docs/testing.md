@@ -165,15 +165,15 @@ the seven engines at 800 games each, a gauntlet is 5,600 games: about 4 hours on
 scripts/mac-levels.sh <engines file> <issue or PR number> [games per engine] [tc] [git ref]
 ```
 
-Rates the strength levels: each Skill Level from 0 to 19 plays a gauntlet against the 4
-engines in `levels.txt` nearest its expected rating, and the result is a table of the levels'
-ratings on the CCRL Blitz scale, posted to the issue or PR, with a progress comment updated
-after each level. The first level is expected at its provisional `UCI_Elo`, and each later
-one at the gain per level the levels rated so far showed. That only picks the opponents: each
-rating comes from the reference engines alone. `LEVELS="0 5 10"` rates some levels only, and
-`OPPONENTS=N` changes how many engines each plays. At the default 200 games per engine, the
-twenty levels are 16,000 games, about 8–11 hours on the M3 (cb2026 moves quickly at the low
-levels, which search only a few thousand nodes, but the opponents use their clocks). The
+Rates the strength levels: each Skill Level from 0 to 19 plays a gauntlet against the 4 engines
+in `levels.txt` nearest its expected rating, and the result is a table of the levels' ratings on
+the CCRL Blitz scale, posted to the issue or PR, with a progress comment updated after each
+level. The first level is expected where the mapping before the first calibration put it, and
+each later one at the gain per level the levels rated so far showed. That only picks the
+opponents: each rating comes from the reference engines alone. `LEVELS="0 5 10"` rates some
+levels only, and `OPPONENTS=N` changes how many engines each plays. At the default 200 games per
+engine, the twenty levels are 16,000 games: six and a half hours on the M3 at 8+0.08 (#103;
+cb2026 moves quickly at the low levels, which search only a few thousand nodes). The
 games are saved in `target/levels/`. The ratings feed the `UCI_Elo` mapping in
 `crates/engine/src/levels.rs`.
 

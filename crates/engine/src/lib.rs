@@ -299,10 +299,11 @@ impl Engine {
         Ok(summary)
     }
 
-    /// The level the engine plays at: [`Engine::skill_level`], or the level for
-    /// [`Engine::elo`] when the strength is limited, whichever is weaker.
-    pub fn level(&self) -> u32 {
-        let skill = self.skill_level.min(levels::FULL_STRENGTH);
+    /// The strength the engine plays at, 0 to [`levels::FULL_STRENGTH`]: [`Engine::skill_level`],
+    /// or the strength for [`Engine::elo`] when the strength is limited, whichever is weaker. An
+    /// Elo can fall between two levels.
+    pub fn level(&self) -> f64 {
+        let skill = f64::from(self.skill_level.min(levels::FULL_STRENGTH));
         if self.limit_strength {
             skill.min(levels::level_for_elo(self.elo))
         } else {
@@ -395,7 +396,7 @@ impl Engine {
 
         // ANCHOR: level_limits
         // A weaker level searches fewer nodes and several lines to choose from.
-        let level = levels::settings(self.level());
+        let level = levels::settings_at(self.level());
         let mut level_limits = limits.clone();
         if let Some(nodes) = level.nodes {
             level_limits.nodes = Some(limits.nodes.map_or(nodes, |n| n.min(nodes)));
@@ -1069,14 +1070,16 @@ mod tests {
         }
         // Level 0 picks among four candidates with plenty of randomness.
         assert!(chosen.len() > 1, "{chosen:?}");
-        // UCI_Elo maps onto a level, and never makes the engine stronger than Skill Level.
+        // UCI_Elo maps onto a strength, and never makes the engine stronger than Skill Level.
         engine.skill_level = 20;
         engine.limit_strength = true;
+        engine.elo = 1534;
+        assert_eq!(engine.level(), 10.0);
         engine.elo = 1000;
-        assert_eq!(engine.level(), 0);
+        assert_eq!(engine.level(), levels::level_for_elo(1000));
         engine.elo = 2400;
         engine.skill_level = 5;
-        assert_eq!(engine.level(), 5);
+        assert_eq!(engine.level(), 5.0);
     }
 
     #[test]

@@ -12,10 +12,14 @@
 //! sometimes, a blunder that loses a rook practically never. The engine then makes the kind of
 //! mistakes a player of that level makes: inaccuracies, more of them at lower levels.
 //!
-//! The numbers below are starting values. The PRD requires them to be **calibrated**: each level
-//! is played against reference engines with known ratings (CCRL), and the `UCI_Elo` mapping is
-//! fitted to the results. Until then the Elo figures are estimates. They are on the CCRL scale,
-//! which isn't the same as FIDE or Lichess ratings.
+//! The levels are **calibrated**, as the PRD requires: on 2026-10-18 each level played 800 games
+//! against the four reference engines nearest its strength, engines with known ratings on the
+//! CCRL Blitz list (cjus/chessengine#103, `scripts/mac-levels.sh`), and [`RATINGS`] records the
+//! result. `UCI_Elo` maps onto those ratings, between two levels where it falls between them:
+//! the settings are smooth in the level, so [`settings_at`] takes a fractional one. The ratings
+//! are on the CCRL scale, which isn't the same as FIDE or Lichess ratings, and they were
+//! measured at 8+0.08: the levels limit nodes, not time, so against engines given more time
+//! they would rate lower (see chapter 19).
 //!
 //! See the Chess Programming Wiki, [Strength](https://www.chessprogramming.org/Strength) and
 //! [Playing Strength](https://www.chessprogramming.org/Playing_Strength).
@@ -26,6 +30,18 @@ use cb2026_chess::Move;
 pub const FULL_STRENGTH: u32 = 20;
 /// The lowest and highest `UCI_Elo` accepted.
 pub const ELO_RANGE: (u32, u32) = (1000, 2400);
+
+// ANCHOR: ratings
+/// The measured rating of each level, 0 to [`FULL_STRENGTH`], on the CCRL Blitz scale. Levels
+/// 0–19: the calibration of 2026-10-18 on the test Mac (cjus/chessengine#103), 800 games each
+/// at 8+0.08 against the four reference engines nearest it, ± 22 to 41 (level 0, weaker than
+/// every reference engine, has the widest margin). Full strength: that day's gauntlet of
+/// `main`, 2714 ± 10 (cjus/chessengine#36).
+pub const RATINGS: [u32; FULL_STRENGTH as usize + 1] = [
+    752, 823, 851, 927, 999, 1052, 1131, 1242, 1307, 1414, 1534, 1642, 1783, 1924, 2106, 2240,
+    2368, 2475, 2533, 2599, 2714,
+];
+// ANCHOR_END: ratings
 
 /// How a level plays.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -41,10 +57,16 @@ pub struct LevelSettings {
     pub temperature: f64,
 }
 
-// ANCHOR: settings
 /// The settings for `level` (0 to [`FULL_STRENGTH`]).
 pub fn settings(level: u32) -> LevelSettings {
-    if level >= FULL_STRENGTH {
+    settings_at(f64::from(level))
+}
+
+// ANCHOR: settings
+/// The settings at a strength `level` from 0 to [`FULL_STRENGTH`], which can fall between two
+/// levels: `UCI_Elo` maps onto in-between strengths.
+pub fn settings_at(level: f64) -> LevelSettings {
+    if level >= f64::from(FULL_STRENGTH) {
         return LevelSettings {
             nodes: None,
             candidates: 1,
@@ -52,23 +74,46 @@ pub fn settings(level: u32) -> LevelSettings {
             temperature: 0.0,
         };
     }
-    let level = level as i32;
+    let level = level.max(0.0);
+    // 1.5 to the whole levels, then to the fraction, so that a whole level's node count is exact.
+    let growth = 1.5f64.powi(level.floor() as i32) * 1.5f64.powf(level.fract());
     LevelSettings {
         // 400 nodes at level 0, growing by half each level: about 890,000 at level 19.
-        nodes: Some((400.0 * 1.5f64.powi(level)) as u64),
+        nodes: Some((400.0 * growth) as u64),
         candidates: 4,
-        margin: 300 - 15 * level,
-        temperature: f64::from(120 - 6 * level),
+        margin: (300.0 - 15.0 * level).round() as i32,
+        temperature: 120.0 - 6.0 * level,
     }
 }
 // ANCHOR_END: settings
 
-/// The level for a `UCI_Elo` setting: a straight line from 1000 (level 0) to 2400 (level 19).
-/// Provisional, until the levels are calibrated.
-pub fn level_for_elo(elo: u32) -> u32 {
+// ANCHOR: level_for_elo
+/// The strength for a `UCI_Elo` setting (clamped to [`ELO_RANGE`]): the level with that measured
+/// rating in [`RATINGS`], interpolated linearly between the two levels it falls between.
+pub fn level_for_elo(elo: u32) -> f64 {
     let (low, high) = ELO_RANGE;
     let elo = elo.clamp(low, high);
-    ((elo - low) * (FULL_STRENGTH - 1) + (high - low) / 2) / (high - low)
+    // The first level rated at least `elo`; there is one, since full strength is above the range.
+    let above = RATINGS
+        .iter()
+        .position(|&r| r >= elo)
+        .unwrap_or(RATINGS.len() - 1);
+    if above == 0 {
+        return 0.0;
+    }
+    let (below_rating, above_rating) = (RATINGS[above - 1], RATINGS[above]);
+    (above - 1) as f64 + f64::from(elo - below_rating) / f64::from(above_rating - below_rating)
+}
+// ANCHOR_END: level_for_elo
+
+/// The rating of a strength `level`, interpolated in [`RATINGS`] (the inverse of
+/// [`level_for_elo`]).
+pub fn rating(level: f64) -> u32 {
+    let level = level.clamp(0.0, f64::from(FULL_STRENGTH));
+    let below = (level.floor() as usize).min(FULL_STRENGTH as usize - 1);
+    let fraction = level - below as f64;
+    let (low, high) = (f64::from(RATINGS[below]), f64::from(RATINGS[below + 1]));
+    (low + fraction * (high - low)).round() as u32
 }
 
 // ANCHOR: choose
@@ -121,12 +166,35 @@ mod tests {
     }
 
     #[test]
-    fn elo_maps_onto_levels() {
-        assert_eq!(level_for_elo(500), 0);
-        assert_eq!(level_for_elo(1000), 0);
-        assert_eq!(level_for_elo(2400), 19);
-        assert_eq!(level_for_elo(3000), 19);
-        assert!(level_for_elo(1700) > 8 && level_for_elo(1700) < 11);
+    fn whole_levels_keep_their_settings() {
+        assert_eq!(settings(5).nodes, Some(3037));
+        assert_eq!(settings(10).nodes, Some(23066));
+        assert_eq!(settings(19).nodes, Some(886_735));
+        assert_eq!(settings(10).margin, 150);
+        // In between, every setting lies between the two levels'.
+        let (low, mid, high) = (settings(9), settings_at(9.5), settings(10));
+        assert!(low.nodes < mid.nodes && mid.nodes < high.nodes);
+        assert!(low.margin > mid.margin && mid.margin > high.margin);
+        assert!(low.temperature > mid.temperature && mid.temperature > high.temperature);
+    }
+
+    #[test]
+    fn elo_maps_onto_the_measured_ratings() {
+        // Each level is stronger than the one below it.
+        assert!(RATINGS.windows(2).all(|pair| pair[0] < pair[1]));
+        // A level's own rating maps onto it exactly, and the range's ends onto in-between
+        // strengths: 1000 just above level 4 (999), 2400 between levels 16 (2368) and 17 (2475).
+        assert_eq!(level_for_elo(RATINGS[10]), 10.0);
+        assert!(level_for_elo(1000) > 4.0 && level_for_elo(1000) < 4.1);
+        assert!(level_for_elo(2400) > 16.0 && level_for_elo(2400) < 17.0);
+        // Outside the range, the nearest end.
+        assert_eq!(level_for_elo(500), level_for_elo(1000));
+        assert_eq!(level_for_elo(3000), level_for_elo(2400));
+        // And back: the rating of the strength for an Elo is that Elo.
+        for elo in (ELO_RANGE.0..=ELO_RANGE.1).step_by(50) {
+            assert_eq!(rating(level_for_elo(elo)), elo, "{elo}");
+        }
+        assert_eq!(rating(f64::from(FULL_STRENGTH)), 2714);
     }
 
     #[test]

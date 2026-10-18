@@ -6,8 +6,8 @@
 # Each Skill Level (0 to 19; 20 is full strength) plays a gauntlet against the reference
 # engines nearest its expected rating, and the gauntlet tool fits its rating on their scale
 # (CCRL Blitz). The engines file is levels.txt from scripts/fetch-gauntlet-engines.sh: twelve
-# engines rated 1058 to 3049. The first level is expected at its provisional UCI_Elo (1000 +
-# level × 1400 / 19, as in crates/engine/src/levels.rs). After that, each level is expected to
+# engines rated 1058 to 3049. The first level is expected where the mapping before the first
+# calibration put it (1000 + level × 1400 / 19). After that, each level is expected to
 # gain as much per level as the last two rated levels did: at least 30 points, and the
 # provisional 73 until two are rated; a level that won or lost every game counts as 200 past
 # its bound. It plays the 4 engines nearest that (OPPONENTS=N for another number). Only the
@@ -34,7 +34,8 @@ TC="${4:-8+0.08}"
 REF="${5:-origin/main}"
 LEVELS="${LEVELS:-0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19}"
 NEAR="${OPPONENTS:-4}"
-# The provisional UCI_Elo of level 0 and level 19, the smallest gain per level expected, and
+# The UCI_Elo of level 0 and level 19 before the first calibration (cjus/chessengine#103), the
+# first guess; the smallest gain per level expected; and
 # how far past its bound a level that won or lost every game is expected.
 ELO_LOW=1000
 ELO_HIGH=2400

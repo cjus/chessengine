@@ -750,20 +750,25 @@ impl Shell {
     }
 
     /// Lists every part of the position's Zobrist key, then their XOR.
-    /// The engine's strength setting, in words.
+    /// The engine's strength setting, in words, with its measured rating.
     fn strength_text(&self) -> String {
         let level = self.engine.level();
-        if level >= levels::FULL_STRENGTH {
-            return "Strength: full".to_string();
+        if level >= f64::from(levels::FULL_STRENGTH) {
+            return format!(
+                "Strength: full, about {} Elo",
+                levels::RATINGS[levels::FULL_STRENGTH as usize]
+            );
         }
-        let settings = levels::settings(level);
-        let elo = if self.engine.limit_strength {
-            format!(", about {} Elo (provisional)", self.engine.elo)
+        let settings = levels::settings_at(level);
+        // A whole level as it is ("level 5"); an Elo between two levels to a tenth ("level 9.7").
+        let name = if level.fract() == 0.0 {
+            format!("{level}")
         } else {
-            String::new()
+            format!("{level:.1}")
         };
         format!(
-            "Strength: level {level}{elo}: {} nodes per move, choosing among the best {} moves",
+            "Strength: level {name}, about {} Elo: {} nodes per move, choosing among the best {} moves",
+            levels::rating(level),
             settings.nodes.unwrap_or_default(),
             settings.candidates
         )
@@ -1636,14 +1641,28 @@ mod tests {
         );
         assert!(shell.execute("fen").output.starts_with("bbqnnrkr/"));
         assert!(shell.execute("new960 960").output.starts_with("Usage"));
-        assert_eq!(shell.execute("level 20").output, "Strength: full");
+        assert_eq!(
+            shell.execute("level 20").output,
+            "Strength: full, about 2714 Elo"
+        );
         assert!(
             shell
                 .execute("level 5")
                 .output
-                .starts_with("Strength: level 5: 3037 nodes")
+                .starts_with("Strength: level 5, about 1052 Elo: 3037 nodes")
         );
-        assert!(shell.execute("elo 1300").output.contains("about 1300 Elo"));
+        // Skill Level 5 still caps the strength, and the text says what the engine plays at.
+        let out = shell.execute("elo 1300").output;
+        assert!(
+            out.starts_with("Strength: level 5, about 1052 Elo"),
+            "{out}"
+        );
+        shell.execute("level 20");
+        let out = shell.execute("elo 1300").output;
+        assert!(
+            out.starts_with("Strength: level 7.9, about 1300 Elo"),
+            "{out}"
+        );
         assert!(shell.execute("elo 900").output.starts_with("Usage"));
         assert!(shell.execute("level 21").output.starts_with("Usage"));
         shell.execute("elo off");

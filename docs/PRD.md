@@ -610,6 +610,13 @@ measures it again with the robustness run. That is only 45 ± 14 above stage 16.
 that passed their SPRTs add up to about +136 Elo in self-play, so against other engines they
 gained about a third of that: self-play SPRTs find gains reliably but overstate their size.
 
+M4's levels are calibrated (2026-10-18, cjus/chessengine#103): Skill Levels 0–19 rated **752 to
+2599** (± 22 to 41), 800 games each at 8+0.08 against the four reference engines nearest each,
+and `UCI_Elo` maps onto those ratings (`crates/engine/src/levels.rs`, chapter 19). The levels
+limit nodes, so at slower time controls they would rate lower; whether to check that, and
+whether to widen `UCI_Elo` beyond 1000–2400, is cjus/chessengine#106. M4 still needs the GUI
+compatibility matrix (cjus/chessengine#37).
+
 ## Risks
 
 | Risk | Impact | Mitigation |
