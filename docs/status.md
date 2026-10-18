@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-17, 18:55 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-17, 23:10 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -20,7 +20,7 @@ failures in matches can no longer count as draws, #91). 2026-10-17: one `Game` t
 chessgui, #94, merged; buckets at 40+0.4 about even, +1.6 ± 6.3 with no verdict, so they stay
 off, #92; the gauntlet reference engines chosen, built by `scripts/fetch-gauntlet-engines.sh`,
 #36; double extensions merged off by default after no verdict, +3.6 ± 4.9, #96; the M2/M3
-gauntlets running on the M3, #36.*
+gauntlets running on the M3, #36; **M2 passed**, stage 14 rated 2442 ± 11 by gauntlet, #36.*
 
 ## Stages
 
@@ -73,12 +73,12 @@ gauntlets running on the M3, #36.*
 
 **Running now: the M2/M3 rating gauntlets (#36)**, started on the M3 on 2026-10-17 at about
 18:45 MDT: cb2026 at `stage-14-pruning`, then `stage-16-tuning`, then `main`, each playing 800
-games against each of the seven reference engines at 8+0.08, about 4.5 hours a version and 13.5
-in all. Each version posts a `<!-- gauntlet -->` comment to #36 with its rating (or **Gauntlet
-run failed** and the end of its log). On the results, record the M2 gate (stage 14, about 2200
-CCRL) and the M3 gate (stage 16, 2400 or more) in the PRD's "Milestones", the ledger and this
-file, and `main`'s rating with them; then write the level calibration script (#36's second
-half). Nothing is waiting for an SPRT. If the gauntlet stops early, ask Carlos for `tail -20
+games against each of the seven reference engines at 8+0.08, about 4 hours a version. Each
+version posts a `<!-- gauntlet -->` comment to #36 with its rating (or **Gauntlet run failed**
+and the end of its log). Stage 14 finished at 22:52 MDT: **2442 ± 11**, so M2 passed (recorded
+in the PRD's "Milestones" and the ledger). Stage 16 is next, then `main`, about 03:00 and 07:00
+MDT on 2026-10-18. On their results, record the M3 gate (stage 16, 2400 or more) and `main`'s
+rating in the same places; then write the level calibration script (#36's second half). Nothing is waiting for an SPRT. If the gauntlet stops early, ask Carlos for `tail -20
 ~/gauntlet-36.log` and `pgrep -fl "gauntlet|cb2026"` on the M3.
 
 When several PRs wait for the M3, they run one at a time, and **before each SPRT starts, rebase
@@ -107,15 +107,15 @@ asks: build `main` (`cargo build --release`), check `bench` matches `main`'s, th
 
 ## Milestones
 
-`docs/PRD.md`, "Milestones", defines the gates and records the results. M0 is passed; the rest
-wait on rating gauntlets or GUI checks.
+`docs/PRD.md`, "Milestones", defines the gates and records the results. M0 and M2 are passed; the
+rest wait on rating gauntlets or GUI checks.
 
 | Milestone | Scope | State |
 | --- | --- | --- |
 | M0 Foundations | stages 1–3 | **Passed** 2026-10-11: perft suites exact, 278.8 Mnps on the M1 Max (#20); 369.6 on the M3 Max |
 | M1 Playable | stages 4–7 | Merged; GUI check still open (#24) |
-| M2 Classical search | stages 8–14 | Merged; gauntlet (~2200 CCRL) waits on #36 |
-| M3 Evaluation | stages 15–16 | Merged; gauntlet (≥2400 CCRL) waits on #36 |
+| M2 Classical search | stages 8–14 | **Passed** 2026-10-18: stage 14 rated 2442 ± 11 by gauntlet at 8+0.08 (gate ~2200 CCRL), #36 |
+| M3 Evaluation | stages 15–16 | Merged; gauntlet (≥2400 CCRL) running, #36 |
 | M4 Complete engine | stages 17–20 | Merged (#46–#55); GUI matrix (#37) and level calibration (#36) open |
 | M5 v1.0 | strength work, release | Started (the M5 branches above); release workflow merged (#40) |
 | M6 NNUE | stage 21 | Not started |
@@ -229,7 +229,7 @@ Run the full test suite on every commit you replay, not only at the tip: each be
 2. Milestone gates: the reference engines are chosen (#36, 2026-10-17; `docs/PRD.md`,
    "Testing and strength measurement"), and `scripts/fetch-gauntlet-engines.sh` builds them. Carlos
    started the M2 and M3 gauntlets on the M3 on 2026-10-17 (the stage 14 and 16 tags), then one
-   on `main` (see "Running now").
+   on `main` (see "Running now"). Stage 14 rated 2442 ± 11, so M2 passed.
    A smoke test of 2 games per engine on the M1 Max found no time losses, illegal moves or
    failures, and gave stage 14 2338 ± 158 and `main` 2706 ± 165: too few games to mean much,
    but the list brackets both. Level calibration's script is still to write, using

@@ -111,6 +111,14 @@ RESULTS="$(sed -n '/^Results:/,$p' "$LOG")"
 # Only the engines that had a problem; the rest had none.
 PROBLEMS="$(grep 'Problems for' "$LOG" \
   | grep -v ': 0 time losses, 0 illegal moves, 0 failures, 0 aborted games' | names)" || true
+if [[ -n "$PROBLEMS" ]]; then
+  PROBLEMS="
+\`\`\`
+$PROBLEMS
+\`\`\`"
+else
+  PROBLEMS="none, for any engine."
+fi
 gh issue comment "$TARGET" --body "<!-- gauntlet -->
 **Gauntlet result** (run by \`scripts/mac-gauntlet.sh\` on $MACHINE)
 
@@ -120,8 +128,5 @@ gh issue comment "$TARGET" --body "<!-- gauntlet -->
 $RESULTS
 \`\`\`
 
-Time losses, illegal moves, failures and aborted games: ${PROBLEMS:+
-\`\`\`
-$PROBLEMS
-\`\`\`}${PROBLEMS:-none, for any engine.}"
+Time losses, illegal moves, failures and aborted games: $PROBLEMS"
 echo "Posted the result to #$TARGET."
