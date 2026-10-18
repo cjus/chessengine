@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-17, 15:04 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-17, 18:55 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -18,8 +18,9 @@ transposition table buckets failed, −8.8 ± 8.6, so they are off by default, #
 failures in matches can no longer count as draws, #91). 2026-10-17: one `Game` type in
 `cb2026-chess` decides when every game is over, for the shell, the match tool, self-play and
 chessgui, #94, merged; buckets at 40+0.4 about even, +1.6 ± 6.3 with no verdict, so they stay
-off, #92; double extensions running on the M3, #96; the gauntlet reference engines chosen,
-built by `scripts/fetch-gauntlet-engines.sh`, #36.*
+off, #92; the gauntlet reference engines chosen, built by `scripts/fetch-gauntlet-engines.sh`,
+#36; double extensions merged off by default after no verdict, +3.6 ± 4.9, #96; the M2/M3
+gauntlets running on the M3, #36.*
 
 ## Stages
 
@@ -68,17 +69,17 @@ built by `scripts/fetch-gauntlet-engines.sh`, #36.*
 | M5: transposition table buckets (chapter 8.1) | #86 | 1098926 (1114877 with buckets on) | Merged, off by default: −8.8 ± 8.6, 2,685 games, [0, 5] failed (M3 Max) |
 | M5: transposition table buckets at 40+0.4 (chapter 8.1) | #92 | 1098926 (1114877 with buckets on) | Merged as a record, off by default: +1.6 ± 6.3, 4,630 games, [0, 5] at 40+0.4 no verdict (LLR −0.45), stopped (M3 Max) |
 | `cb2026_chess::game::Game`: one record of a game and one set of end-of-game rules, moved from chessgui and used by the shell, the match tool and self-play | #94 | 1098926 | Merged, no functional change; chessgui uses it from cjus/chessgui#31 |
-| M5: double extensions (chapter 14.1) | #96, `claude/m5-double-extensions` | 1248666 | Draft, its SPRT running on the M3 Max: [0, 5] at 8+0.08 |
+| M5: double extensions (chapter 14.1) | #96 | 1098926 (1248666 with double extensions on) | Merged, off by default: +3.6 ± 4.9, 8,670 games, [0, 5] no verdict (LLR 0.92), stopped (M3 Max) |
 
-**Running now: #96** (double extensions: a singular hash move that no other move comes within
-20 centipawns of `singular_beta` is searched two plies deeper, off the principal variation, at
-most 6 times a line), started on the M3 on 2026-10-17 at about 12:00 MDT. A new session should
-restart the watcher, `scripts/watch-sprt.sh 96`, or just read #96's comments if the result is
-already there. Then rebase #96 onto `main` (in `docs/status.md` take `main`'s side and edit
-it), record the result in chapter 14.1, the module docs, the ledger and this file, and merge.
-If it fails, switch `double_extension` off by default (with its comment, and the shell's help)
-and merge as a record; a wider margin (50 makes the depth-10 tree 30% bigger instead of 44%)
-would be the next try.
+**Running now: the M2/M3 rating gauntlets (#36)**, started on the M3 on 2026-10-17 at about
+18:45 MDT: cb2026 at `stage-14-pruning`, then `stage-16-tuning`, then `main`, each playing 800
+games against each of the seven reference engines at 8+0.08, about 4.5 hours a version and 13.5
+in all. Each version posts a `<!-- gauntlet -->` comment to #36 with its rating (or **Gauntlet
+run failed** and the end of its log). On the results, record the M2 gate (stage 14, about 2200
+CCRL) and the M3 gate (stage 16, 2400 or more) in the PRD's "Milestones", the ledger and this
+file, and `main`'s rating with them; then write the level calibration script (#36's second
+half). Nothing is waiting for an SPRT. If the gauntlet stops early, ask Carlos for `tail -20
+~/gauntlet-36.log` and `pgrep -fl "gauntlet|cb2026"` on the M3.
 
 When several PRs wait for the M3, they run one at a time, and **before each SPRT starts, rebase
 that PR onto the current `main`** and re-measure its `Bench:` line: `scripts/mac-sprt.sh` plays
@@ -123,8 +124,8 @@ wait on rating gauntlets or GUI checks.
 
 The open [`needs-carlos` issues](https://github.com/cjus/chessengine/issues?q=is%3Aopen+label%3Aneeds-carlos):
 
-- #36: run the M2/M3 gauntlets on the M3, after #96's SPRT. The engines are chosen (2026-10-17)
-  and `scripts/fetch-gauntlet-engines.sh` builds them; the steps are in the issue.
+- #36: the M2/M3 gauntlets, running on the M3 since 2026-10-17 (see "Running now"); the level
+  calibration follows.
 - #37: GUI compatibility matrix; Lichess bot account.
 - #24 (M1 GUI games).
 
@@ -226,8 +227,9 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    time taken, clock) say which kind it is, and every SPRT comment lists them. The M5 robustness
    run (10,000+ games at 1+0.01, 10+0.1 and 40/60) is the final check.
 2. Milestone gates: the reference engines are chosen (#36, 2026-10-17; `docs/PRD.md`,
-   "Testing and strength measurement"), and `scripts/fetch-gauntlet-engines.sh` builds them. Next,
-   Carlos runs the M2 and M3 gauntlets on the M3 (the stage 14 and 16 tags), then one on `main`.
+   "Testing and strength measurement"), and `scripts/fetch-gauntlet-engines.sh` builds them. Carlos
+   started the M2 and M3 gauntlets on the M3 on 2026-10-17 (the stage 14 and 16 tags), then one
+   on `main` (see "Running now").
    A smoke test of 2 games per engine on the M1 Max found no time losses, illegal moves or
    failures, and gave stage 14 2338 ± 158 and `main` 2706 ± 165: too few games to mean much,
    but the list brackets both. Level calibration's script is still to write, using
@@ -242,7 +244,8 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    against 3, 7,476 games, about 6 hours) and transposition table buckets (#86, −8.8 ± 8.6,
    2,685 games, about 2 hours; off by default). No verdict, off: history in
    LMR's first version (#70) and, on 2026-10-17 at 40+0.4, transposition table buckets (#92,
-   +1.6 ± 6.3 over 4,630 games, about 18 hours, stopped). Failed as a simplification, so kept:
+   +1.6 ± 6.3 over 4,630 games, about 18 hours, stopped) and, at 8+0.08, double extensions
+   (#96, +3.6 ± 4.9 over 8,670 games, about 7 hours, stopped). Failed as a simplification, so kept:
    history off (#73, −17.7) and, on
    2026-10-14 at the long time control 40+0.4, adaptive time off (#76, −13.8 ± 8.6 over 2,599
    games; about 255 games an hour on the M3, 10 hours).
@@ -252,9 +255,10 @@ Run the full test suite on every commit you replay, not only at the tip: each be
      which is about where Stockfish starts; `singular_margin` 3 passed too (#82), and 4
      failed (#84). That settles the start depth and the margin for now. Double extensions,
      which extend a move two plies when it is singular by a wide margin (as in Stockfish,
-     GPL-3.0), are running now, #96. Still untried: the hash entry's depth margin
-     (`singular_tt_depth_margin`, 3). Gains this size take 9,000–14,000 games, 7–13 hours on
-     the M3.
+     GPL-3.0), had no verdict (#96, +3.6 ± 4.9) and are off; next for them, a margin of 50
+     (the depth-10 tree 30% bigger instead of 44%), a limit of 3 (23%), or 40+0.4. Still
+     untried: the hash entry's depth margin (`singular_tt_depth_margin`, 3). Gains this size
+     take 9,000–14,000 games, 7–13 hours on the M3.
    - **Tuning adaptive time at 40+0.4**: the gain there (about 14 Elo) is smaller than at
      8+0.08 (about 33), and the scale's numbers were set by hand. Each run at 40+0.4 takes
      about 10 hours, so it waits behind cheaper candidates.
@@ -262,7 +266,7 @@ Run the full test suite on every commit you replay, not only at the tip: each be
      about even at 40+0.4. A small table at 8+0.08 would test a full table cheaply, but a gain
      there would say little about the default 16 MB.
    - **The milestone gauntlets** (item 2): with about +115 Elo of M5 gains since the M2/M3
-     gates were set, a rating run now would say a lot. #36 has the engines; it waits for the M3.
+     gates were set, a rating run now would say a lot. Running now, #36.
 
    Improving is set aside (Carlos, 2026-10-12) after three failed versions (#60, #63, #65). The results point at
    reverse futility pruning, and the late-move-pruning part may have helped, so later

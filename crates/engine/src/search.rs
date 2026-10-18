@@ -196,8 +196,9 @@
 //! Starting the test from depth 6 instead of 8 gained +5.0 ± 4.1 Elo after 12,282 games
 //! (cjus/chessengine#78), and from depth 4 instead of 6 another +6.1 ± 4.8 after 9,057
 //! (cjus/chessengine#80). A `singular_margin` of 3 instead of 2 gained +5.2 ± 4.2 after 11,400
-//! (cjus/chessengine#82). Double extensions make the bench 14% bigger; they wait for their SPRT
-//! (cjus/chessengine#96).
+//! (cjus/chessengine#82). Double extensions, which make the bench 14% bigger, had no verdict:
+//! +3.6 ± 4.9 Elo after 8,670 games, stopped there (cjus/chessengine#96). They are off by
+//! default.
 //!
 //! ## Tablebase probes (stage 18)
 //!
@@ -500,7 +501,9 @@ impl Default for Techniques {
             // Off by default: it didn't measure stronger (see the module documentation).
             check_extension: false,
             singular_extension: true,
-            double_extension: true,
+            // Off by default: no verdict, +3.6 ± 4.9 Elo after 8,670 games at 8+0.08
+            // (cjus/chessengine#96); see chapter 14.1.
+            double_extension: false,
             multi_cut: true,
             negative_extension: true,
             iir: true,
@@ -2077,18 +2080,20 @@ mod tests {
             assert_eq!(searcher.double_extensions, 0);
             searcher.stats()
         };
-        let on = counts(Techniques::default(), SearchParams::default());
-        assert!(on.double_extensions > 0);
-        assert!(on.double_extensions <= on.singular_extensions);
-        let off = Techniques {
-            double_extension: false,
+        let with = Techniques {
+            double_extension: true,
             ..Techniques::default()
         };
-        assert_eq!(counts(off, SearchParams::default()).double_extensions, 0);
+        let on = counts(with, SearchParams::default());
+        assert!(on.double_extensions > 0);
+        assert!(on.double_extensions <= on.singular_extensions);
+        // Off by default.
+        let off = counts(Techniques::default(), SearchParams::default());
+        assert_eq!(off.double_extensions, 0);
         let no_room = SearchParams {
             double_extension_limit: 0,
             ..SearchParams::default()
         };
-        assert_eq!(counts(Techniques::default(), no_room).double_extensions, 0);
+        assert_eq!(counts(with, no_room).double_extensions, 0);
     }
 }

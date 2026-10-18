@@ -165,7 +165,7 @@ Commands:
   set singular on|off  Singular extensions (a hash move far better than the rest: a ply deeper)
   set multicut on|off  Multi-cut: cut off a node where two moves beat beta (needs singular)
   set doubleext on|off Double extensions: a hash move singular by a wide margin, two plies
-                       deeper (needs singular)
+                       deeper (needs singular; default off)
   set negext on|off    Negative extensions: a hash move that isn't singular but beats beta, a
                        ply shallower (needs singular)
   set iir on|off       Internal iterative reductions (no hash move: a ply shallower)

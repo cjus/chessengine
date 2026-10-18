@@ -154,7 +154,14 @@ still would be. With the margin at 20 the depth-10 tree is 44% bigger and the be
 (1,248,666 nodes against 1,098,926). A margin of 50 makes the tree 30% bigger, and 100 only 9%.
 At this depth the limit hardly matters: at a margin of 50, a limit of 12 gives the same tree as
 6, and only a limit of 3 takes the margin of 20's growth down to 23%. The margin is small, as in
-Stockfish, and the games decide (see "What it's worth").
+Stockfish.
+
+**Double extensions had no verdict.** An SPRT against the same engine without them found about
++4 Elo, give or take 5, after 8,670 games (see "What it's worth"). Like the first version of
+history in LMR (below), that sits between the test's two hypotheses, 0 and 5 Elo, where an SPRT
+takes longest, so the test was stopped and double extensions are off by default (`set doubleext
+on` turns them on). The candidates for another test are the ones that grow the tree less, a
+margin of 50 or a limit of 3, and the long time control, 40+0.4.
 
 The search without the hash move asks a different question from the node's own search, so it
 must not mix with it. It neither reads nor writes the transposition table (an entry about the
@@ -408,7 +415,7 @@ that it is small, about **+5 Elo**, and it took over 14,000 of them to say so.
 | Singular extensions from depth 4 vs `main` (from depth 6), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+6.1 ± 4.8 Elo** over 9,057 games (+2127 −1969 =4961): passed (LLR 2.96) |
 | `singular_margin` 3 vs `main` (2, from depth 4), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+5.2 ± 4.2 Elo** over 11,400 games (+2552 −2381 =6467): passed (LLR 2.96) |
 | `singular_margin` 4 vs `main` (3), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−1.8 ± 5.3 Elo** over 7,476 games (+1670 −1709 =4097): failed (LLR −2.95); the margin stays at 3 |
-| Double extensions (margin 20, at most 6 a line) vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | Waiting for its SPRT (cjus/chessengine#96) |
+| Double extensions (margin 20, at most 6 a line) vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | +3.6 ± 4.9 Elo over 8,670 games (+1988 −1897 =4785): no verdict (LLR 0.92), stopped; off by default |
 
 ## Further reading
 
