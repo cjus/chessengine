@@ -569,6 +569,15 @@ release tags. Releases build binaries for every platform in the table above.
 **Gate results.** M0 passed on 2026-10-11: every perft suite exact (665,777,044 nodes, 0
 failures) at 278.8 million nodes/s on the M1 Max (cjus/chessengine#20).
 
+M2 passed on 2026-10-18: `stage-14-pruning` rated **2442 ± 11** against the seven reference
+engines, 800 games each (5,600 in all, +2058 −2746 =796) at 8+0.08 on the M3 Max
+(cjus/chessengine#36), against a gate of about 2200. Its performance against each engine
+ranged from 2395 (against Blunder 5.0.0) to 2494 (Blunder 8.5.5). The ± is the statistical
+error only: it holds the reference ratings fixed, and the time control is much faster than
+CCRL's (see "Rating"). cb2026 had no time losses, illegal moves or failures; Stash 15.3 had
+one time loss and five failures. Stages 8–14 each have an SPRT result in
+`docs/elo-ledger.md`.
+
 ## Risks
 
 | Risk | Impact | Mitigation |
