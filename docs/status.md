@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-18, 16:37 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-18, 16:47 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -75,7 +75,14 @@ written, #104; the levels calibrated, 752–2599, and `UCI_Elo` fitted to them, 
 | `cb2026_chess::game::Game`: one record of a game and one set of end-of-game rules, moved from chessgui and used by the shell, the match tool and self-play | #94 | 1098926 | Merged, no functional change; chessgui uses it from cjus/chessgui#31 |
 | M5: double extensions (chapter 14.1) | #96 | 1098926 (1248666 with double extensions on) | Merged, off by default: +3.6 ± 4.9, 8,670 games, [0, 5] no verdict (LLR 0.92), stopped (M3 Max) |
 
-**Nothing is running on the M3.** The level calibration (#103) finished on 2026-10-18 at about
+**Running now: the levels at 40+0.4 (#106)**, started on the M3 on 2026-10-18 at about 16:45
+MDT: `LEVELS="4 10 16" scripts/mac-levels.sh ... 106 200 40+0.4`, levels 4, 10 and 16 (999,
+1534 and 2368 at 8+0.08) against the same kind of opponents at the long time control, 2,400
+games in about 3–4 hours. Its result posts to #106. If they rate within about 50 of their
+8+0.08 ratings, the table stands; if much lower, propose recalibrating at 40+0.4. If it stops
+early, ask Carlos for `tail -20 ~/levels-ltc.log`.
+
+The level calibration (#103) finished on 2026-10-18 at about
 16:10 MDT, 16,000 games in six and a half hours: Skill Levels 0–19 rated **752 to 2599**, and
 `UCI_Elo` now maps onto those ratings, interpolating between levels (`levels::RATINGS`,
 `level_for_elo`, `settings_at`; chapter 19). Walleye 1.3.0 lost about 1% of its games by an
@@ -134,8 +141,8 @@ passed; the rest wait on GUI checks, level calibration or the v1.0 work.
 
 The open [`needs-carlos` issues](https://github.com/cjus/chessengine/issues?q=is%3Aopen+label%3Aneeds-carlos):
 
-- #106: check three levels at 40+0.4 (about 3–4 hours)? (Its other question, the `UCI_Elo`
-  range, is answered: 800–2600.)
+- #106: the check of three levels at 40+0.4, running (see "Running now"). Its other
+  question, the `UCI_Elo` range, is answered: 800–2600.
 - #37: GUI compatibility matrix; Lichess bot account.
 - #24 (M1 GUI games).
 
