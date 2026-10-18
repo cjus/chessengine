@@ -161,6 +161,11 @@ pub(crate) const SWITCHES: &[Switch] = &[
         flag: |e| &mut e.techniques.multi_cut,
     },
     Switch {
+        name: "doubleext",
+        description: "Double extensions (a singular hash move by a wide margin: two plies deeper)",
+        flag: |e| &mut e.techniques.double_extension,
+    },
+    Switch {
         name: "negext",
         description: "Negative extensions (in the singular extensions' search)",
         flag: |e| &mut e.techniques.negative_extension,
@@ -371,12 +376,13 @@ impl Shell {
             s.pvs_researches
         ));
         out.push_str(&format!(
-            "  Singular extensions: {} searches, {} hash moves extended ({:.0}%), {} multi-cuts, {} searched shallower\n",
+            "  Singular extensions: {} searches, {} hash moves extended ({:.0}%), {} multi-cuts, {} searched shallower, {} extended twice\n",
             s.singular_searches,
             s.singular_extensions,
             percent(s.singular_extensions, s.singular_searches),
             s.multi_cuts,
-            s.negative_extensions
+            s.negative_extensions,
+            s.double_extensions
         ));
         out.push_str("Counts say how often a technique fired, not how many nodes it saved: `ab <name>` measures that.");
         Response::text(out)
@@ -664,6 +670,7 @@ fn render_tree(root: &Position, tree: &SearchTree) -> String {
                 None
             }
             Note::SingularExtension(mv) => Some(format!("{} singular, extended", san_of(mv))),
+            Note::DoubleExtension(mv) => Some(format!("{} extended a second ply", san_of(mv))),
             Note::MultiCut => Some("multi-cut".to_string()),
             Note::NegativeExtension(mv) => {
                 Some(format!("{} not singular, searched shallower", san_of(mv)))

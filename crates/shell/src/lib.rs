@@ -164,6 +164,8 @@ Commands:
   set checkext on|off  Check extensions: search checking moves one ply deeper (default off)
   set singular on|off  Singular extensions (a hash move far better than the rest: a ply deeper)
   set multicut on|off  Multi-cut: cut off a node where two moves beat beta (needs singular)
+  set doubleext on|off Double extensions: a hash move singular by a wide margin, two plies
+                       deeper (needs singular; default off)
   set negext on|off    Negative extensions: a hash move that isn't singular but beats beta, a
                        ply shallower (needs singular)
   set iir on|off       Internal iterative reductions (no hash move: a ply shallower)
@@ -1109,7 +1111,7 @@ fn parse_move(pos: &Position, text: &str) -> Option<Move> {
 }
 
 /// Usage for the `set` command.
-const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set threads <N> | set eval hand|tuned | set alphabeta|quiescence|mvvlva|tt|ttbuckets|killers|countermoves|history|conthist|pvs|aspiration|nullmove|lmr|histlmr|lmp|rfp|razoring|futility|seeprune|delta|seeorder|checkext|singular|multicut|negext|iir|improving|tmstability|tmscore|pst|tapered|mobility|pawns|pieces|kingsafety|tempo on|off";
+const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set threads <N> | set eval hand|tuned | set alphabeta|quiescence|mvvlva|tt|ttbuckets|killers|countermoves|history|conthist|pvs|aspiration|nullmove|lmr|histlmr|lmp|rfp|razoring|futility|seeprune|delta|seeorder|checkext|singular|doubleext|multicut|negext|iir|improving|tmstability|tmscore|pst|tapered|mobility|pawns|pieces|kingsafety|tempo on|off";
 
 /// How long the engine thinks per move by default in the shell.
 const DEFAULT_MOVETIME_MS: u64 = 1000;

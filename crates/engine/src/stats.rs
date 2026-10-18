@@ -77,6 +77,9 @@ pub enum Note {
     SingularSearch(Move),
     /// No other move came close: this hash move is singular, and searched a ply deeper.
     SingularExtension(Move),
+    /// No other move came close by a wide margin either: this singular hash move is searched a
+    /// second ply deeper.
+    DoubleExtension(Move),
     /// Another move beat beta in the singular extension's search: the node is cut off.
     MultiCut,
     /// This hash move isn't singular but beats beta: it is searched shallower.
@@ -126,6 +129,8 @@ pub struct SearchStats {
     pub singular_searches: u64,
     /// Hash moves found singular and extended.
     pub singular_extensions: u64,
+    /// Singular hash moves extended a second ply (also counted in `singular_extensions`).
+    pub double_extensions: u64,
     /// Nodes cut off by multi-cut.
     pub multi_cuts: u64,
     /// Hash moves searched shallower by a negative extension.
@@ -154,6 +159,7 @@ impl SearchStats {
             Note::PvsResearch(_) => &mut self.pvs_researches,
             Note::SingularSearch(_) => &mut self.singular_searches,
             Note::SingularExtension(_) => &mut self.singular_extensions,
+            Note::DoubleExtension(_) => &mut self.double_extensions,
             Note::MultiCut => &mut self.multi_cuts,
             Note::NegativeExtension(_) => &mut self.negative_extensions,
             Note::BetaCutoff(_, index) => {
@@ -190,6 +196,7 @@ impl SearchStats {
             pvs_researches,
             singular_searches,
             singular_extensions,
+            double_extensions,
             multi_cuts,
             negative_extensions,
         } = *other;
@@ -213,6 +220,7 @@ impl SearchStats {
         self.pvs_researches += pvs_researches;
         self.singular_searches += singular_searches;
         self.singular_extensions += singular_extensions;
+        self.double_extensions += double_extensions;
         self.multi_cuts += multi_cuts;
         self.negative_extensions += negative_extensions;
     }
@@ -288,6 +296,7 @@ mod tests {
             Note::SingularSearch(mv),
             Note::SingularSearch(mv),
             Note::SingularExtension(mv),
+            Note::DoubleExtension(mv),
             Note::MultiCut,
             Note::NegativeExtension(mv),
             Note::Exit { score: 0 },
@@ -300,6 +309,7 @@ mod tests {
         assert_eq!(stats.futility, 1);
         assert_eq!(stats.singular_searches, 2);
         assert_eq!(stats.singular_extensions, 1);
+        assert_eq!(stats.double_extensions, 1);
         assert_eq!(stats.multi_cuts, 1);
         assert_eq!(stats.negative_extensions, 1);
         let mut total = stats;
@@ -308,6 +318,7 @@ mod tests {
         assert_eq!(total.singular_searches, 4);
         assert_eq!(total.multi_cuts, 2);
         assert_eq!(total.negative_extensions, 2);
+        assert_eq!(total.double_extensions, 2);
     }
 
     #[test]

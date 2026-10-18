@@ -11,8 +11,8 @@ a move, its **history** score, changes how much late move reductions take off it
 
 The techniques in this chapter came after stage 20, as strength work towards version 1.0
 (milestone M5), so no stage tag contains them: read this chapter against `main`. Like everything
-before them, each can be switched off and on: `set checkext`, `set singular`, `set multicut`,
-`set negext`, `set iir`, `set improving` and `set histlmr`.
+before them, each can be switched off and on: `set checkext`, `set singular`, `set doubleext`,
+`set multicut`, `set negext`, `set iir`, `set improving` and `set histlmr`.
 
 ## Check extensions
 
@@ -134,6 +134,35 @@ first pull winning: from 3 to 4, multi-cuts went up, where from 2 to 3 they went
 games, 4 was no better than 3, about **−2 Elo**, so the margin stays at 3 (see "What it's
 worth").
 
+The search answers one more question. Its score is the best any other move managed, so it says
+not only whether the hash move is singular but by how much. When no other move comes within
+`double_extension_margin` (20 centipawns) of `singular_beta` either, the hash move is close to
+the only move: a recapture with nothing else to do, the one defence that doesn't lose a piece.
+A mistake in its line costs the most of all, so it is searched two plies deeper instead of one.
+That is a **double extension**.
+
+Two plies at a time feed on themselves faster than one, so double extensions have two limits of
+their own, on top of the limit of twice the root depth that every extension has. They apply
+only off the principal variation, in the null-window searches that make up most of the tree.
+And a line can have at most `double_extension_limit` (6) of them: the searcher counts them on
+the way down and takes them off on the way up.
+
+They apply more often than the name suggests, because the search's score is usually not just
+under `singular_beta` but far below it. Over the six positions of "What it saves" at depth 10,
+seven singular hash moves in ten are extended twice, and with a margin of 200 centipawns a third
+still would be. With the margin at 20 the depth-10 tree is 44% bigger and the bench 14%
+(1,248,666 nodes against 1,098,926). A margin of 50 makes the tree 30% bigger, and 100 only 9%.
+At this depth the limit hardly matters: at a margin of 50, a limit of 12 gives the same tree as
+6, and only a limit of 3 takes the margin of 20's growth down to 23%. The margin is small, as in
+Stockfish.
+
+**Double extensions had no verdict.** An SPRT against the same engine without them found about
++4 Elo, give or take 5, after 8,670 games (see "What it's worth"). Like the first version of
+history in LMR (below), that sits between the test's two hypotheses, 0 and 5 Elo, where an SPRT
+takes longest, so the test was stopped and double extensions are off by default (`set doubleext
+on` turns them on). The candidates for another test are the ones that grow the tree less, a
+margin of 50 or a limit of 3, and the long time control, 40+0.4.
+
 The search without the hash move asks a different question from the node's own search, so it
 must not mix with it. It neither reads nor writes the transposition table (an entry about the
 node with all its moves would answer the wrong question, and its result would poison the
@@ -141,8 +170,8 @@ entry), it tries no null move, and IIR doesn't reduce it further. If the hash mo
 legal move, the search has nothing to search: it fails low, since nothing else comes close.
 
 Singular extensions go back to Deep Thought, the Carnegie Mellon machine that led to Deep Blue
-(Anantharaman, Campbell and Hsu, 1988). This version, multi-cut and negative extensions are as
-in Stockfish (GPL-3.0); the code is cb2026's own.
+(Anantharaman, Campbell and Hsu, 1988). This version, multi-cut, and negative and double
+extensions are as in Stockfish (GPL-3.0); the code is cb2026's own.
 
 ## Internal iterative reductions
 
@@ -360,6 +389,11 @@ that it is small, about **+5 Elo**, and it took over 14,000 of them to say so.
   off with, on the strength of a score from an earlier search. If that score was too
   optimistic, the move's shallower search is the one that has to find out. It applies only
   where the singular test has run, with an entry at most 3 plies shallower than the node.
+- **Count along the line, and take the count off on every way out.** The limit on double
+  extensions is per line, so the searcher keeps a count that each double-extended move adds to
+  before its search and takes off after it. A count that some exit skips (a cutoff, a stopped
+  search) only grows, until no move can be extended twice. A unit test checks that the count is
+  back at zero after a search.
 - **Two plies back may be a check.** In check, cb2026 computes no static evaluation (it is
   recorded as `-INFINITY`), so a side that was in check two plies ago always counts as
   improving. Some engines look four plies back in that case.
@@ -381,6 +415,7 @@ that it is small, about **+5 Elo**, and it took over 14,000 of them to say so.
 | Singular extensions from depth 4 vs `main` (from depth 6), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+6.1 ± 4.8 Elo** over 9,057 games (+2127 −1969 =4961): passed (LLR 2.96) |
 | `singular_margin` 3 vs `main` (2, from depth 4), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+5.2 ± 4.2 Elo** over 11,400 games (+2552 −2381 =6467): passed (LLR 2.96) |
 | `singular_margin` 4 vs `main` (3), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−1.8 ± 5.3 Elo** over 7,476 games (+1670 −1709 =4097): failed (LLR −2.95); the margin stays at 3 |
+| Double extensions (margin 20, at most 6 a line) vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | +3.6 ± 4.9 Elo over 8,670 games (+1988 −1897 =4785): no verdict (LLR 0.92), stopped; off by default |
 
 ## Further reading
 
