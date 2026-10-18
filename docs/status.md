@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-18, 16:30 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-18, 16:37 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -23,8 +23,8 @@ off, #92; the gauntlet reference engines chosen, built by `scripts/fetch-gauntle
 gauntlets running on the M3, #36; **M2 passed**, stage 14 rated 2442 ± 11 by gauntlet, #36.
 2026-10-18: **M3 passed**, stage 16 rated 2669 ± 10, #36; `main` rated 2714 ± 10, #36; five
 engines from 1058 to 1794 chosen for the level calibration, #101, and `scripts/mac-levels.sh`
-written, #104; the levels calibrated, 752–2599, and `UCI_Elo` fitted to them, #103; the
-`UCI_Elo` range and a slower check, #106.*
+written, #104; the levels calibrated, 752–2599, and `UCI_Elo` fitted to them, #103;
+`UCI_Elo` widened to 800–2600, #106.*
 
 ## Stages
 
@@ -79,10 +79,10 @@ written, #104; the levels calibrated, 752–2599, and `UCI_Elo` fitted to them, 
 16:10 MDT, 16,000 games in six and a half hours: Skill Levels 0–19 rated **752 to 2599**, and
 `UCI_Elo` now maps onto those ratings, interpolating between levels (`levels::RATINGS`,
 `level_for_elo`, `settings_at`; chapter 19). Walleye 1.3.0 lost about 1% of its games by an
-illegal move: it ignores en passant captures in the moves it is sent, a bug of its own. Two
-questions for Carlos follow, #106: widen `UCI_Elo` to 800–2600, and a spot check of three
-levels at 40+0.4 (about 3–4 hours), since node-limited levels would rate lower at slower time
-controls.
+illegal move: it ignores en passant captures in the moves it is sent, a bug of its own.
+`UCI_Elo` is now 800–2600 (levels 0.7 to 19.0), widened from 1000–2400 (Carlos, #106). Still
+open in #106: a spot check of three levels at 40+0.4 (about 3–4 hours), since node-limited
+levels would rate lower at slower time controls.
 
 The rating gauntlets (#36) finished on 2026-10-18 at 06:50 MDT, 800 games against each of the
 seven reference engines at 8+0.08, about 4 hours a version: stage 14 **2442 ± 11** (M2 passed),
@@ -134,7 +134,8 @@ passed; the rest wait on GUI checks, level calibration or the v1.0 work.
 
 The open [`needs-carlos` issues](https://github.com/cjus/chessengine/issues?q=is%3Aopen+label%3Aneeds-carlos):
 
-- #106: widen `UCI_Elo` to 800–2600? And check three levels at 40+0.4 (about 3–4 hours)?
+- #106: check three levels at 40+0.4 (about 3–4 hours)? (Its other question, the `UCI_Elo`
+  range, is answered: 800–2600.)
 - #37: GUI compatibility matrix; Lichess bot account.
 - #24 (M1 GUI games).
 

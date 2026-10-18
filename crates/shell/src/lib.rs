@@ -141,7 +141,7 @@ Commands:
   new960 [n]           Chess960 starting position n (0-959, 518 is the standard one;
                        random without n)
   level <0-20>         The engine's strength level (20 = full strength)
-  elo <n>|off          Limit the engine's strength to about n Elo (1000-2400), or not
+  elo <n>|off          Limit the engine's strength to about n Elo (800-2600), or not
   set multipv <N>      Search and show the N best lines
   set syzygy <path>    Load Syzygy endgame tablebases from a directory (none: unload)
   tb                   The tablebase result and best move for this position
@@ -447,7 +447,7 @@ impl Shell {
                         self.engine.elo = elo;
                         Response::text(self.strength_text())
                     }
-                    _ => Response::text("Usage: elo <1000-2400>|off"),
+                    _ => Response::text("Usage: elo <800-2600>|off"),
                 },
             },
             "book" => self.book_moves(),
@@ -1663,7 +1663,7 @@ mod tests {
             out.starts_with("Strength: level 7.9, about 1300 Elo"),
             "{out}"
         );
-        assert!(shell.execute("elo 900").output.starts_with("Usage"));
+        assert!(shell.execute("elo 700").output.starts_with("Usage"));
         assert!(shell.execute("level 21").output.starts_with("Usage"));
         shell.execute("elo off");
         shell.execute("level 20");

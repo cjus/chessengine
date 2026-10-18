@@ -18,7 +18,7 @@
 //! < option name MultiPV type spin default 1 min 1 max 256
 //! < option name Skill Level type spin default 20 min 0 max 20
 //! < option name UCI_LimitStrength type check default false
-//! < option name UCI_Elo type spin default 2400 min 1000 max 2400
+//! < option name UCI_Elo type spin default 2600 min 800 max 2600
 //! < option name Move Overhead type spin default 30 min 0 max 5000
 //! < option name UCI_Chess960 type check default false
 //! < uciok
@@ -885,7 +885,7 @@ mod tests {
         let bad = session(
             "setoption name UCI_Elo value 3000\nsetoption name Skill Level value 21\nisready\n",
         );
-        assert!(bad.iter().any(|l| l.contains("UCI_Elo must be 1000-2400")));
+        assert!(bad.iter().any(|l| l.contains("UCI_Elo must be 800-2600")));
         assert!(bad.iter().any(|l| l.contains("Skill Level must be 0-20")));
     }
 
