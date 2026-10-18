@@ -28,8 +28,10 @@ use cb2026_chess::Move;
 
 /// The full-strength level: no limits.
 pub const FULL_STRENGTH: u32 = 20;
-/// The lowest and highest `UCI_Elo` accepted.
-pub const ELO_RANGE: (u32, u32) = (1000, 2400);
+/// The lowest and highest `UCI_Elo` accepted: levels 0.7 to 19.0 of [`RATINGS`]. It was 1000 to
+/// 2400 before the calibration showed the levels reach further (cjus/chessengine#106). It stops
+/// short of level 0's 752, the least certain rating.
+pub const ELO_RANGE: (u32, u32) = (800, 2600);
 
 // ANCHOR: ratings
 /// The measured rating of each level, 0 to [`FULL_STRENGTH`], on the CCRL Blitz scale. Levels
@@ -182,14 +184,18 @@ mod tests {
     fn elo_maps_onto_the_measured_ratings() {
         // Each level is stronger than the one below it.
         assert!(RATINGS.windows(2).all(|pair| pair[0] < pair[1]));
-        // A level's own rating maps onto it exactly, and the range's ends onto in-between
-        // strengths: 1000 just above level 4 (999), 2400 between levels 16 (2368) and 17 (2475).
+        // A level's own rating maps onto it exactly, and other Elos onto in-between strengths:
+        // 1000 just above level 4 (999), 2400 between levels 16 (2368) and 17 (2475).
         assert_eq!(level_for_elo(RATINGS[10]), 10.0);
         assert!(level_for_elo(1000) > 4.0 && level_for_elo(1000) < 4.1);
         assert!(level_for_elo(2400) > 16.0 && level_for_elo(2400) < 17.0);
+        // The range's ends: 800 between levels 0 (752) and 1 (823), 2600 just above level 19
+        // (2599).
+        assert!(level_for_elo(800) > 0.6 && level_for_elo(800) < 0.7);
+        assert!(level_for_elo(2600) > 19.0 && level_for_elo(2600) < 19.01);
         // Outside the range, the nearest end.
-        assert_eq!(level_for_elo(500), level_for_elo(1000));
-        assert_eq!(level_for_elo(3000), level_for_elo(2400));
+        assert_eq!(level_for_elo(500), level_for_elo(800));
+        assert_eq!(level_for_elo(3000), level_for_elo(2600));
         // And back: the rating of the strength for an Elo is that Elo.
         for elo in (ELO_RANGE.0..=ELO_RANGE.1).step_by(50) {
             assert_eq!(rating(level_for_elo(elo)), elo, "{elo}");

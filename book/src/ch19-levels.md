@@ -55,7 +55,7 @@ full search, so three lines take about three times as long.
 | Option | What it does |
 | --- | --- |
 | `Skill Level` 0–20 | The level; 20 is full strength |
-| `UCI_LimitStrength` + `UCI_Elo` 1000–2400 | Limit to an Elo rating; mapped onto the levels' measured ratings (below) |
+| `UCI_LimitStrength` + `UCI_Elo` 800–2600 | Limit to an Elo rating; mapped onto the levels' measured ratings (below) |
 | `MultiPV` 1–256 | Lines searched and reported |
 
 In the shell, `level 5`, `elo 1500` and `elo off` do the same, and say what the engine now
@@ -117,8 +117,9 @@ and an Elo of 1500, between level 9 (1414) and level 10 (1534), plays at level 9
 {{#include ../../crates/engine/src/levels.rs:level_for_elo}}
 ```
 
-The `UCI_Elo` range, 1000 to 2400, covers levels 4.0 to 16.3. Levels 0 to 3 and 17 to 19 are
-there through `Skill Level`.
+The `UCI_Elo` range was 1000 to 2400 before the calibration, a guess at what the levels would
+reach. They reach further, so it is now **800 to 2600**: levels 0.7 to 19.0. It stops short of
+level 0 (752), whose rating is the least certain; `Skill Level 0` still plays it.
 
 The ratings are on the CCRL scale (engine against engine, at blitz). That isn't the same as a
 FIDE or Lichess rating, and a human's experience against a level depends on more than its

@@ -214,7 +214,7 @@ moves ...`, every `go` parameter, `stop`, `ponderhit`, `quit`, and `info` lines 
 | UCI_Chess960 | check | false | |
 | UCI_ShowWDL | check | false | |
 | UCI_LimitStrength | check | false | |
-| UCI_Elo | spin | 2400 | 1000–2400 (final range after calibration) |
+| UCI_Elo | spin | 2600 | 800–2600 (widened from 1000–2400 after the calibration, cjus/chessengine#106) |
 | Skill Level | spin | 20 | 0–20 |
 | SyzygyPath | string | `<empty>` | |
 | SyzygyProbeDepth | spin | 1 | 1–100 |
@@ -613,8 +613,9 @@ gained about a third of that: self-play SPRTs find gains reliably but overstate 
 M4's levels are calibrated (2026-10-18, cjus/chessengine#103): Skill Levels 0–19 rated **752 to
 2599** (± 22 to 41), 800 games each at 8+0.08 against the four reference engines nearest each,
 and `UCI_Elo` maps onto those ratings (`crates/engine/src/levels.rs`, chapter 19). The levels
-limit nodes, so at slower time controls they would rate lower; whether to check that, and
-whether to widen `UCI_Elo` beyond 1000–2400, is cjus/chessengine#106. M4 still needs the GUI
+limit nodes, so at slower time controls they would rate lower; whether to check that is
+cjus/chessengine#106. Since the levels reach further than first guessed, `UCI_Elo` is widened
+from 1000–2400 to 800–2600 (Carlos, 2026-10-18, cjus/chessengine#106). M4 still needs the GUI
 compatibility matrix (cjus/chessengine#37).
 
 ## Risks
@@ -736,6 +737,8 @@ about 26 s, and the M1 Max played about 970 games an hour.
 - [x] Level calibration engines: five more, from 1058 to 1794 CCRL Blitz (Fatalii 0.1.1, Walleye
       1.3.0, Arche 0.3.8, Blunder 4.0.0, Rustic Alpha 3.0.0), built by the same script
       (cjus/chessengine#101, 2026-10-18).
+- [x] `UCI_Elo` range: 800–2600, levels 0.7 to 19.0 of the calibrated table, instead of
+      1000–2400 (cjus/chessengine#106, 2026-10-18).
 
 ## Open questions
 
