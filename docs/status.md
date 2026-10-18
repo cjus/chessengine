@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-18, 07:15 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-18, 10:30 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -21,8 +21,9 @@ chessgui, #94, merged; buckets at 40+0.4 about even, +1.6 ± 6.3 with no verdict
 off, #92; the gauntlet reference engines chosen, built by `scripts/fetch-gauntlet-engines.sh`,
 #36; double extensions merged off by default after no verdict, +3.6 ± 4.9, #96; the M2/M3
 gauntlets running on the M3, #36; **M2 passed**, stage 14 rated 2442 ± 11 by gauntlet, #36.
-2026-10-18: **M3 passed**, stage 16 rated 2669 ± 10, #36; `main` rated 2714 ± 10, #36; the
-level calibration needs engines below 2000, #101.*
+2026-10-18: **M3 passed**, stage 16 rated 2669 ± 10, #36; `main` rated 2714 ± 10, #36; five
+engines from 1058 to 1794 chosen for the level calibration, #101, and `scripts/mac-levels.sh`
+written; the calibration waits for the M3, #103.*
 
 ## Stages
 
@@ -78,8 +79,11 @@ MDT, 800 games against each of the seven reference engines at 8+0.08, about 4 ho
 stage 14 **2442 ± 11** (M2 passed), stage 16 **2669 ± 10** (M3 passed), and `main` **2714 ±
 10**, all recorded in the PRD's "Milestones" and the ledger. `main` is only 45 ± 14 above stage
 16, though the M5 SPRTs that passed add up to about +136 in self-play: self-play overstates
-gains against other engines about threefold here. Next for the M3: the level calibration, once
-#101 settles which engines rate the levels below 2000, or another M5 SPRT (item 3 below).
+gains against other engines about threefold here. Next for the M3: the level calibration
+(#103, about 8–11 hours: `scripts/mac-levels.sh` rates Skill Levels 0–19 against the engines
+in `levels.txt`), or another M5 SPRT (item 3 below). When #103's result comment arrives, fit
+`level_for_elo` in `crates/engine/src/levels.rs` to the ratings, put the table in the book's
+levels chapter, and record the M4 levels gate.
 
 When several PRs wait for the M3, they run one at a time, and **before each SPRT starts, rebase
 that PR onto the current `main`** and re-measure its `Bench:` line: `scripts/mac-sprt.sh` plays
@@ -116,7 +120,7 @@ passed; the rest wait on GUI checks, level calibration or the v1.0 work.
 | M1 Playable | stages 4–7 | Merged; GUI check still open (#24) |
 | M2 Classical search | stages 8–14 | **Passed** 2026-10-18: stage 14 rated 2442 ± 11 by gauntlet at 8+0.08 (gate ~2200 CCRL), #36 |
 | M3 Evaluation | stages 15–16 | **Passed** 2026-10-18: stage 16 rated 2669 ± 10 by gauntlet at 8+0.08 (gate ≥2400 CCRL), #36 |
-| M4 Complete engine | stages 17–20 | Merged (#46–#55); GUI matrix (#37) and level calibration (#101) open |
+| M4 Complete engine | stages 17–20 | Merged (#46–#55); GUI matrix (#37) and level calibration (#103) open |
 | M5 v1.0 | strength work, release | Started (the M5 branches above); release workflow merged (#40); `main` rated 2714 ± 10 by gauntlet on 2026-10-18, above the gate (≥2400, goal 2600+), #36 |
 | M6 NNUE | stage 21 | Not started |
 
@@ -124,7 +128,7 @@ passed; the rest wait on GUI checks, level calibration or the v1.0 work.
 
 The open [`needs-carlos` issues](https://github.com/cjus/chessengine/issues?q=is%3Aopen+label%3Aneeds-carlos):
 
-- #101: which engines rate the levels below 2000 CCRL, for the level calibration (M4).
+- #103: run the level calibration on the M3 (`scripts/mac-levels.sh`, about 8–11 hours).
 - #37: GUI compatibility matrix; Lichess bot account.
 - #24 (M1 GUI games).
 
@@ -132,7 +136,7 @@ On hold: #61, running long tests on AWS Batch (closed 2026-10-12; reopen it if t
 up with the test queue).
 
 Done on 2026-10-18: #36 (the M2/M3 gauntlets and one on `main`, run overnight on the M3:
-2442, 2669 and 2714).
+2442, 2669 and 2714) and #101 (five engines from 1058 to 1794 for the levels).
 
 Done on 2026-10-12: #62 (the M3 Max is set up; its check: `bench` 765380, the perft suites
 exact at 369.6 Mnps) and #66 (the time-loss checks on the M3: none).
@@ -232,10 +236,10 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    "Testing and strength measurement"), and `scripts/fetch-gauntlet-engines.sh` builds them. Carlos
    started the M2 and M3 gauntlets on the M3 on 2026-10-17 (the stage 14 and 16 tags), then one
    on `main`. Stage 14 rated 2442 ± 11, so M2 passed; stage 16 2669 ± 10, so M3 passed; and
-   `main` 2714 ± 10. Level calibration is next: `UCI_Elo` goes down to 1000 but the weakest
-   engine is rated 2018, so the low levels need weaker engines (#101, Carlos's choice; option
-   1 there is that Claude researches them as for #36). Then the calibration script, using
-   `crates/tools/src/gauntlet.rs`.
+   `main` 2714 ± 10. Level calibration is next: five weaker engines (1058–1794, #101) join the
+   seven in `levels.txt`, and `scripts/mac-levels.sh` rates each Skill Level against the four
+   nearest its expected rating (#103). A smoke test of 4 games per engine found no problems
+   and `UCI_Elo` 1400 at about 1166 ± 98, so the provisional mapping overstates the levels.
 3. More M5 strength work, each change with an SPRT. Passed on 2026-10-13: continuation history
    (#69, +10.7), singular extensions and multi-cut (#71, +29.5), adaptive time management (#72,
    +33.5), history in LMR's second version (#74, +22.2); on 2026-10-14, negative extensions

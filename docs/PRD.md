@@ -348,8 +348,10 @@ stalemate), the engine offering and accepting draws and resigning in hopeless po
   controlled randomness, so it makes believable mistakes instead of blundering pieces at random.
   The book explains why "search less" alone doesn't produce human-like play.
 - **Calibrated, not guessed:** each level is measured in matches against reference engines with
-  known CCRL ratings, and the `UCI_Elo` → settings table is fitted to those results. Elo is on the
-  CCRL scale; the docs say plainly that this isn't the same as a FIDE or Lichess rating.
+  known CCRL ratings, and the `UCI_Elo` → settings table is fitted to those results. The
+  engines are in "Testing and strength measurement"; `scripts/mac-levels.sh` rates the levels.
+  Elo is on the CCRL scale; the docs say plainly that this isn't the same as a FIDE or Lichess
+  rating.
 - The shell's `level` and `elo` commands set the same options.
 
 ## Learning tool
@@ -453,6 +455,22 @@ to behave the same built for Apple Silicon (the script says how); Weiss 0.10 and
 the first choices for two of the places, failed that check. The gauntlets run at 8+0.08, much
 faster than CCRL Blitz's 2'+1", so their ratings are approximate; a run at 40+0.4 is closer and
 takes five times as long.
+
+**For the strength levels**, which go down to `UCI_Elo` 1000, five weaker engines join the
+seven (chosen on 2026-10-18, cjus/chessengine#101; same CCRL snapshot):
+
+| Engine | CCRL Blitz | Language |
+| --- | ---: | --- |
+| Fatalii 0.1.1 | 1058 ± 22 | Rust |
+| Walleye 1.3.0 | 1266 ± 21 | Rust |
+| Arche 0.3.8 | 1451 ± 20 | Rust |
+| Blunder 4.0.0 | 1616 ± 22 | Go |
+| Rustic Alpha 3.0.0 | 1794 ± 16 | Rust |
+
+With the gauntlet's lower four, that is one engine every 165–225 points from 1058 to 2513. The
+two engines below 1000 that were tried failed the Apple Silicon check (Megalodon 1.0.0 reads
+past an array, Algae 1.0 builds only for x86), so the lowest levels are rated from above. Each Skill Level plays the
+four engines nearest its expected rating (`scripts/mac-levels.sh`, cjus/chessengine#103).
 
 ### Test machine
 
@@ -708,6 +726,9 @@ about 26 s, and the M1 Max played about 970 games an hour.
 - [x] Gauntlet reference engines: seven open-source versions from 2018 to 3049 CCRL Blitz,
       built from source by `scripts/fetch-gauntlet-engines.sh` (see "Testing and strength
       measurement"; cjus/chessengine#36, 2026-10-17).
+- [x] Level calibration engines: five more, from 1058 to 1794 CCRL Blitz (Fatalii 0.1.1, Walleye
+      1.3.0, Arche 0.3.8, Blunder 4.0.0, Rustic Alpha 3.0.0), built by the same script
+      (cjus/chessengine#101, 2026-10-18).
 
 ## Open questions
 
