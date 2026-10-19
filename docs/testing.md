@@ -171,10 +171,13 @@ the CCRL Blitz scale, posted to the issue or PR, with a progress comment updated
 level. The first level is expected where the mapping before the first calibration put it, and
 each later one at the gain per level the levels rated so far showed. That only picks the
 opponents: each rating comes from the reference engines alone. `LEVELS="0 5 10"` rates some
-levels only, and `OPPONENTS=N` changes how many engines each plays. At the default 200 games per
-engine, the twenty levels are 16,000 games: six and a half hours on the M3 at 8+0.08 (#103;
-cb2026 moves quickly at the low levels, which search only a few thousand nodes). The
-games are saved in `target/levels/`. The ratings feed the `UCI_Elo` mapping in
+levels only, and `OPPONENTS=N` changes how many engines each plays. The default time control is
+40+0.4: the levels limit nodes, so against opponents given more time they rate lower, 74 to
+272 lower at 40+0.4 than at 8+0.08 (#106). At the default 200 games per engine, a level is 800
+games, about 1 hour 20 minutes on the M3 at 40+0.4. So the twenty levels would take about 27
+hours, and every other level (`LEVELS="0 2 4 6 8 10 12 14 16 18 19"`, the odd ones
+interpolated) about 15; at 8+0.08 all twenty took six and a half hours (#103). The games are
+saved in `target/levels/`. The ratings feed the `UCI_Elo` mapping in
 `crates/engine/src/levels.rs`.
 
 ```sh

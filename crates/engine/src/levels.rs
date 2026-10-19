@@ -12,14 +12,15 @@
 //! sometimes, a blunder that loses a rook practically never. The engine then makes the kind of
 //! mistakes a player of that level makes: inaccuracies, more of them at lower levels.
 //!
-//! The levels are **calibrated**, as the PRD requires: on 2026-10-18 each level played 800 games
-//! against the four reference engines nearest its strength, engines with known ratings on the
-//! CCRL Blitz list (cjus/chessengine#103, `scripts/mac-levels.sh`), and [`RATINGS`] records the
-//! result. `UCI_Elo` maps onto those ratings, between two levels where it falls between them:
-//! the settings are smooth in the level, so [`settings_at`] takes a fractional one. The ratings
-//! are on the CCRL scale, which isn't the same as FIDE or Lichess ratings, and they were
-//! measured at 8+0.08: the levels limit nodes, not time, so against engines given more time
-//! they would rate lower (see chapter 19).
+//! The levels are **calibrated**, as the PRD requires: every other level, and level 19, played
+//! 800 games at 40+0.4 against the four reference engines nearest its strength, engines with
+//! known ratings on the CCRL Blitz list (cjus/chessengine#106, `scripts/mac-levels.sh`), and
+//! [`RATINGS`] records the result. `UCI_Elo` maps onto those ratings, between two levels where
+//! it falls between them: the settings are smooth in the level, so [`settings_at`] takes a
+//! fractional one. The ratings are on the CCRL scale, which isn't the same as FIDE or Lichess
+//! ratings. The time control matters: a level's node limit doesn't grow with the clock, while
+//! its opponents play better with more time. A first calibration at 8+0.08
+//! (cjus/chessengine#103) put the levels 74 to 272 higher (see chapter 19).
 //!
 //! See the Chess Programming Wiki, [Strength](https://www.chessprogramming.org/Strength) and
 //! [Playing Strength](https://www.chessprogramming.org/Playing_Strength).
@@ -28,20 +29,22 @@ use cb2026_chess::Move;
 
 /// The full-strength level: no limits.
 pub const FULL_STRENGTH: u32 = 20;
-/// The lowest and highest `UCI_Elo` accepted: levels 0.7 to 19.0 of [`RATINGS`]. It was 1000 to
-/// 2400 before the calibration showed the levels reach further (cjus/chessengine#106). It stops
-/// short of level 0's 752, the least certain rating.
-pub const ELO_RANGE: (u32, u32) = (800, 2600);
+/// The lowest and highest `UCI_Elo` accepted: levels 0.3 to 18.8 of [`RATINGS`], level 0's and
+/// level 19's ratings rounded inward to 50. It was 1000 to 2400 before any calibration, then
+/// 800 to 2600 after the one at 8+0.08 (cjus/chessengine#106).
+pub const ELO_RANGE: (u32, u32) = (650, 2450);
 
 // ANCHOR: ratings
 /// The measured rating of each level, 0 to [`FULL_STRENGTH`], on the CCRL Blitz scale. Levels
-/// 0–19: the calibration of 2026-10-18 on the test Mac (cjus/chessengine#103), 800 games each
-/// at 8+0.08 against the four reference engines nearest it, ± 22 to 41 (level 0, weaker than
-/// every reference engine, has the widest margin). Full strength: that day's gauntlet of
-/// `main`, 2714 ± 10 (cjus/chessengine#36).
+/// 0–19: the calibration at 40+0.4 on the test Mac, 2026-10-18 and 19 (cjus/chessengine#106).
+/// Levels 0, 2, 4, …, 18 and 19 played 800 games each against the four reference engines nearest
+/// them, ± 23 to 55 (level 0, weaker than every reference engine, has the widest margin). Each
+/// odd level below 19 is halfway between its neighbours. Full strength: the gauntlet of `main`
+/// on 2026-10-18, 2714 ± 10 at 8+0.08 (cjus/chessengine#36); it uses the clock, so it gains from
+/// more time like its opponents.
 pub const RATINGS: [u32; FULL_STRENGTH as usize + 1] = [
-    752, 823, 851, 927, 999, 1052, 1131, 1242, 1307, 1414, 1534, 1642, 1783, 1924, 2106, 2240,
-    2368, 2475, 2533, 2599, 2714,
+    629, 703, 777, 833, 888, 957, 1025, 1112, 1198, 1295, 1391, 1501, 1610, 1731, 1852, 1974, 2096,
+    2217, 2337, 2483, 2714,
 ];
 // ANCHOR_END: ratings
 
@@ -185,17 +188,17 @@ mod tests {
         // Each level is stronger than the one below it.
         assert!(RATINGS.windows(2).all(|pair| pair[0] < pair[1]));
         // A level's own rating maps onto it exactly, and other Elos onto in-between strengths:
-        // 1000 just above level 4 (999), 2400 between levels 16 (2368) and 17 (2475).
+        // 1000 between levels 5 (957) and 6 (1025), 2000 just above level 15 (1974).
         assert_eq!(level_for_elo(RATINGS[10]), 10.0);
-        assert!(level_for_elo(1000) > 4.0 && level_for_elo(1000) < 4.1);
-        assert!(level_for_elo(2400) > 16.0 && level_for_elo(2400) < 17.0);
-        // The range's ends: 800 between levels 0 (752) and 1 (823), 2600 just above level 19
-        // (2599).
-        assert!(level_for_elo(800) > 0.6 && level_for_elo(800) < 0.7);
-        assert!(level_for_elo(2600) > 19.0 && level_for_elo(2600) < 19.01);
+        assert!(level_for_elo(1000) > 5.0 && level_for_elo(1000) < 6.0);
+        assert!(level_for_elo(2000) > 15.0 && level_for_elo(2000) < 15.3);
+        // The range's ends: 650 between levels 0 (629) and 1 (703), 2450 between levels 18
+        // (2337) and 19 (2483).
+        assert!(level_for_elo(650) > 0.2 && level_for_elo(650) < 0.3);
+        assert!(level_for_elo(2450) > 18.7 && level_for_elo(2450) < 18.8);
         // Outside the range, the nearest end.
-        assert_eq!(level_for_elo(500), level_for_elo(800));
-        assert_eq!(level_for_elo(3000), level_for_elo(2600));
+        assert_eq!(level_for_elo(500), level_for_elo(650));
+        assert_eq!(level_for_elo(3000), level_for_elo(2450));
         // And back: the rating of the strength for an Elo is that Elo.
         for elo in (ELO_RANGE.0..=ELO_RANGE.1).step_by(50) {
             assert_eq!(rating(level_for_elo(elo)), elo, "{elo}");

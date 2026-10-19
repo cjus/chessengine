@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-18, 21:30 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-19, 09:00 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -25,7 +25,8 @@ gauntlets running on the M3, #36; **M2 passed**, stage 14 rated 2442 ± 11 by ga
 engines from 1058 to 1794 chosen for the level calibration, #101, and `scripts/mac-levels.sh`
 written, #104; the levels calibrated, 752–2599, and `UCI_Elo` fitted to them, #103;
 `UCI_Elo` widened to 800–2600, #106; at 40+0.4 levels 4, 10 and 16 rated 111–272 lower, so
-the levels are being recalibrated at 40+0.4, #106.*
+the levels were recalibrated at 40+0.4, #106. 2026-10-19: the levels at 40+0.4 rated 629–2483,
+`levels::RATINGS` set to them and `UCI_Elo` narrowed to 650–2450, #106.*
 
 ## Stages
 
@@ -76,29 +77,26 @@ the levels are being recalibrated at 40+0.4, #106.*
 | `cb2026_chess::game::Game`: one record of a game and one set of end-of-game rules, moved from chessgui and used by the shell, the match tool and self-play | #94 | 1098926 | Merged, no functional change; chessgui uses it from cjus/chessgui#31 |
 | M5: double extensions (chapter 14.1) | #96 | 1098926 (1248666 with double extensions on) | Merged, off by default: +3.6 ± 4.9, 8,670 games, [0, 5] no verdict (LLR 0.92), stopped (M3 Max) |
 
-**Running now: the levels recalibrated at 40+0.4 (#106)**, started on the M3 on 2026-10-18 at
-about 21:20 MDT: `LEVELS="0 2 6 8 12 14 18 19" scripts/mac-levels.sh ... 106 200 40+0.4`,
-eight levels, 6,400 games in about 11 hours (levels 4, 10 and 16 are already rated at 40+0.4).
-Its result posts to #106. Then set `levels::RATINGS` to the 40+0.4 ratings, with the odd levels
-interpolated between their neighbours, and narrow `UCI_Elo` to the range from level 0's rating
-to level 19's, rounded inward to 50 (Carlos chose this, option (a) in #106). Record it in
-chapter 19, the PRD and the ledger, and close #106 in that PR. If the run stops early, ask
-Carlos for `tail -20 ~/levels-ltc2.log`.
-
-The check at 40+0.4 (#106) finished on 2026-10-18 at about 20:57 MDT: levels 4, 10 and 16
-rated **888, 1391 and 2096** (± 25 to 32), 111, 143 and 272 below their 8+0.08 ratings. The
-levels search a fixed number of nodes, so they play the same at any time control, while the
-reference engines play better with more time. CCRL rated those engines at 2'+1", slower than
-both, so the 40+0.4 ratings are the better estimate. arche 0.3.8 lost 2 of its 200 games by
-answering `bestmove 0000` (no move), a bug of its own.
+**Nothing is running on the M3.** The recalibration of the levels at 40+0.4 (#106) finished on
+2026-10-19 at 08:28 MDT. It started at about 21:45 MDT the evening before, and rated levels 0,
+2, 6, 8, 12, 14, 18 and 19, 6,400 games in under 11 hours. With levels 4, 10 and 16 from the
+check before it (2,400 games), Skill Levels 0–19 rate **629 to 2483** at 40+0.4 (± 23 to 55),
+74 to 272 below the 8+0.08 calibration. The odd levels are halfway between their neighbours.
+`levels::RATINGS` holds the new table, and `UCI_Elo` runs from level 0's rating to level 19's,
+rounded inward to 50: **650–2450** (levels 0.3 to 18.8). The levels search a fixed number of
+nodes, so they play the same at any time control, while the reference engines play better with
+more time. CCRL rated those engines at 2'+1", slower than both, so 40+0.4 is the better
+estimate. Walleye 1.3.0 lost 8 games by an illegal move (its en passant bug), and Arche 0.3.8 2
+by answering `bestmove 0000` (no move), a bug of its own. The M3's next job is another M5 SPRT
+(item 3 below).
 
 The level calibration (#103) finished on 2026-10-18 at about
 16:10 MDT, 16,000 games in six and a half hours: Skill Levels 0–19 rated **752 to 2599**, and
 `UCI_Elo` now maps onto those ratings, interpolating between levels (`levels::RATINGS`,
 `level_for_elo`, `settings_at`; chapter 19). Walleye 1.3.0 lost about 1% of its games by an
 illegal move: it ignores en passant captures in the moves it is sent, a bug of its own.
-`UCI_Elo` is now 800–2600 (levels 0.7 to 19.0), widened from 1000–2400 (Carlos, #106); the
-recalibration at 40+0.4 replaces both.
+`UCI_Elo` became 800–2600 (levels 0.7 to 19.0), widened from 1000–2400 (Carlos, #106). The
+recalibration at 40+0.4 replaced both.
 
 The rating gauntlets (#36) finished on 2026-10-18 at 06:50 MDT, 800 games against each of the
 seven reference engines at 8+0.08, about 4 hours a version: stage 14 **2442 ± 11** (M2 passed),
@@ -142,7 +140,7 @@ passed; the rest wait on GUI checks, level calibration or the v1.0 work.
 | M1 Playable | stages 4–7 | Merged; GUI check still open (#24) |
 | M2 Classical search | stages 8–14 | **Passed** 2026-10-18: stage 14 rated 2442 ± 11 by gauntlet at 8+0.08 (gate ~2200 CCRL), #36 |
 | M3 Evaluation | stages 15–16 | **Passed** 2026-10-18: stage 16 rated 2669 ± 10 by gauntlet at 8+0.08 (gate ≥2400 CCRL), #36 |
-| M4 Complete engine | stages 17–20 | Merged (#46–#55); levels calibrated 2026-10-18, 752–2599 (#103); GUI matrix (#37) open |
+| M4 Complete engine | stages 17–20 | Merged (#46–#55); levels calibrated at 40+0.4 on 2026-10-19, 629–2483 (#106); GUI matrix (#37) open |
 | M5 v1.0 | strength work, release | Started (the M5 branches above); release workflow merged (#40); `main` rated 2714 ± 10 by gauntlet on 2026-10-18, above the gate (≥2400, goal 2600+), #36 |
 | M6 NNUE | stage 21 | Not started |
 
@@ -150,8 +148,6 @@ passed; the rest wait on GUI checks, level calibration or the v1.0 work.
 
 The open [`needs-carlos` issues](https://github.com/cjus/chessengine/issues?q=is%3Aopen+label%3Aneeds-carlos):
 
-- #106: the levels recalibrated at 40+0.4, running (see "Running now"). Nothing left to
-  decide: Carlos chose 800–2600 for the range, then option (a), every other level at 40+0.4.
 - #37: GUI compatibility matrix; Lichess bot account.
 - #24 (M1 GUI games).
 
@@ -161,6 +157,8 @@ up with the test queue).
 Done on 2026-10-18: #36 (the M2/M3 gauntlets and one on `main`, run overnight on the M3:
 2442, 2669 and 2714), #101 (five engines from 1058 to 1794 for the levels) and #103 (the
 level calibration, 752–2599).
+
+Done on 2026-10-19: #106 (the levels recalibrated at 40+0.4, 629–2483, and `UCI_Elo` 650–2450).
 
 Done on 2026-10-12: #62 (the M3 Max is set up; its check: `bench` 765380, the perft suites
 exact at 369.6 Mnps) and #66 (the time-loss checks on the M3: none).
@@ -264,8 +262,8 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    #101) joined the seven in `levels.txt`, `scripts/mac-levels.sh` rated each Skill Level
    against the four nearest it, from 752 (level 0) to 2599 (level 19), and `UCI_Elo` maps onto
    those ratings. The straight line it replaced was too flat: about 250 too high at the bottom,
-   200 too low at the top. At 40+0.4 the levels rate 111–272 lower, so they are being
-   recalibrated there (#106).
+   200 too low at the top. At 40+0.4 the levels rated 74–272 lower, so they were recalibrated
+   there (#106): 629 to 2483, and `UCI_Elo` 650–2450.
 3. More M5 strength work, each change with an SPRT. Passed on 2026-10-13: continuation history
    (#69, +10.7), singular extensions and multi-cut (#71, +29.5), adaptive time management (#72,
    +33.5), history in LMR's second version (#74, +22.2); on 2026-10-14, negative extensions

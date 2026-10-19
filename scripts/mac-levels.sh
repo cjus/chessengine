@@ -14,8 +14,9 @@
 # choice of opponents depends on the earlier levels: each rating comes from the reference
 # engines alone. The games are saved in target/levels/.
 #
-# Defaults: 200 games per engine, 8+0.08, all twenty levels (LEVELS="0 5 10" for some), the
-# current origin/main. As in scripts/mac-gauntlet.sh, cb2026 is built at the ref and the
+# Defaults: 200 games per engine, 40+0.4 (the levels limit nodes, so they rate lower against
+# opponents given more time, cjus/chessengine#106), all twenty levels (LEVELS="0 5 10" for
+# some), the current origin/main. As in scripts/mac-gauntlet.sh, cb2026 is built at the ref and the
 # gauntlet tool at origin/main, one game per performance core minus one, the Mac kept awake
 # with caffeinate. A progress comment on the issue is updated after each level, and the result
 # follows in its own comment: a table of the levels' ratings. If a level's gauntlet breaks, that
@@ -24,13 +25,13 @@
 set -euo pipefail
 
 if [[ $# -lt 2 || "$1" == "-h" || "$1" == "--help" ]]; then
-  sed -n '2,23p' "$0"
+  sed -n '2,24p' "$0"
   exit 2
 fi
 ENGINES_FILE="$1"
 TARGET="$2"
 GAMES="${3:-200}"
-TC="${4:-8+0.08}"
+TC="${4:-40+0.4}"
 REF="${5:-origin/main}"
 LEVELS="${LEVELS:-0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19}"
 NEAR="${OPPONENTS:-4}"
