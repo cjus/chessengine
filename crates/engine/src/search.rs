@@ -209,6 +209,33 @@
 //! [`crate::correction`]). It takes 3% off the bench and gained +28.0 ± 13.0 Elo after 1,308
 //! games at 8+0.08 (cjus/chessengine#112).
 //!
+//! ## ProbCut
+//!
+//! Null-move pruning asks whether passing keeps the score at or above beta. **ProbCut** asks
+//! whether a good capture keeps it well above: if some capture beats `beta + probcut_margin`
+//! (100 centipawns) in a search `probcut_reduction` (4) plies shallower, the full-depth search
+//! would almost surely beat beta, so the node is cut off. A shallow search's score and a deep
+//! one's are closely related, and the margin covers most of the difference.
+//!
+//! The test is cheap. Only captures and queen promotions are tried, only those that win by
+//! static exchange at least what the static evaluation is short of the margin, and each gets a
+//! quiescence search first, with the deeper search only if that reaches the margin too. It
+//! applies off the principal variation, out of check and from depth `probcut_min_depth` (5).
+//! It is skipped when beta is near a mate score, and when the hash table already holds a
+//! result about as deep as ProbCut's own search that falls short of the margin. A cutoff is
+//! stored in the table as a lower bound at the depth ProbCut searched to, plus one.
+//!
+//! Michael Buro invented ProbCut for Othello (his thesis, 1994; "ProbCut: An Effective
+//! Selective Extension of the Alpha-Beta Algorithm", ICCA Journal 18(2), 1995). His version
+//! sets the margin from the statistics of shallow and deep scores. Chess engines found little
+//! in it until Gary Linscott's version for Stockfish (GPL-3.0, 2013), which tries captures
+//! against a fixed margin. This is that kind, and the code is cb2026's own. See the Chess
+//! Programming Wiki, [ProbCut](https://www.chessprogramming.org/ProbCut).
+//!
+//! **Off by default.** It took 9.6% off the bench and measured weaker: −10.2 ± 9.1 Elo after
+//! 2,593 games at 8+0.08 (cjus/chessengine#117). The switch and the parameters stay, so other
+//! settings can be tested.
+//!
 //! ## Tablebase probes (stage 18)
 //!
 //! With few pieces left, the search can ask the endgame tablebases for the exact result
@@ -352,6 +379,12 @@ pub struct SearchParams {
     pub correction_max_weight: i32,
     /// ...and no entry corrects by more than this many centipawns either way.
     pub correction_limit: i32,
+    /// ProbCut applies from this depth on...
+    pub probcut_min_depth: u32,
+    /// ...and asks whether a capture beats beta by this many centipawns...
+    pub probcut_margin: i32,
+    /// ...in a search this many plies shallower.
+    pub probcut_reduction: u32,
 }
 
 impl Default for SearchParams {
@@ -401,6 +434,10 @@ impl Default for SearchParams {
             negative_extension_plies: 1,
             correction_max_weight: 16,
             correction_limit: 64,
+            // Set by hand, not tuned: a pawn above beta, four plies shallower.
+            probcut_min_depth: 5,
+            probcut_margin: 100,
+            probcut_reduction: 4,
         }
     }
 }
@@ -491,6 +528,9 @@ pub struct Techniques {
     /// Correction history: correct the static evaluation by how far off it has been in
     /// positions with the same pawns (see [`crate::correction`]).
     pub correction_history: bool,
+    /// ProbCut: cut a node off when a good capture beats beta by a margin in a shallower
+    /// search (needs the quiescence search; off by default).
+    pub probcut: bool,
 }
 
 impl Default for Techniques {
@@ -536,6 +576,9 @@ impl Default for Techniques {
             // Off by default: three versions measured weaker (see the module documentation).
             improving: false,
             correction_history: true,
+            // Off by default: it measured weaker, −10.2 ± 9.1 Elo after 2,593 games at 8+0.08
+            // (cjus/chessengine#117), though it took 9.6% off the bench; see chapter 12.1.
+            probcut: false,
         }
     }
 }
@@ -565,6 +608,7 @@ impl Techniques {
             iir: false,
             improving: false,
             correction_history: false,
+            probcut: false,
             ..Techniques::default()
         }
     }
@@ -1035,6 +1079,97 @@ impl<'a> Searcher<'a> {
             }
         }
         // ANCHOR_END: null_move
+
+        // ANCHOR: probcut
+        // ProbCut: if a good capture beats beta by a margin even in a shallower search, the
+        // full-depth search would almost surely beat beta too, so the node is cut off. Not if
+        // the hash table already says that a search about as deep fell short of the margin.
+        let probcut_beta = beta + p.probcut_margin;
+        if self.techniques.probcut
+            && self.techniques.quiescence
+            && selective
+            && excluded.is_none()
+            && depth >= p.probcut_min_depth
+            && beta.abs() + p.probcut_margin < MATE - MAX_PLY as i32
+            && !tt_entry.is_some_and(|entry| {
+                entry.bound != Bound::Lower
+                    && u32::from(entry.depth) + p.probcut_reduction > depth
+                    && score_from_tt(entry.score, ply) < probcut_beta
+            })
+        {
+            self.note(Note::ProbCut);
+            let probcut_depth = depth.saturating_sub(p.probcut_reduction);
+            let captures: Vec<Move> = moves.iter().copied().filter(|&mv| is_noisy(mv)).collect();
+            let previous = self.previous();
+            let picker = MovePicker::new(
+                pos,
+                &captures,
+                tt_move,
+                ply,
+                &previous,
+                self.ordering,
+                &self.techniques,
+            );
+            let mut cutoff = None;
+            let mut probcut_pv = Vec::new();
+            self.keys.push(pos.hash());
+            for mv in picker {
+                // Only captures that win, by static exchange, at least what the static
+                // evaluation is short of the margin.
+                if see(pos, mv) < probcut_beta - static_eval {
+                    continue;
+                }
+                let mut child = pos.clone();
+                child.make_move(mv);
+                self.push_move(pos, Some(mv));
+                // The quiescence search first: it is cheap, and if even it can't reach the
+                // margin, the shallower search seldom does.
+                let mut score = -self.quiescence(
+                    &child,
+                    ply + 1,
+                    -probcut_beta,
+                    -probcut_beta + 1,
+                    &mut probcut_pv,
+                );
+                if score >= probcut_beta && probcut_depth > 0 && !self.aborted {
+                    score = self.search_child(
+                        &child,
+                        probcut_depth,
+                        probcut_beta - 1,
+                        probcut_beta,
+                        &mut probcut_pv,
+                    );
+                }
+                self.pop_move();
+                if self.aborted {
+                    break;
+                }
+                if score >= probcut_beta {
+                    cutoff = Some((mv, score));
+                    break;
+                }
+            }
+            self.keys.pop();
+            if self.aborted {
+                return 0;
+            }
+            if let Some((mv, score)) = cutoff {
+                self.note(Note::ProbCutCutoff(mv));
+                // What ProbCut found is a lower bound from its shallower search.
+                if self.techniques.tt {
+                    let stored = score_to_tt(score, ply);
+                    self.tt.store(
+                        pos.hash(),
+                        Some(mv),
+                        stored,
+                        probcut_depth + 1,
+                        Bound::Lower,
+                    );
+                }
+                return score;
+            }
+        }
+        // ANCHOR_END: probcut
 
         // ANCHOR: singular
         // Singular extension: is the hash move much better than every other move? Search the

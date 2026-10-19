@@ -186,6 +186,11 @@ pub(crate) const SWITCHES: &[Switch] = &[
         flag: |e| &mut e.techniques.improving,
     },
     Switch {
+        name: "probcut",
+        description: "ProbCut (a capture that beats beta by a margin, shallower: cut off; off by default)",
+        flag: |e| &mut e.techniques.probcut,
+    },
+    Switch {
         name: "correction",
         description: "Correction history (static evaluation corrected by pawn structure)",
         flag: |e| &mut e.techniques.correction_history,
@@ -366,6 +371,12 @@ impl Shell {
             s.null_moves,
             s.null_move_cutoffs,
             percent(s.null_move_cutoffs, s.null_moves)
+        ));
+        out.push_str(&format!(
+            "  ProbCut: {} nodes tried, {} cut off ({:.0}%)\n",
+            s.probcuts,
+            s.probcut_cutoffs,
+            percent(s.probcut_cutoffs, s.probcuts)
         ));
         out.push_str(&format!(
             "  Nodes cut off: reverse futility {}, razoring {}, tablebases {}\n",
@@ -650,6 +661,7 @@ fn render_tree(root: &Position, tree: &SearchTree) -> String {
             Note::ReverseFutility => Some("reverse futility cutoff".to_string()),
             Note::Razoring => Some("razored".to_string()),
             Note::NullMoveCutoff => Some("null move cutoff".to_string()),
+            Note::ProbCutCutoff(mv) => Some(format!("ProbCut cutoff by {}", san_of(mv))),
             Note::BetaCutoff(mv, index) => {
                 Some(format!("beta cutoff by {} (move {index})", san_of(mv)))
             }
@@ -685,7 +697,11 @@ fn render_tree(root: &Position, tree: &SearchTree) -> String {
             Note::NegativeExtension(mv) => {
                 Some(format!("{} not singular, searched shallower", san_of(mv)))
             }
-            Note::TtHit | Note::NullMove | Note::Quiescence | Note::DeltaPruning(_) => None,
+            Note::TtHit
+            | Note::NullMove
+            | Note::ProbCut
+            | Note::Quiescence
+            | Note::DeltaPruning(_) => None,
         };
         if let Some(tag) = tag
             && let Some(line) = node_line(&open)

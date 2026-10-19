@@ -57,6 +57,10 @@ pub enum Note {
     NullMove,
     /// The null move scored at least beta: the node is cut off.
     NullMoveCutoff,
+    /// ProbCut looks for a capture that beats beta by its margin in a shallower search.
+    ProbCut,
+    /// This capture did: the node is cut off.
+    ProbCutCutoff(Move),
     /// Late move pruning skipped this move.
     LateMovePruning(Move),
     /// Futility pruning skipped this quiet move.
@@ -107,6 +111,10 @@ pub struct SearchStats {
     pub null_moves: u64,
     /// Null moves that cut the node off.
     pub null_move_cutoffs: u64,
+    /// Nodes where ProbCut looked for a capture.
+    pub probcuts: u64,
+    /// Nodes cut off by ProbCut.
+    pub probcut_cutoffs: u64,
     /// Nodes cut off by reverse futility pruning.
     pub reverse_futility: u64,
     /// Nodes cut off by razoring.
@@ -150,6 +158,8 @@ impl SearchStats {
             Note::Razoring => &mut self.razoring,
             Note::NullMove => &mut self.null_moves,
             Note::NullMoveCutoff => &mut self.null_move_cutoffs,
+            Note::ProbCut => &mut self.probcuts,
+            Note::ProbCutCutoff(_) => &mut self.probcut_cutoffs,
             Note::LateMovePruning(_) => &mut self.late_move_pruning,
             Note::Futility(_) => &mut self.futility,
             Note::SeePruning(_) => &mut self.see_pruning,
@@ -185,6 +195,8 @@ impl SearchStats {
             first_move_cutoffs,
             null_moves,
             null_move_cutoffs,
+            probcuts,
+            probcut_cutoffs,
             reverse_futility,
             razoring,
             late_move_pruning,
@@ -209,6 +221,8 @@ impl SearchStats {
         self.first_move_cutoffs += first_move_cutoffs;
         self.null_moves += null_moves;
         self.null_move_cutoffs += null_move_cutoffs;
+        self.probcuts += probcuts;
+        self.probcut_cutoffs += probcut_cutoffs;
         self.reverse_futility += reverse_futility;
         self.razoring += razoring;
         self.late_move_pruning += late_move_pruning;
@@ -299,6 +313,9 @@ mod tests {
             Note::DoubleExtension(mv),
             Note::MultiCut,
             Note::NegativeExtension(mv),
+            Note::ProbCut,
+            Note::ProbCut,
+            Note::ProbCutCutoff(mv),
             Note::Exit { score: 0 },
         ] {
             stats.count(note);
@@ -312,12 +329,15 @@ mod tests {
         assert_eq!(stats.double_extensions, 1);
         assert_eq!(stats.multi_cuts, 1);
         assert_eq!(stats.negative_extensions, 1);
+        assert_eq!(stats.probcuts, 2);
+        assert_eq!(stats.probcut_cutoffs, 1);
         let mut total = stats;
         total.add(&stats);
         assert_eq!(total.cutoffs, 4);
         assert_eq!(total.singular_searches, 4);
         assert_eq!(total.multi_cuts, 2);
         assert_eq!(total.negative_extensions, 2);
+        assert_eq!(total.probcut_cutoffs, 2);
         assert_eq!(total.double_extensions, 2);
     }
 
