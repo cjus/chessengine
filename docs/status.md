@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-19, 09:00 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-19, 10:23 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -28,7 +28,8 @@ written, #104; the levels calibrated, 752–2599, and `UCI_Elo` fitted to them, 
 the levels were recalibrated at 40+0.4, #106. 2026-10-19: the levels at 40+0.4 rated 629–2483,
 `levels::RATINGS` set to them and `UCI_Elo` narrowed to 650–2450, #106; `Position::parse_move`
 reads a move in SAN or coordinates and says why text names none, including a promotion
-without its piece, for the shell and Solrac's chat, #113.*
+without its piece, for the shell and Solrac's chat, #113; correction history running on the
+M3, #112.*
 
 ## Stages
 
@@ -79,8 +80,18 @@ without its piece, for the shell and Solrac's chat, #113.*
 | `cb2026_chess::game::Game`: one record of a game and one set of end-of-game rules, moved from chessgui and used by the shell, the match tool and self-play | #94 | 1098926 | Merged, no functional change; chessgui uses it from cjus/chessgui#31 |
 | M5: double extensions (chapter 14.1) | #96 | 1098926 (1248666 with double extensions on) | Merged, off by default: +3.6 ± 4.9, 8,670 games, [0, 5] no verdict (LLR 0.92), stopped (M3 Max) |
 | `Position::parse_move`: a move typed in SAN or coordinates, and `SanError::MissingPromotion` when a pawn promotes without its piece; the shell uses it, and Solrac's chat will (cjus/chessgui#38) | #113 | 1098926 | Open, no functional change |
+| M5: correction history (chapter 14.2) | #112, `claude/correction-history` | 1065754 | Draft, its SPRT running on the M3 Max: [0, 5] at 8+0.08 |
 
-**Nothing is running on the M3.** The recalibration of the levels at 40+0.4 (#106) finished on
+**Running now: #112** (correction history: the static evaluation corrected by how far off it
+has been with the same pawns, learnt from the search; chapter 14.2), started on the M3 on
+2026-10-19 at about 09:45 MDT. A new session should restart the watcher,
+`scripts/watch-sprt.sh 112`, or just read #112's comments if the result is already there. Then
+rebase #112 onto `main` (in `docs/status.md` take `main`'s side and edit it), record the result
+in chapter 14.2, the module docs, the ledger and this file, and merge. If it fails, switch
+`correction_history` off by default (with its comment and the shell's help) and merge as a
+record.
+
+The recalibration of the levels at 40+0.4 (#106) finished on
 2026-10-19 at 08:28 MDT. It started at about 21:45 MDT the evening before, and rated levels 0,
 2, 6, 8, 12, 14, 18 and 19, 6,400 games in under 11 hours. With levels 4, 10 and 16 from the
 check before it (2,400 games), Skill Levels 0–19 rate **629 to 2483** at 40+0.4 (± 23 to 55),
@@ -90,8 +101,7 @@ rounded inward to 50: **650–2450** (levels 0.3 to 18.8). The levels search a f
 nodes, so they play the same at any time control, while the reference engines play better with
 more time. CCRL rated those engines at 2'+1", slower than both, so 40+0.4 is the better
 estimate. Walleye 1.3.0 lost 8 games by an illegal move (its en passant bug), and Arche 0.3.8 2
-by answering `bestmove 0000` (no move), a bug of its own. The M3's next job is another M5 SPRT
-(item 3 below).
+by answering `bestmove 0000` (no move), a bug of its own.
 
 The level calibration (#103) finished on 2026-10-18 at about
 16:10 MDT, 16,000 games in six and a half hours: Skill Levels 0–19 rated **752 to 2599**, and
@@ -284,6 +294,9 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    games; about 255 games an hour on the M3, 10 hours).
 
    Next, in a rough order of value:
+   - **Correction history** (#112, chapter 14.2), its SPRT running now (see "Running now").
+     After it: capture history and ProbCut, both new techniques and usually worth more than
+     the parameter changes below.
    - **Tuning singular extensions, continued**: depth 6 passed (#78) and depth 4 too (#80),
      which is about where Stockfish starts; `singular_margin` 3 passed too (#82), and 4
      failed (#84). That settles the start depth and the margin for now. Double extensions,
