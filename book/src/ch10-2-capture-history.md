@@ -13,7 +13,8 @@ Chapter 10 had the same problem with quiet moves and solved it with the history 
 learns from the search which moves cause cutoffs. **Capture history** does the same for
 captures. Its table is indexed by the piece that captures, the square it captures on and the
 piece it takes, and it learns the way history does. Like chapter 14.1's techniques, it came
-after stage 20, so no stage tag contains it. Switch it with `set capthist on|off`.
+after stage 20, so no stage tag contains it. It measured weaker, so it is **off by default**;
+`set capthist on` switches it on.
 
 ## The table
 
@@ -85,9 +86,12 @@ three alternating bench runs gave 1.51 to 1.65 million nodes a second for `main`
 
 Chapter 10.1 warned that with late move reductions and pruning, a smaller tree doesn't prove
 better ordering: a worse order can push good moves into the reductions and shrink the tree by
-missing them. That trap is mostly absent here. Captures are never reduced or pruned for coming
-late, so a capture moved later is still searched in full. The 11.5% is probably cutoffs found
-sooner. Whether it is worth Elo, only games can say.
+missing them. The warning seemed to apply less here. Captures are never reduced or pruned for
+coming late, so a capture moved later is still searched in full, and the 11.5% looked like
+cutoffs found sooner. The games said otherwise (below): the tree shrank and the engine got
+weaker. Why isn't measured. One candidate: at a principal variation node, the order decides
+which capture gets the first move's full window, while the others get null windows, where
+null-move pruning and the rest are allowed and a good capture can be missed.
 
 ## Pitfalls
 
@@ -103,7 +107,16 @@ sooner. Whether it is worth Elo, only games can say.
 
 | Test | Result |
 | --- | --- |
-| Capture history vs `main` without it, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | Waiting for its SPRT (cjus/chessengine#115) |
+| Capture history vs `main` without it, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−19.2 ± 11.9 Elo** over 1,561 games (+328 −414 =819): failed (LLR −2.96), cjus/chessengine#115, so it is off by default |
+
+Like switching history off in chapter 10.1, it made the tree smaller and the engine weaker.
+The switch and the table stay for a second version. Untested candidates:
+
+- **History only among captures of the same piece**: a scale large enough that a victim rank
+  outweighs any history score, so history only reorders the attackers.
+- **No penalty for the captures tried before a quiet move's cutoff**, so that a capture is
+  marked down only when another capture did better.
+- **Stockfish's form**: the victim's value plus capture history, with no attacker term.
 
 ## Further reading
 

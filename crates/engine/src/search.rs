@@ -444,7 +444,7 @@ pub struct Techniques {
     /// after the moves one and two plies before.
     pub continuation_history: bool,
     /// Capture history: captures and queen promotions are ordered by how often they caused
-    /// cutoffs as well as by MVV-LVA (needs MVV-LVA ordering).
+    /// cutoffs as well as by MVV-LVA (needs MVV-LVA ordering; off by default).
     pub capture_history: bool,
     /// Principal variation search: moves after the first get a null-window search first.
     pub pvs: bool,
@@ -508,7 +508,9 @@ impl Default for Techniques {
             countermoves: true,
             history: true,
             continuation_history: true,
-            capture_history: true,
+            // Off by default: it measured weaker, −19.2 ± 11.9 Elo after 1,561 games at 8+0.08
+            // (cjus/chessengine#115), though it took 11.5% off the bench; see chapter 10.2.
+            capture_history: false,
             pvs: true,
             aspiration: true,
             null_move: true,
@@ -1851,18 +1853,22 @@ mod tests {
             "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
             "r1bq1rk1/pppp1ppp/2n2n2/2b1p3/2B1P3/2N2N2/PPPP1PPP/R1BQ1RK1 w - - 0 1",
         ];
+        let on = Techniques {
+            capture_history: true,
+            ..Techniques::sound()
+        };
         for fen in fens {
-            let on = search(fen, 5, Techniques::sound());
-            let off = search(
+            let with = search(fen, 5, on);
+            let without = search(
                 fen,
                 5,
                 Techniques {
                     capture_history: false,
-                    ..Techniques::sound()
+                    ..on
                 },
             );
-            assert_eq!(on.score, off.score, "{fen}");
-            assert_ne!(on.nodes, off.nodes, "{fen}");
+            assert_eq!(with.score, without.score, "{fen}");
+            assert_ne!(with.nodes, without.nodes, "{fen}");
         }
     }
 

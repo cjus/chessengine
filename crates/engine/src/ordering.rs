@@ -78,6 +78,10 @@
 //! This code is cb2026's own, and keeps MVV-LVA's attacker term, which orders captures until
 //! their history says otherwise.
 //!
+//! **Off by default.** It took 11.5% off the bench and measured weaker: −19.2 ± 11.9 Elo after
+//! 1,561 games at 8+0.08 (cjus/chessengine#115). The switch and the table stay, so a second
+//! version can be tested.
+//!
 //! ## The order, and staged picking
 //!
 //! 1. The transposition table move.
