@@ -26,7 +26,9 @@ engines from 1058 to 1794 chosen for the level calibration, #101, and `scripts/m
 written, #104; the levels calibrated, 752–2599, and `UCI_Elo` fitted to them, #103;
 `UCI_Elo` widened to 800–2600, #106; at 40+0.4 levels 4, 10 and 16 rated 111–272 lower, so
 the levels were recalibrated at 40+0.4, #106. 2026-10-19: the levels at 40+0.4 rated 629–2483,
-`levels::RATINGS` set to them and `UCI_Elo` narrowed to 650–2450, #106.*
+`levels::RATINGS` set to them and `UCI_Elo` narrowed to 650–2450, #106; `Position::parse_move`
+reads a move in SAN or coordinates and says why text names none, including a promotion
+without its piece, for the shell and Solrac's chat, #113.*
 
 ## Stages
 
@@ -76,6 +78,7 @@ the levels were recalibrated at 40+0.4, #106. 2026-10-19: the levels at 40+0.4 r
 | M5: transposition table buckets at 40+0.4 (chapter 8.1) | #92 | 1098926 (1114877 with buckets on) | Merged as a record, off by default: +1.6 ± 6.3, 4,630 games, [0, 5] at 40+0.4 no verdict (LLR −0.45), stopped (M3 Max) |
 | `cb2026_chess::game::Game`: one record of a game and one set of end-of-game rules, moved from chessgui and used by the shell, the match tool and self-play | #94 | 1098926 | Merged, no functional change; chessgui uses it from cjus/chessgui#31 |
 | M5: double extensions (chapter 14.1) | #96 | 1098926 (1248666 with double extensions on) | Merged, off by default: +3.6 ± 4.9, 8,670 games, [0, 5] no verdict (LLR 0.92), stopped (M3 Max) |
+| `Position::parse_move`: a move typed in SAN or coordinates, and `SanError::MissingPromotion` when a pawn promotes without its piece; the shell uses it, and Solrac's chat will (cjus/chessgui#38) | #113 | 1098926 | Open, no functional change |
 
 **Nothing is running on the M3.** The recalibration of the levels at 40+0.4 (#106) finished on
 2026-10-19 at 08:28 MDT. It started at about 21:45 MDT the evening before, and rated levels 0,
