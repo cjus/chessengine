@@ -38,6 +38,8 @@
 //! - [`ordering`]: move ordering by MVV-LVA (stage 7).
 //! - [`tt`]: the transposition table (stage 8).
 //! - [`see`]: static exchange evaluation (stage 14).
+//! - [`correction`]: correction history, which corrects the static evaluation by what the
+//!   search has learnt (M5).
 //! - [`hce`]: the full hand-crafted evaluation's positional terms (stage 15).
 //! - [`tuning`]: the evaluation as features times parameters, for tuning (stage 16).
 //! - [`tuned`]: the parameter values found by Texel tuning (stage 16, generated), available as
@@ -71,6 +73,7 @@
 pub mod bench;
 pub mod book;
 mod book_keys;
+pub mod correction;
 pub mod eval;
 pub mod hce;
 pub mod levels;
@@ -93,6 +96,7 @@ use std::time::{Duration, Instant};
 use cb2026_chess::{Move, Position};
 
 use book::OpeningBook;
+use correction::CorrectionHistory;
 use eval::EvalParams;
 use ordering::OrderingTables;
 use search::{
@@ -226,6 +230,9 @@ pub struct Engine {
     pub tt: TranspositionTable,
     /// Killer moves, countermoves and history, for ordering quiet moves.
     pub ordering: OrderingTables,
+    /// How far the static evaluation has been off, by pawn structure, kept from one search to
+    /// the next.
+    pub correction: CorrectionHistory,
     /// Search threads (Lazy SMP, stage 17): 1 means a single-threaded search.
     pub threads: usize,
     /// Endgame tablebases, if any are loaded (stage 18).
@@ -257,6 +264,7 @@ impl Default for Engine {
             search_params: SearchParams::default(),
             tt: TranspositionTable::default(),
             ordering: OrderingTables::default(),
+            correction: CorrectionHistory::default(),
             threads: 1,
             tablebase: None,
             tablebase_params: TablebaseParams::default(),
@@ -281,6 +289,7 @@ impl Engine {
     pub fn new_game(&mut self) {
         self.tt.clear();
         self.ordering.clear();
+        self.correction.clear();
     }
 
     /// Opens the tablebases found at `path` (the UCI `SyzygyPath`): directories separated by
@@ -432,6 +441,7 @@ impl Engine {
             search_params,
             tt,
             ordering,
+            correction,
             threads,
             tablebase,
             tablebase_params,
@@ -450,6 +460,7 @@ impl Engine {
                 let (helpers_stop, helper_nodes) = (&helpers_stop, &helper_nodes);
                 helper_threads.push(scope.spawn(move || {
                     let mut ordering = OrderingTables::default();
+                    let mut correction = CorrectionHistory::default();
                     let mut searcher = Searcher::new(
                         params,
                         search_params,
@@ -464,6 +475,7 @@ impl Engine {
                         history,
                     );
                     searcher.count_nodes_in(helper_nodes);
+                    searcher.use_correction(&mut correction);
                     if let Some(tb) = tablebase {
                         searcher.use_tablebase(tb, tablebase_params);
                     }
@@ -484,6 +496,7 @@ impl Engine {
                 },
                 history,
             );
+            searcher.use_correction(correction);
             if let Some(tb) = tablebase {
                 searcher.use_tablebase(tb, tablebase_params);
             }
@@ -586,6 +599,7 @@ impl Engine {
             },
             history,
         );
+        searcher.use_correction(&mut self.correction);
         if let Some(tb) = self.tablebase.as_deref() {
             searcher.use_tablebase(tb, self.tablebase_params);
         }

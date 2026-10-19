@@ -200,6 +200,14 @@
 //! +3.6 ± 4.9 Elo after 8,670 games, stopped there (cjus/chessengine#96). They are off by
 //! default.
 //!
+//! ## Correction history
+//!
+//! The pruning decisions above all trust the static evaluation, and a hand-crafted evaluation
+//! is wrong in the same way in the same pawn structures. **Correction history** learns how far
+//! off it was from the nodes' searched scores, by side to move and pawn structure, and corrects
+//! every static evaluation in the main and quiescence searches by that much (see
+//! [`crate::correction`]).
+//!
 //! ## Tablebase probes (stage 18)
 //!
 //! With few pieces left, the search can ask the endgame tablebases for the exact result
@@ -240,6 +248,7 @@ use std::time::Instant;
 use cb2026_chess::{Move, PieceType, Position};
 
 use crate::Score;
+use crate::correction::CorrectionHistory;
 use crate::eval::{EvalParams, evaluate};
 use crate::ordering::{
     CONTINUATION_PLIES, MovePicker, OrderingTables, PieceTo, Previous, is_noisy,
@@ -337,6 +346,11 @@ pub struct SearchParams {
     /// A hash move that isn't singular but whose hash score beats beta is searched this many
     /// plies shallower (a negative extension).
     pub negative_extension_plies: u32,
+    /// Correction history moves an entry towards a node's error by at most this many 256ths of
+    /// the way (`depth + 1` below it)...
+    pub correction_max_weight: i32,
+    /// ...and no entry corrects by more than this many centipawns either way.
+    pub correction_limit: i32,
 }
 
 impl Default for SearchParams {
@@ -384,6 +398,8 @@ impl Default for SearchParams {
             double_extension_margin: 20,
             double_extension_limit: 6,
             negative_extension_plies: 1,
+            correction_max_weight: 16,
+            correction_limit: 64,
         }
     }
 }
@@ -468,6 +484,9 @@ pub struct Techniques {
     pub iir: bool,
     /// Adjust pruning when the side to move is improving (better than two plies ago).
     pub improving: bool,
+    /// Correction history: correct the static evaluation by how far off it has been in
+    /// positions with the same pawns (see [`crate::correction`]).
+    pub correction_history: bool,
 }
 
 impl Default for Techniques {
@@ -509,6 +528,7 @@ impl Default for Techniques {
             iir: true,
             // Off by default: three versions measured weaker (see the module documentation).
             improving: false,
+            correction_history: true,
         }
     }
 }
@@ -537,6 +557,7 @@ impl Techniques {
             negative_extension: false,
             iir: false,
             improving: false,
+            correction_history: false,
             ..Techniques::default()
         }
     }
@@ -618,6 +639,9 @@ pub(crate) struct Searcher<'a> {
     tablebase: Option<(&'a dyn Tablebase, TablebaseParams)>,
     /// Tablebase probes that gave a result.
     tb_hits: u64,
+    /// The engine's correction history, if it gave this search one (see
+    /// [`Searcher::use_correction`]).
+    correction: Option<&'a mut CorrectionHistory>,
     /// What the search has done so far (see [`crate::stats`]).
     stats: SearchStats,
     /// The search tree, when one is being recorded.
@@ -693,8 +717,26 @@ impl<'a> Searcher<'a> {
             shared_nodes: None,
             tablebase: None,
             tb_hits: 0,
+            correction: None,
             stats: SearchStats::default(),
             tree: None,
+        }
+    }
+
+    /// Corrects the static evaluation with `correction`, and updates it, from now on (if
+    /// [`Techniques::correction_history`] is on).
+    pub(crate) fn use_correction(&mut self, correction: &'a mut CorrectionHistory) {
+        self.correction = Some(correction);
+    }
+
+    /// `raw_eval`, the static evaluation of `pos`, corrected by the correction history if
+    /// there is one and it is switched on.
+    fn corrected_eval(&self, pos: &Position, raw_eval: i32) -> i32 {
+        match self.correction.as_deref() {
+            Some(correction) if self.techniques.correction_history => {
+                correction.corrected(pos, raw_eval)
+            }
+            _ => raw_eval,
         }
     }
 
@@ -887,12 +929,20 @@ impl<'a> Searcher<'a> {
         let p = self.search_params;
         let in_check = pos.in_check();
         let pv_node = beta - alpha > 1;
-        // The static evaluation, for the pruning decisions (meaningless in check).
-        let static_eval = if in_check {
+        // ANCHOR: static_eval
+        // The static evaluation, for the pruning decisions (meaningless in check), corrected by
+        // what the search has learnt about positions with these pawns.
+        let raw_eval = if in_check {
             -INFINITY
         } else {
             evaluate(pos, self.params)
         };
+        let static_eval = if in_check {
+            -INFINITY
+        } else {
+            self.corrected_eval(pos, raw_eval)
+        };
+        // ANCHOR_END: static_eval
         // ANCHOR: improving
         // Improving: better than two plies ago, when this side last moved. Its evaluation will
         // probably keep rising, which changes the bets the pruning techniques make.
@@ -1217,16 +1267,16 @@ impl<'a> Searcher<'a> {
         }
         self.keys.pop();
 
+        let bound = if best >= beta {
+            Bound::Lower
+        } else if best > original_alpha {
+            Bound::Exact
+        } else {
+            Bound::Upper
+        };
         // ANCHOR: tt_store
         // (Not in a singular extension's search: its result leaves the best move out.)
         if self.techniques.tt && !self.aborted && excluded.is_none() {
-            let bound = if best >= beta {
-                Bound::Lower
-            } else if best > original_alpha {
-                Bound::Exact
-            } else {
-                Bound::Upper
-            };
             // After a fail low every move was refuted, so none of them is known to be best.
             let move_to_store = if bound == Bound::Upper {
                 None
@@ -1238,6 +1288,22 @@ impl<'a> Searcher<'a> {
                 .store(pos.hash(), move_to_store, score, depth, bound);
         }
         // ANCHOR_END: tt_store
+
+        // ANCHOR: correction_update
+        // Correction history learns how far the static evaluation was off: not in check (there
+        // is none), not in a singular extension's search (its score leaves the best move out),
+        // and not when the best move is a capture or promotion (its gain is material the static
+        // evaluation isn't meant to see).
+        if self.techniques.correction_history
+            && !self.aborted
+            && !in_check
+            && excluded.is_none()
+            && !best_move.is_some_and(is_noisy)
+            && let Some(correction) = self.correction.as_deref_mut()
+        {
+            correction.update(pos, depth, raw_eval, best, bound, &self.search_params);
+        }
+        // ANCHOR_END: correction_update
         best
     }
     // ANCHOR_END: negamax
@@ -1365,8 +1431,9 @@ impl<'a> Searcher<'a> {
 
         let mut best = -INFINITY;
         if !in_check {
-            // Stand pat: not capturing is an option, so the static score is a lower bound.
-            best = evaluate(pos, self.params);
+            // Stand pat: not capturing is an option, so the static score is a lower bound. It
+            // is corrected, as in the main search.
+            best = self.corrected_eval(pos, evaluate(pos, self.params));
             if self.techniques.alpha_beta && best >= beta {
                 return best;
             }
