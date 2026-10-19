@@ -207,7 +207,8 @@
 //! off it was from the nodes' searched scores, by side to move and pawn structure, and corrects
 //! every static evaluation in the main and quiescence searches by that much (see
 //! [`crate::correction`]). It takes 3% off the bench and gained +28.0 ± 13.0 Elo after 1,308
-//! games at 8+0.08 (cjus/chessengine#112).
+//! games at 8+0.08 (cjus/chessengine#112). Two more tables, keyed by each side's pieces other
+//! than pawns, are averaged in with it ([`Techniques::correction_non_pawn`]).
 //!
 //! ## ProbCut
 //!
@@ -276,7 +277,7 @@ use std::time::Instant;
 use cb2026_chess::{Move, PieceType, Position};
 
 use crate::Score;
-use crate::correction::CorrectionHistory;
+use crate::correction::{CorrectionHistory, CorrectionSettings};
 use crate::eval::{EvalParams, evaluate};
 use crate::ordering::{
     CONTINUATION_PLIES, MovePicker, OrderingTables, PieceTo, Previous, is_noisy,
@@ -379,6 +380,9 @@ pub struct SearchParams {
     pub correction_max_weight: i32,
     /// ...and no entry corrects by more than this many centipawns either way.
     pub correction_limit: i32,
+    /// With the piece tables on, each side's counts this many 256ths of the correction, and
+    /// the pawn table the rest (keep it at most 128).
+    pub correction_non_pawn_share: i32,
     /// ProbCut applies from this depth on...
     pub probcut_min_depth: u32,
     /// ...and asks whether a capture beats beta by this many centipawns...
@@ -434,6 +438,8 @@ impl Default for SearchParams {
             negative_extension_plies: 1,
             correction_max_weight: 16,
             correction_limit: 64,
+            // Half for the pawns, a quarter for each side's pieces: set by hand, not tuned.
+            correction_non_pawn_share: 64,
             // Set by hand, not tuned: a pawn above beta, four plies shallower.
             probcut_min_depth: 5,
             probcut_margin: 100,
@@ -528,6 +534,9 @@ pub struct Techniques {
     /// Correction history: correct the static evaluation by how far off it has been in
     /// positions with the same pawns (see [`crate::correction`]).
     pub correction_history: bool,
+    /// Correction history's piece tables: also learn and correct by each side's pieces other
+    /// than pawns, averaged with the pawn table (needs correction history).
+    pub correction_non_pawn: bool,
     /// ProbCut: cut a node off when a good capture beats beta by a margin in a shallower
     /// search (needs the quiescence search; off by default).
     pub probcut: bool,
@@ -576,6 +585,7 @@ impl Default for Techniques {
             // Off by default: three versions measured weaker (see the module documentation).
             improving: false,
             correction_history: true,
+            correction_non_pawn: true,
             // Off by default: it measured weaker, −10.2 ± 9.1 Elo after 2,593 games at 8+0.08
             // (cjus/chessengine#117), though it took 9.6% off the bench; see chapter 12.1.
             probcut: false,
@@ -608,6 +618,7 @@ impl Techniques {
             iir: false,
             improving: false,
             correction_history: false,
+            correction_non_pawn: false,
             probcut: false,
             ..Techniques::default()
         }
@@ -785,10 +796,16 @@ impl<'a> Searcher<'a> {
     fn corrected_eval(&self, pos: &Position, raw_eval: i32) -> i32 {
         match self.correction.as_deref() {
             Some(correction) if self.techniques.correction_history => {
-                correction.corrected(pos, raw_eval)
+                correction.corrected(pos, raw_eval, &self.correction_settings())
             }
             _ => raw_eval,
         }
+    }
+
+    /// How correction history learns and corrects in this search: its parameters, and whether
+    /// the piece tables are on.
+    fn correction_settings(&self) -> CorrectionSettings {
+        CorrectionSettings::new(&self.search_params, self.techniques.correction_non_pawn)
     }
 
     /// Records the search's decisions in `tree` from now on.
@@ -1446,6 +1463,7 @@ impl<'a> Searcher<'a> {
         // is none), not in a singular extension's search (its score leaves the best move out),
         // and not when the best move is a capture or promotion (its gain is material the static
         // evaluation isn't meant to see).
+        let settings = self.correction_settings();
         if self.techniques.correction_history
             && !self.aborted
             && !in_check
@@ -1453,7 +1471,7 @@ impl<'a> Searcher<'a> {
             && !best_move.is_some_and(is_noisy)
             && let Some(correction) = self.correction.as_deref_mut()
         {
-            correction.update(pos, depth, raw_eval, best, bound, &self.search_params);
+            correction.update(pos, depth, raw_eval, best, bound, &settings);
         }
         // ANCHOR_END: correction_update
         best

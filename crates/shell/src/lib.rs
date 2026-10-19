@@ -179,6 +179,8 @@ Commands:
   set correction on|off
                        Correction history: correct the static evaluation by how far off it
                        has been with the same pawns
+  set corrpieces on|off
+                       Correction history's piece tables: by each side's pieces as well
   set tmstability on|off
                        Time: stop sooner when the best move stays the same, later when it changes
   set tmscore on|off   Time: think longer when the score falls from one depth to the next
@@ -1126,7 +1128,7 @@ impl Shell {
 }
 
 /// Usage for the `set` command.
-const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set threads <N> | set eval hand|tuned | set alphabeta|quiescence|mvvlva|tt|ttbuckets|killers|countermoves|history|conthist|capthist|pvs|aspiration|nullmove|lmr|histlmr|lmp|rfp|razoring|futility|seeprune|delta|seeorder|checkext|singular|doubleext|multicut|negext|iir|improving|probcut|correction|tmstability|tmscore|pst|tapered|mobility|pawns|pieces|kingsafety|tempo on|off";
+const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set threads <N> | set eval hand|tuned | set alphabeta|quiescence|mvvlva|tt|ttbuckets|killers|countermoves|history|conthist|capthist|pvs|aspiration|nullmove|lmr|histlmr|lmp|rfp|razoring|futility|seeprune|delta|seeorder|checkext|singular|doubleext|multicut|negext|iir|improving|probcut|correction|corrpieces|tmstability|tmscore|pst|tapered|mobility|pawns|pieces|kingsafety|tempo on|off";
 
 /// How long the engine thinks per move by default in the shell.
 const DEFAULT_MOVETIME_MS: u64 = 1000;

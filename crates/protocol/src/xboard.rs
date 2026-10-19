@@ -799,14 +799,19 @@ mod tests {
         assert!(wait_until(|| played() == 2));
         session.handle("ping 2");
         assert_eq!(session.history.len(), 4);
-        // A miss: any other move ends the ponder search and starts a new one.
+        // A miss: any other move ends the ponder search and starts a new one. Not a king move:
+        // the first one generated can walk into a mate (1. e4 d5 2. exd5 Qxd5 3. Ke2 Qe4#), and
+        // a finished game has nothing to ponder on.
         let expected = session.pondering().expect("pondering again");
+        let king = session
+            .position
+            .king_square(session.position.side_to_move());
         let other = session
             .position
             .legal_moves()
             .iter()
             .copied()
-            .find(|&mv| mv != expected)
+            .find(|&mv| mv != expected && mv.from() != king)
             .unwrap();
         session.handle(&format!("usermove {}", other.to_uci(false)));
         assert!(wait_until(|| played() == 3));
