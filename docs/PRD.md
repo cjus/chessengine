@@ -214,7 +214,7 @@ moves ...`, every `go` parameter, `stop`, `ponderhit`, `quit`, and `info` lines 
 | UCI_Chess960 | check | false | |
 | UCI_ShowWDL | check | false | |
 | UCI_LimitStrength | check | false | |
-| UCI_Elo | spin | 2600 | 800–2600 (widened from 1000–2400 after the calibration, cjus/chessengine#106) |
+| UCI_Elo | spin | 2450 | 650–2450: level 0's and level 19's ratings at 40+0.4, rounded inward (cjus/chessengine#106) |
 | Skill Level | spin | 20 | 0–20 |
 | SyzygyPath | string | `<empty>` | |
 | SyzygyProbeDepth | spin | 1 | 1–100 |
@@ -347,8 +347,9 @@ stalemate), the engine offering and accepting draws and resigning in hopeless po
 - **How it weakens:** a node limit per move, plus choosing among the top MultiPV moves with
   controlled randomness, so it makes believable mistakes instead of blundering pieces at random.
   The book explains why "search less" alone doesn't produce human-like play.
-- **Calibrated, not guessed:** each level is measured in matches against reference engines with
-  known CCRL ratings, and the `UCI_Elo` → settings table is fitted to those results. The
+- **Calibrated, not guessed:** each level is measured in matches at 40+0.4 against reference
+  engines with known CCRL ratings, and the `UCI_Elo` → settings table is fitted to those
+  results. The
   engines are in "Testing and strength measurement"; `scripts/mac-levels.sh` rates the levels.
   Elo is on the CCRL scale; the docs say plainly that this isn't the same as a FIDE or Lichess
   rating.
@@ -456,7 +457,7 @@ the first choices for two of the places, failed that check. The gauntlets run at
 faster than CCRL Blitz's 2'+1", so their ratings are approximate; a run at 40+0.4 is closer and
 takes five times as long.
 
-**For the strength levels**, which go down to `UCI_Elo` 1000, five weaker engines join the
+**For the strength levels**, which go down to `UCI_Elo` 650, five weaker engines join the
 seven (chosen on 2026-10-18, cjus/chessengine#101; same CCRL snapshot):
 
 | Engine | CCRL Blitz | Language |
@@ -470,7 +471,11 @@ seven (chosen on 2026-10-18, cjus/chessengine#101; same CCRL snapshot):
 With the gauntlet's lower four, that is one engine every 165–225 points from 1058 to 2513. The
 two engines below 1000 that were tried failed the Apple Silicon check (Megalodon 1.0.0 reads
 past an array, Algae 1.0 builds only for x86), so the lowest levels are rated from above. Each Skill Level plays the
-four engines nearest its expected rating (`scripts/mac-levels.sh`, cjus/chessengine#103).
+four engines nearest its expected rating (`scripts/mac-levels.sh`, cjus/chessengine#103 and
+#106). Two of the five have bugs of their own that lose games, which count as losses: Walleye
+1.3.0 ignores en passant captures in the moves it is sent (about 1% of its games), and Arche
+0.3.8 sometimes answers `bestmove 0000` with legal moves on the board (2 of its 1,400 games at
+40+0.4, none at 8+0.08).
 
 ### Test machine
 
@@ -610,13 +615,15 @@ measures it again with the robustness run. That is only 45 ± 14 above stage 16.
 that passed their SPRTs add up to about +136 Elo in self-play, so against other engines they
 gained about a third of that: self-play SPRTs find gains reliably but overstate their size.
 
-M4's levels are calibrated (2026-10-18, cjus/chessengine#103): Skill Levels 0–19 rated **752 to
-2599** (± 22 to 41), 800 games each at 8+0.08 against the four reference engines nearest each,
-and `UCI_Elo` maps onto those ratings (`crates/engine/src/levels.rs`, chapter 19). The levels
-limit nodes, so at slower time controls they would rate lower; whether to check that is
-cjus/chessengine#106. Since the levels reach further than first guessed, `UCI_Elo` is widened
-from 1000–2400 to 800–2600 (Carlos, 2026-10-18, cjus/chessengine#106). M4 still needs the GUI
-compatibility matrix (cjus/chessengine#37).
+M4's levels are calibrated (2026-10-19, cjus/chessengine#106): Skill Levels 0–19 rate **629 to
+2483** at 40+0.4 (± 23 to 55), and `UCI_Elo` maps onto those ratings
+(`crates/engine/src/levels.rs`, chapter 19). Every other level played 800 games against the
+four reference engines nearest it, 8,800 games in all, and the odd levels are interpolated.
+The first calibration, at 8+0.08 on 2026-10-18 (cjus/chessengine#103), rated the levels 752 to
+2599. Levels limit nodes, so against opponents given more time they rate lower: 74 to 272
+lower at 40+0.4, which is closer to CCRL's 2'+1". `UCI_Elo` now runs from level 0's rating to
+level 19's, rounded inward to 50: 650–2450 (Carlos, cjus/chessengine#106). M4 still needs the
+GUI compatibility matrix (cjus/chessengine#37).
 
 ## Risks
 
@@ -737,8 +744,12 @@ about 26 s, and the M1 Max played about 970 games an hour.
 - [x] Level calibration engines: five more, from 1058 to 1794 CCRL Blitz (Fatalii 0.1.1, Walleye
       1.3.0, Arche 0.3.8, Blunder 4.0.0, Rustic Alpha 3.0.0), built by the same script
       (cjus/chessengine#101, 2026-10-18).
-- [x] `UCI_Elo` range: 800–2600, levels 0.7 to 19.0 of the calibrated table, instead of
-      1000–2400 (cjus/chessengine#106, 2026-10-18).
+- [x] Levels calibrated at 40+0.4, not 8+0.08, since node-limited levels rate 74–272 lower
+      there: every other level measured, the odd ones interpolated (cjus/chessengine#106,
+      2026-10-18).
+- [x] `UCI_Elo` range: 650–2450, level 0's and level 19's ratings at 40+0.4 rounded inward to
+      50. It was 1000–2400 at first, then 800–2600 after the calibration at 8+0.08
+      (cjus/chessengine#106, 2026-10-18).
 
 ## Open questions
 

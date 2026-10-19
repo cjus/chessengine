@@ -1073,7 +1073,7 @@ mod tests {
         // UCI_Elo maps onto a strength, and never makes the engine stronger than Skill Level.
         engine.skill_level = 20;
         engine.limit_strength = true;
-        engine.elo = 1534;
+        engine.elo = 1391;
         assert_eq!(engine.level(), 10.0);
         engine.elo = 1000;
         assert_eq!(engine.level(), levels::level_for_elo(1000));

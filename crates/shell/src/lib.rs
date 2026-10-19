@@ -141,7 +141,7 @@ Commands:
   new960 [n]           Chess960 starting position n (0-959, 518 is the standard one;
                        random without n)
   level <0-20>         The engine's strength level (20 = full strength)
-  elo <n>|off          Limit the engine's strength to about n Elo (800-2600), or not
+  elo <n>|off          Limit the engine's strength to about n Elo (650-2450), or not
   set multipv <N>      Search and show the N best lines
   set syzygy <path>    Load Syzygy endgame tablebases from a directory (none: unload)
   tb                   The tablebase result and best move for this position
@@ -447,7 +447,11 @@ impl Shell {
                         self.engine.elo = elo;
                         Response::text(self.strength_text())
                     }
-                    _ => Response::text("Usage: elo <800-2600>|off"),
+                    _ => Response::text(format!(
+                        "Usage: elo <{}-{}>|off",
+                        levels::ELO_RANGE.0,
+                        levels::ELO_RANGE.1
+                    )),
                 },
             },
             "book" => self.book_moves(),
@@ -749,7 +753,6 @@ impl Shell {
         Response::text(out)
     }
 
-    /// Lists every part of the position's Zobrist key, then their XOR.
     /// The engine's strength setting, in words, with its measured rating.
     fn strength_text(&self) -> String {
         let level = self.engine.level();
@@ -886,6 +889,7 @@ impl Shell {
         Response::text(out)
     }
 
+    /// Lists every part of the position's Zobrist key, then their XOR.
     fn zobrist(&self) -> Response {
         let pos = self.game.position();
         let mut out = String::from("The key is the XOR of one random number per feature:\n");
@@ -1649,21 +1653,18 @@ mod tests {
             shell
                 .execute("level 5")
                 .output
-                .starts_with("Strength: level 5, about 1052 Elo: 3037 nodes")
+                .starts_with("Strength: level 5, about 957 Elo: 3037 nodes")
         );
         // Skill Level 5 still caps the strength, and the text says what the engine plays at.
         let out = shell.execute("elo 1300").output;
-        assert!(
-            out.starts_with("Strength: level 5, about 1052 Elo"),
-            "{out}"
-        );
+        assert!(out.starts_with("Strength: level 5, about 957 Elo"), "{out}");
         shell.execute("level 20");
         let out = shell.execute("elo 1300").output;
         assert!(
-            out.starts_with("Strength: level 7.9, about 1300 Elo"),
+            out.starts_with("Strength: level 9.1, about 1300 Elo"),
             "{out}"
         );
-        assert!(shell.execute("elo 700").output.starts_with("Usage"));
+        assert!(shell.execute("elo 600").output.starts_with("Usage"));
         assert!(shell.execute("level 21").output.starts_with("Usage"));
         shell.execute("elo off");
         shell.execute("level 20");
