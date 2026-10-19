@@ -206,7 +206,8 @@
 //! is wrong in the same way in the same pawn structures. **Correction history** learns how far
 //! off it was from the nodes' searched scores, by side to move and pawn structure, and corrects
 //! every static evaluation in the main and quiescence searches by that much (see
-//! [`crate::correction`]).
+//! [`crate::correction`]). It takes 3% off the bench and gained +28.0 ± 13.0 Elo after 1,308
+//! games at 8+0.08 (cjus/chessengine#112).
 //!
 //! ## Tablebase probes (stage 18)
 //!

@@ -97,10 +97,15 @@ after another, without clearing the table, 2,111 of the 32,768 entries were in u
 average correction was 3.5 centipawns, 90% were within 8 and 99% within 25, and none reached
 the limit of 64. Reverse futility pruning, razoring and futility pruning have margins of 80
 centipawns a ply or more, so a typical correction changes few of their decisions. Null-move
-pruning, which only needs the evaluation at beta, and the stand pat feel it more directly. The
-gain, if there is one, comes from the structures where the evaluation is consistently wrong by
-more. In a game the table carries over from move to move,
-and the same structures come up again and again.
+pruning, which only needs the evaluation at beta, and the stand pat feel it more directly.
+
+Even so, it gained about as much as singular extensions and multi-cut (+29.5, chapter 14.1),
+among the largest of the changes made after stage 20. The numbers above don't explain that on
+their own, and two things they leave out probably do. In a game the table carries over from
+move to move and the same structures come up again and again, so its entries learn from far
+more nodes than in that measurement. And most of the gain may come from the few structures
+where the evaluation is consistently wrong by more, the 1% beyond 25 centipawns, which are also
+where a wrong evaluation costs the most. Neither is measured.
 
 ## Pitfalls
 
@@ -124,7 +129,7 @@ and the same structures come up again and again.
 
 | Test | Result |
 | --- | --- |
-| Correction history vs `main` without it, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | Running (cjus/chessengine#112) |
+| Correction history vs `main` without it, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+28.0 ± 13.0 Elo** over 1,308 games (+362 −257 =689): passed (LLR 2.95), cjus/chessengine#112 |
 
 ## Further reading
 

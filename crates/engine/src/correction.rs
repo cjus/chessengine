@@ -10,7 +10,8 @@
 //! **Correction history** keeps a running average of that difference in a table indexed by the
 //! side to move and the pawn structure. It adds the average to every later static evaluation of
 //! a position with the same pawns and the same side to move. The table persists from one search
-//! to the next, like the history tables, and a new game clears it.
+//! to the next, like the history tables, and a new game clears it. It gained +28.0 ± 13.0 Elo
+//! after 1,308 games at 8+0.08 (cjus/chessengine#112).
 //!
 //! ## Which results it learns from
 //!

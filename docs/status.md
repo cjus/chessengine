@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-19, 10:23 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-19, 10:56 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -28,8 +28,8 @@ written, #104; the levels calibrated, 752–2599, and `UCI_Elo` fitted to them, 
 the levels were recalibrated at 40+0.4, #106. 2026-10-19: the levels at 40+0.4 rated 629–2483,
 `levels::RATINGS` set to them and `UCI_Elo` narrowed to 650–2450, #106; `Position::parse_move`
 reads a move in SAN or coordinates and says why text names none, including a promotion
-without its piece, for the shell and Solrac's chat, #113; correction history running on the
-M3, #112.*
+without its piece, for the shell and Solrac's chat, #113; correction history merged, +28.0 ±
+13.0, #112.*
 
 ## Stages
 
@@ -79,17 +79,13 @@ M3, #112.*
 | M5: transposition table buckets at 40+0.4 (chapter 8.1) | #92 | 1098926 (1114877 with buckets on) | Merged as a record, off by default: +1.6 ± 6.3, 4,630 games, [0, 5] at 40+0.4 no verdict (LLR −0.45), stopped (M3 Max) |
 | `cb2026_chess::game::Game`: one record of a game and one set of end-of-game rules, moved from chessgui and used by the shell, the match tool and self-play | #94 | 1098926 | Merged, no functional change; chessgui uses it from cjus/chessgui#31 |
 | M5: double extensions (chapter 14.1) | #96 | 1098926 (1248666 with double extensions on) | Merged, off by default: +3.6 ± 4.9, 8,670 games, [0, 5] no verdict (LLR 0.92), stopped (M3 Max) |
-| `Position::parse_move`: a move typed in SAN or coordinates, and `SanError::MissingPromotion` when a pawn promotes without its piece; the shell uses it, and Solrac's chat will (cjus/chessgui#38) | #113 | 1098926 | Open, no functional change |
-| M5: correction history (chapter 14.2) | #112, `claude/correction-history` | 1065754 | Draft, its SPRT running on the M3 Max: [0, 5] at 8+0.08 |
+| `Position::parse_move`: a move typed in SAN or coordinates, and `SanError::MissingPromotion` when a pawn promotes without its piece; the shell uses it, and Solrac's chat will (cjus/chessgui#38) | #113 | 1098926 | Merged, no functional change |
+| M5: correction history (chapter 14.2) | #112 | 1065754 | Merged: +28.0 ± 13.0, 1,308 games, [0, 5] passed (M3 Max) |
 
-**Running now: #112** (correction history: the static evaluation corrected by how far off it
-has been with the same pawns, learnt from the search; chapter 14.2), started on the M3 on
-2026-10-19 at about 09:45 MDT. A new session should restart the watcher,
-`scripts/watch-sprt.sh 112`, or just read #112's comments if the result is already there. Then
-rebase #112 onto `main` (in `docs/status.md` take `main`'s side and edit it), record the result
-in chapter 14.2, the module docs, the ledger and this file, and merge. If it fails, switch
-`correction_history` off by default (with its comment and the shell's help) and merge as a
-record.
+**Nothing is running on the M3.** Correction history's SPRT (#112) finished on 2026-10-19 at
+10:53 MDT. It started at about 09:45 and passed in 1,308 games: **+28.0 ± 13.0**, about as much
+as singular extensions and multi-cut (#71). It is on by default, and the M3's next job is
+another M5 SPRT (item 3 below).
 
 The recalibration of the levels at 40+0.4 (#106) finished on
 2026-10-19 at 08:28 MDT. It started at about 21:45 MDT the evening before, and rated levels 0,
@@ -116,7 +112,7 @@ seven reference engines at 8+0.08, about 4 hours a version: stage 14 **2442 ± 1
 stage 16 **2669 ± 10** (M3 passed), and `main` **2714 ± 10**, all recorded in the PRD's
 "Milestones" and the ledger. `main` is only 45 ± 14 above stage 16, though the M5 SPRTs that
 passed add up to about +136 in self-play: self-play overstates gains against other engines about
-threefold here. After the calibration, the M3's next job is another M5 SPRT (item 3 below).
+threefold here.
 
 When several PRs wait for the M3, they run one at a time, and **before each SPRT starts, rebase
 that PR onto the current `main`** and re-measure its `Bench:` line: `scripts/mac-sprt.sh` plays
@@ -125,8 +121,8 @@ have. For each: if it passes, record it in its chapter and the ledger, mark it r
 if it fails, switch it off by default (as with #57, #60, #63 and #65), record it and merge.
 
 **The SPRT loop with Carlos.** Claude opens the PR as a draft with the M3 command in its
-description, ending with `tail -f ~/sprt-<N>.log` so Carlos can watch it (he asked for that
-on every job, 2026-10-15). Carlos starts it on the M3 and says so ("SPRT started on the
+description, ending with `tail -f ~/sprt-<N>.log` so Carlos can watch it (Carlos asked for
+that on every job, 2026-10-15). Carlos starts it on the M3 and says so ("SPRT started on the
 M3 for #N"). Claude then runs `scripts/watch-sprt.sh <N>` in the background: it checks the PR every 10 minutes for
 the comment `mac-sprt.sh` posts and prints it (Carlos approved this polling on 2026-10-12).
 `mac-sprt.sh` also keeps a progress comment on the PR, updated every 2,000 games (Carlos,
@@ -283,7 +279,8 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    (#77, +4.9 ± 4.0, after 14,211 games and about 13 hours); on 2026-10-15, singular extensions
    from depth 6 (#78, +5.0 ± 4.1, 12,282 games, about 10 hours) and from depth 4 (#80, +6.1 ±
    4.8, 9,057 games, about 7 hours); on 2026-10-16, `singular_margin` 3 (#82, +5.2 ± 4.2,
-   11,400 games, about 9 hours). Failed, so not adopted: `singular_margin` 4 (#84, −1.8 ± 5.3
+   11,400 games, about 9 hours); on 2026-10-19, correction history (#112, +28.0 ± 13.0, 1,308
+   games, about 70 minutes). Failed, so not adopted: `singular_margin` 4 (#84, −1.8 ± 5.3
    against 3, 7,476 games, about 6 hours) and transposition table buckets (#86, −8.8 ± 8.6,
    2,685 games, about 2 hours; off by default). No verdict, off: history in
    LMR's first version (#70) and, on 2026-10-17 at 40+0.4, transposition table buckets (#92,
@@ -294,9 +291,9 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    games; about 255 games an hour on the M3, 10 hours).
 
    Next, in a rough order of value:
-   - **Correction history** (#112, chapter 14.2), its SPRT running now (see "Running now").
-     After it: capture history and ProbCut, both new techniques and usually worth more than
-     the parameter changes below.
+   - **Capture history and ProbCut**, both new techniques and usually worth more than the
+     parameter changes below. Correction history passed (#112, +28.0); more correction tables,
+     keyed by pieces other than the pawns as several strong engines do, could follow it.
    - **Tuning singular extensions, continued**: depth 6 passed (#78) and depth 4 too (#80),
      which is about where Stockfish starts; `singular_margin` 3 passed too (#82), and 4
      failed (#84). That settles the start depth and the margin for now. Double extensions,
