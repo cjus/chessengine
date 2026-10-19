@@ -232,6 +232,10 @@
 //! against a fixed margin. This is that kind, and the code is cb2026's own. See the Chess
 //! Programming Wiki, [ProbCut](https://www.chessprogramming.org/ProbCut).
 //!
+//! **Off by default.** It took 9.6% off the bench and measured weaker: −10.2 ± 9.1 Elo after
+//! 2,593 games at 8+0.08 (cjus/chessengine#117). The switch and the parameters stay, so other
+//! settings can be tested.
+//!
 //! ## Tablebase probes (stage 18)
 //!
 //! With few pieces left, the search can ask the endgame tablebases for the exact result
@@ -525,7 +529,7 @@ pub struct Techniques {
     /// positions with the same pawns (see [`crate::correction`]).
     pub correction_history: bool,
     /// ProbCut: cut a node off when a good capture beats beta by a margin in a shallower
-    /// search (needs the quiescence search).
+    /// search (needs the quiescence search; off by default).
     pub probcut: bool,
 }
 
@@ -572,7 +576,9 @@ impl Default for Techniques {
             // Off by default: three versions measured weaker (see the module documentation).
             improving: false,
             correction_history: true,
-            probcut: true,
+            // Off by default: it measured weaker, −10.2 ± 9.1 Elo after 2,593 games at 8+0.08
+            // (cjus/chessengine#117), though it took 9.6% off the bench; see chapter 12.1.
+            probcut: false,
         }
     }
 }

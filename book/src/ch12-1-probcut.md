@@ -10,9 +10,9 @@ full-depth search would almost surely beat beta too, and the node is cut off.
 The bet rests on a fact about search scores: a shallow search's score and a deep search's
 score of the same position are closely related (Buro measured it, for Othello). So a shallow
 score well above beta says, with high probability, that the deep score is above beta as
-well. The name is short for *probabilistic cut*. Like chapter
-14.1's techniques, it came after stage 20, so no stage tag contains it. Switch it with
-`set probcut on|off`.
+well. The name is short for *probabilistic cut*. Like chapter 14.1's techniques, it came after
+stage 20, so no stage tag contains it. It measured weaker, so it is **off by default**;
+`set probcut on` switches it on.
 
 ## The test
 
@@ -81,7 +81,7 @@ The `stats` command shows how often it fires. After a search to depth 12:
 
 On those three, ProbCut cuts off hundreds or thousands of nodes, yet the tree comes out about
 the same size. Presumably its own searches cost about what its cutoffs save there; on the bench
-positions it saves 9.6%. Whether it is worth Elo, only games can say.
+positions it saves 9.6%. The games (below) found it weaker all the same.
 
 ## Pitfalls
 
@@ -100,7 +100,18 @@ positions it saves 9.6%. Whether it is worth Elo, only games can say.
 
 | Test | Result |
 | --- | --- |
-| ProbCut vs `main` without it, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | Waiting for its SPRT (cjus/chessengine#117) |
+| ProbCut vs `main` without it, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−10.2 ± 9.1 Elo** over 2,593 games (+562 −638 =1393): failed (LLR −2.95), cjus/chessengine#117, so it is off by default |
+
+Like capture history (chapter 10.2), it made the bench smaller and the engine weaker. Why isn't
+measured: the cutoffs it makes may be wrong too often at a margin of a pawn, or the searches it
+spends where no capture reaches the margin may cost more in games than in the bench. The
+switch and the three parameters stay. Untested candidates for another try:
+
+- **A larger margin**, 150 or 200 centipawns: fewer cutoffs, and fewer wrong ones.
+- **A deeper start**, `probcut_min_depth` 6 or 7, so that ProbCut's own search is deeper and its
+  score closer to the full search's.
+- **The long time control**, 40+0.4, where searches are deeper and more nodes are at the depths
+  ProbCut works at.
 
 ## Further reading
 

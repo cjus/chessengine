@@ -187,7 +187,7 @@ pub(crate) const SWITCHES: &[Switch] = &[
     },
     Switch {
         name: "probcut",
-        description: "ProbCut (a capture that beats beta by a margin, shallower: cut off)",
+        description: "ProbCut (a capture that beats beta by a margin, shallower: cut off; off by default)",
         flag: |e| &mut e.techniques.probcut,
     },
     Switch {

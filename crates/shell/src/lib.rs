@@ -46,7 +46,7 @@
 //! | `set capthist on\|off` | Capture history: order captures by their cutoffs as well as by MVV-LVA (off by default) |
 //! | `set pvs on\|off`, `set aspiration on\|off` | Principal variation search; aspiration windows |
 //! | `set nullmove on\|off` | Null-move pruning |
-//! | `set probcut on\|off` | ProbCut: cut off a node where a capture beats beta by a margin in a shallower search |
+//! | `set probcut on\|off` | ProbCut: cut off a node where a capture beats beta by a margin in a shallower search (off by default) |
 //! | `set lmr on\|off`, `set histlmr on\|off`, `set lmp on\|off` | Late move reductions; adjusted by history; late move pruning |
 //! | `set rfp\|razoring\|futility\|seeprune\|delta\|seeorder on\|off` | Stage 14's pruning and SEE ordering |
 //! | `eval` | The static evaluation, term by term |
@@ -175,7 +175,7 @@ Commands:
   set iir on|off       Internal iterative reductions (no hash move: a ply shallower)
   set improving on|off Adjust pruning when the side to move is improving (default off)
   set probcut on|off   ProbCut: cut off a node where a capture beats beta by a margin in a
-                       shallower search
+                       shallower search (default off)
   set correction on|off
                        Correction history: correct the static evaluation by how far off it
                        has been with the same pawns
