@@ -24,6 +24,7 @@
     - [Capture history](ch10-2-capture-history.md)
 - [Principal variation search and aspiration windows](ch11-pvs.md)
 - [Null-move pruning](ch12-nullmove.md)
+    - [ProbCut](ch12-1-probcut.md)
 - [Late move reductions and pruning](ch13-lmr.md)
 - [Futility, razoring and SEE pruning](ch14-pruning.md)
     - [Extensions and reductions](ch14-1-extensions.md)

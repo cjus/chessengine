@@ -46,6 +46,7 @@
 //! | `set capthist on\|off` | Capture history: order captures by their cutoffs as well as by MVV-LVA (off by default) |
 //! | `set pvs on\|off`, `set aspiration on\|off` | Principal variation search; aspiration windows |
 //! | `set nullmove on\|off` | Null-move pruning |
+//! | `set probcut on\|off` | ProbCut: cut off a node where a capture beats beta by a margin in a shallower search |
 //! | `set lmr on\|off`, `set histlmr on\|off`, `set lmp on\|off` | Late move reductions; adjusted by history; late move pruning |
 //! | `set rfp\|razoring\|futility\|seeprune\|delta\|seeorder on\|off` | Stage 14's pruning and SEE ordering |
 //! | `eval` | The static evaluation, term by term |
@@ -173,6 +174,8 @@ Commands:
                        ply shallower (needs singular)
   set iir on|off       Internal iterative reductions (no hash move: a ply shallower)
   set improving on|off Adjust pruning when the side to move is improving (default off)
+  set probcut on|off   ProbCut: cut off a node where a capture beats beta by a margin in a
+                       shallower search
   set correction on|off
                        Correction history: correct the static evaluation by how far off it
                        has been with the same pawns
@@ -1123,7 +1126,7 @@ impl Shell {
 }
 
 /// Usage for the `set` command.
-const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set threads <N> | set eval hand|tuned | set alphabeta|quiescence|mvvlva|tt|ttbuckets|killers|countermoves|history|conthist|capthist|pvs|aspiration|nullmove|lmr|histlmr|lmp|rfp|razoring|futility|seeprune|delta|seeorder|checkext|singular|doubleext|multicut|negext|iir|improving|correction|tmstability|tmscore|pst|tapered|mobility|pawns|pieces|kingsafety|tempo on|off";
+const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set threads <N> | set eval hand|tuned | set alphabeta|quiescence|mvvlva|tt|ttbuckets|killers|countermoves|history|conthist|capthist|pvs|aspiration|nullmove|lmr|histlmr|lmp|rfp|razoring|futility|seeprune|delta|seeorder|checkext|singular|doubleext|multicut|negext|iir|improving|probcut|correction|tmstability|tmscore|pst|tapered|mobility|pawns|pieces|kingsafety|tempo on|off";
 
 /// How long the engine thinks per move by default in the shell.
 const DEFAULT_MOVETIME_MS: u64 = 1000;
