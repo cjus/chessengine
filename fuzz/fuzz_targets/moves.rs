@@ -1,12 +1,13 @@
-//! Move parsing (SAN and UCI notation) never panics, and every move it accepts is legal and
-//! writes back to text that reads as the same move.
+//! Move parsing (SAN, UCI notation, and `parse_move`, which reads either) never panics, and
+//! every move it accepts is legal and writes back to text that reads as the same move. A
+//! missing promotion piece is only reported where a pawn can promote.
 //!
 //! The input picks a position (one of a few, or a FEN before a newline) and then gives the
 //! move text.
 
 #![no_main]
 
-use cb2026_chess::Position;
+use cb2026_chess::{Position, SanError};
 use libfuzzer_sys::fuzz_target;
 
 const POSITIONS: [&str; 4] = [
@@ -35,5 +36,17 @@ fuzz_target!(|text: &str| {
     if let Some(mv) = pos.parse_uci_move(text) {
         assert!(legal.contains(&mv), "{text} parsed to an illegal move");
         assert_eq!(pos.parse_uci_move(&mv.to_uci(false)), Some(mv));
+    }
+    match pos.parse_move(text) {
+        Ok(mv) => {
+            assert!(legal.contains(&mv), "{text} parsed to an illegal move");
+            assert_eq!(pos.parse_move(&pos.to_san(mv)), Ok(mv));
+            assert_eq!(pos.parse_move(&mv.to_uci(false)), Ok(mv));
+        }
+        Err(SanError::MissingPromotion(_)) => assert!(
+            legal.iter().any(|mv| mv.promotion().is_some()),
+            "{text}: a missing promotion where no pawn can promote"
+        ),
+        Err(_) => {}
     }
 });
