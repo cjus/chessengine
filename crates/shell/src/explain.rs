@@ -86,6 +86,11 @@ pub(crate) const SWITCHES: &[Switch] = &[
         flag: |e| &mut e.techniques.continuation_history,
     },
     Switch {
+        name: "capthist",
+        description: "Capture history: captures ordered by their cutoffs too (off by default)",
+        flag: |e| &mut e.techniques.capture_history,
+    },
+    Switch {
         name: "pvs",
         description: "Principal variation search",
         flag: |e| &mut e.techniques.pvs,

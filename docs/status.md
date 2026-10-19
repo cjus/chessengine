@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-19, 11:40 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-19, 13:01 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -29,7 +29,7 @@ the levels were recalibrated at 40+0.4, #106. 2026-10-19: the levels at 40+0.4 r
 `levels::RATINGS` set to them and `UCI_Elo` narrowed to 650–2450, #106; `Position::parse_move`
 reads a move in SAN or coordinates and says why text names none, including a promotion
 without its piece, for the shell and Solrac's chat, #113; correction history merged, +28.0 ±
-13.0, #112; capture history running on the M3, #115.*
+13.0, #112; capture history failed, −19.2 ± 11.9, so it is off by default, #115.*
 
 ## Stages
 
@@ -81,15 +81,12 @@ without its piece, for the shell and Solrac's chat, #113; correction history mer
 | M5: double extensions (chapter 14.1) | #96 | 1098926 (1248666 with double extensions on) | Merged, off by default: +3.6 ± 4.9, 8,670 games, [0, 5] no verdict (LLR 0.92), stopped (M3 Max) |
 | `Position::parse_move`: a move typed in SAN or coordinates, and `SanError::MissingPromotion` when a pawn promotes without its piece; the shell uses it, and Solrac's chat will (cjus/chessgui#38) | #113 | 1098926 | Merged, no functional change |
 | M5: correction history (chapter 14.2) | #112 | 1065754 | Merged: +28.0 ± 13.0, 1,308 games, [0, 5] passed (M3 Max) |
-| M5: capture history (chapter 10.2) | #115, `claude/capture-history` | 943210 | Draft, its SPRT running on the M3 Max: [0, 5] at 8+0.08 |
+| M5: capture history (chapter 10.2) | #115 | 1065754 (943210 with capture history on) | Merged, off by default: −19.2 ± 11.9, 1,561 games, [0, 5] failed (M3 Max) |
 
-**Running now: #115** (capture history: captures ordered by how often they have caused
-cutoffs as well as by MVV-LVA; chapter 10.2), started on the M3 on 2026-10-19 at about 11:39
-MDT. A new session should restart the watcher, `scripts/watch-sprt.sh 115`, or just read
-#115's comments if the result is already there. Then rebase #115 onto `main` (in
-`docs/status.md` take `main`'s side and edit it), record the result in chapter 10.2, the
-ordering module docs, the ledger and this file, and merge. If it fails, switch
-`capture_history` off by default (with its comment and the shell's help) and merge as a record.
+**Nothing is running on the M3.** Capture history's SPRT (#115) finished on 2026-10-19 at
+12:53 MDT. It started at about 11:39 and failed in 1,561 games: **−19.2 ± 11.9**, though it took
+11.5% off the bench. It is merged off by default, with three untested ideas for a second
+version in chapter 10.2. The M3's next job is another M5 SPRT (item 3 below).
 
 Correction history's SPRT (#112) finished on 2026-10-19 at 10:53 MDT. It started at about 09:45
 and passed in 1,308 games: **+28.0 ± 13.0**, about as much as singular extensions and multi-cut
@@ -290,7 +287,8 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    11,400 games, about 9 hours); on 2026-10-19, correction history (#112, +28.0 ± 13.0, 1,308
    games, about 70 minutes). Failed, so not adopted: `singular_margin` 4 (#84, −1.8 ± 5.3
    against 3, 7,476 games, about 6 hours) and transposition table buckets (#86, −8.8 ± 8.6,
-   2,685 games, about 2 hours; off by default). No verdict, off: history in
+   2,685 games, about 2 hours; off by default) and, on 2026-10-19, capture history (#115,
+   −19.2 ± 11.9, 1,561 games, about 75 minutes; off by default). No verdict, off: history in
    LMR's first version (#70) and, on 2026-10-17 at 40+0.4, transposition table buckets (#92,
    +1.6 ± 6.3 over 4,630 games, about 18 hours, stopped) and, at 8+0.08, double extensions
    (#96, +3.6 ± 4.9 over 8,670 games, about 7 hours, stopped). Failed as a simplification, so kept:
@@ -299,10 +297,10 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    games; about 255 games an hour on the M3, 10 hours).
 
    Next, in a rough order of value:
-   - **Capture history** (#115, chapter 10.2), its SPRT running now (see "Running now"). Then
-     **ProbCut**, a new technique and usually worth more than the parameter changes below.
+   - **ProbCut**, a new technique and usually worth more than the parameter changes below.
      Correction history passed (#112, +28.0); more correction tables, keyed by pieces other
-     than the pawns as several strong engines do, could follow it.
+     than the pawns as several strong engines do, could follow it. Capture history failed
+     (#115, −19.2); chapter 10.2 lists three ideas for a second version.
    - **Tuning singular extensions, continued**: depth 6 passed (#78) and depth 4 too (#80),
      which is about where Stockfish starts; `singular_margin` 3 passed too (#82), and 4
      failed (#84). That settles the start depth and the margin for now. Double extensions,
