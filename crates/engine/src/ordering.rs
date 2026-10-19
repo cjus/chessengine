@@ -54,14 +54,38 @@
 //! The idea is from Stockfish (GPL-3.0), which calls it continuation history (counter-move
 //! history and follow-up history in its first versions). This code is cb2026's own.
 //!
+//! ## Capture history (M5)
+//!
+//! MVV-LVA orders captures by what they take and what takes, and nothing else: Bxf7 comes
+//! before Rxf7 in every position, whether or not the bishop's capture has ever worked.
+//! **Capture history** learns which captures cause cutoffs, as history does for quiet moves. Its
+//! table is indexed by the piece that moves, its destination and the piece it captures (or
+//! nothing, for a queen promotion that captures nothing): 768 × 6 scores.
+//!
+//! When a move causes a beta cutoff, the captures and queen promotions searched before it at
+//! that node get a penalty, whether the move that cut off was a capture or quiet; if it was a
+//! capture or queen promotion itself, it gets a bonus. The bonus, the gravity and the halving
+//! between searches are history's.
+//!
+//! A capture's ordering key is then its MVV-LVA key times [`MVV_LVA_SCALE`], plus its capture
+//! history score. The scale makes one victim rank worth half of [`HISTORY_MAX`], so a capture's
+//! history can lift it or drop it by up to two victim ranks, and reorders freely among captures
+//! of the same piece. The split by static exchange evaluation stays: a losing capture still
+//! goes after the quiet moves however good its history.
+//!
+//! The Chess Programming Wiki credits capture history to Stefan Geschwentner (2016); Stockfish
+//! (GPL-3.0) uses it, scoring a capture by its victim's value and its capture history alone.
+//! This code is cb2026's own, and keeps MVV-LVA's attacker term, which orders captures until
+//! their history says otherwise.
+//!
 //! ## The order, and staged picking
 //!
 //! 1. The transposition table move.
-//! 2. Captures and queen promotions, by MVV-LVA (from stage 14, only those that don't lose
-//!    material by static exchange evaluation).
+//! 2. Captures and queen promotions, by MVV-LVA and capture history (from stage 14, only those
+//!    that don't lose material by static exchange evaluation).
 //! 3. The two killers, then the countermove.
 //! 4. The other quiet moves, by history plus continuation history.
-//! 5. Captures that lose material (stage 14).
+//! 5. Captures that lose material (stage 14), in the same order as in 2.
 //!
 //! The moves are not sorted up front. A [`MovePicker`] picks the best remaining move each time
 //! one is asked for. Most nodes that cut off do so on the first move or two, so the work of
@@ -72,7 +96,8 @@
 //! [MVV-LVA](https://www.chessprogramming.org/MVV-LVA),
 //! [Killer Heuristic](https://www.chessprogramming.org/Killer_Heuristic),
 //! [Countermove Heuristic](https://www.chessprogramming.org/Countermove_Heuristic) and
-//! [History Heuristic](https://www.chessprogramming.org/History_Heuristic).
+//! [History Heuristic](https://www.chessprogramming.org/History_Heuristic) (its section
+//! "Capture History").
 
 use cb2026_chess::{Color, Move, MoveKind, PieceType, Position};
 
@@ -129,7 +154,8 @@ pub fn is_noisy(mv: Move) -> bool {
 
 /// Ordering keys: higher is searched first. The bands keep the stages apart; a quiet move's
 /// score, the sum of three history scores, stays within ±3 × [`HISTORY_MAX`], below every
-/// band.
+/// band, and a capture's key (at most 79 × [`MVV_LVA_SCALE`] + [`HISTORY_MAX`], about 97,000)
+/// stays within 100,000 of its band's.
 const TT_MOVE_KEY: i32 = 3_000_000;
 const NOISY_KEY: i32 = 2_000_000;
 const KILLER_KEYS: [i32; 2] = [1_000_000, 900_000];
@@ -137,11 +163,21 @@ const COUNTERMOVE_KEY: i32 = 800_000;
 const BAD_CAPTURE_KEY: i32 = -1_000_000;
 /// The largest a history score can get (in either direction).
 pub const HISTORY_MAX: i32 = 16_384;
+/// With capture history on, a capture's MVV-LVA key is multiplied by this before its capture
+/// history score is added. A victim rank is 8 MVV-LVA steps, so it is worth half of
+/// [`HISTORY_MAX`], and an attacker rank an eighth of that.
+pub const MVV_LVA_SCALE: i32 = HISTORY_MAX / 16;
 /// How many earlier moves continuation history looks back at: one ply (the opponent's last
 /// move) and two (the side to move's own move before that).
 pub const CONTINUATION_PLIES: usize = 2;
 /// The number of (piece, destination) pairs: 12 pieces × 64 squares.
 const PIECE_TO_COUNT: usize = 12 * 64;
+/// What a capture or queen promotion can take, for capture history: a pawn, knight, bishop,
+/// rook or queen (by piece type index, 0 to 4), or nothing ([`NO_VICTIM`]).
+const VICTIMS: usize = 6;
+/// The victim slot of a queen promotion that captures nothing. A king is never captured, so
+/// the king's index is free for it.
+const NO_VICTIM: usize = 5;
 
 // ANCHOR: piece_to
 /// A move as continuation history sees it: the piece that moved and where it went.
@@ -181,8 +217,8 @@ pub struct Previous {
 // ANCHOR_END: piece_to
 
 // ANCHOR: tables
-/// What the search has learned about quiet moves: killers per ply, countermoves, history and
-/// continuation history.
+/// What the search has learned about which moves cause cutoffs: killers per ply, countermoves,
+/// history and continuation history for quiet moves, and capture history.
 #[derive(Clone, Debug)]
 pub struct OrderingTables {
     /// Two killer moves per ply.
@@ -194,6 +230,9 @@ pub struct OrderingTables {
     /// Continuation history by plies back, the earlier move and the move: one flat table of
     /// `CONTINUATION_PLIES × 768 × 768` scores (see [`continuation_index`]).
     continuation: Vec<i32>,
+    /// Capture history by the piece that moves, its destination and its victim: `768 × 6`
+    /// scores (see [`capture_index`]).
+    captures: Vec<i32>,
 }
 // ANCHOR_END: tables
 
@@ -206,6 +245,7 @@ impl Default for OrderingTables {
             // A flat `Vec`, not nested arrays in a `Box`: those can be built on the stack
             // first, and at 4.7 MB they would overflow a search thread's.
             continuation: vec![0; CONTINUATION_PLIES * PIECE_TO_COUNT * PIECE_TO_COUNT],
+            captures: vec![0; PIECE_TO_COUNT * VICTIMS],
         }
     }
 }
@@ -216,11 +256,40 @@ fn continuation_index(back: usize, earlier: PieceTo, mv: PieceTo) -> usize {
     (back * PIECE_TO_COUNT + earlier.index()) * PIECE_TO_COUNT + mv.index()
 }
 
+// ANCHOR: capture_index
+/// Where `mv`, a capture or queen promotion in `pos`, is in the capture history table: by the
+/// piece that moves, its destination and what it captures. `None` if no piece stands on its
+/// from-square, which a legal move never does.
+fn capture_index(pos: &Position, mv: Move) -> Option<usize> {
+    let victim = match mv.kind() {
+        MoveKind::EnPassant => PieceType::Pawn.index(),
+        _ => pos
+            .piece_at(mv.to())
+            .map_or(NO_VICTIM, |p| p.piece_type.index()),
+    };
+    Some(PieceTo::new(pos, mv)?.index() * VICTIMS + victim)
+}
+// ANCHOR_END: capture_index
+
 /// The countermove table's index for the piece standing on `mv`'s destination.
 fn piece_slot(pos: &Position, mv: Move) -> Option<usize> {
     pos.piece_at(mv.to())
         .map(|p| p.color.index() * 6 + p.piece_type.index())
 }
+
+// ANCHOR: gravity
+/// The history bonus for a cutoff with `depth` plies left (and the penalty for the moves that
+/// failed before it): `depth²`, since cutoffs deep in the tree save the most work.
+fn cutoff_bonus(depth: u32) -> i32 {
+    (depth * depth).min(HISTORY_MAX as u32) as i32
+}
+
+/// Adds `change` to a history score with gravity: the nearer the cap, the smaller the change,
+/// so scores stay within ±[`HISTORY_MAX`].
+fn gravity(entry: &mut i32, change: i32) {
+    *entry += change - *entry * change.abs() / HISTORY_MAX;
+}
+// ANCHOR_END: gravity
 
 impl OrderingTables {
     /// Forgets everything (a new game).
@@ -228,15 +297,14 @@ impl OrderingTables {
         *self = OrderingTables::default();
     }
 
-    /// Prepares for a new search: killers are about the old search's plies, so they go;
-    /// history and continuation history are halved, so they still help but new results soon
-    /// dominate.
+    /// Prepares for a new search: killers are about the old search's plies, so they go; the
+    /// history tables are halved, so they still help but new results soon dominate.
     pub fn new_search(&mut self) {
         self.killers.fill([None; 2]);
         for value in self.history.iter_mut().flatten().flatten() {
             *value /= 2;
         }
-        for value in &mut self.continuation {
+        for value in self.continuation.iter_mut().chain(&mut self.captures) {
             *value /= 2;
         }
     }
@@ -282,6 +350,24 @@ impl OrderingTables {
         score
     }
 
+    /// The capture history score of `mv`, a capture or queen promotion in `pos`.
+    pub fn capture_history(&self, pos: &Position, mv: Move) -> i32 {
+        capture_index(pos, mv).map_or(0, |index| self.captures[index])
+    }
+
+    // ANCHOR: noisy_score
+    /// The score that orders `mv`, a capture or queen promotion in `pos`, among the others:
+    /// its MVV-LVA key, or with capture history on, that key scaled up plus its capture history
+    /// score.
+    pub fn noisy_score(&self, pos: &Position, mv: Move, techniques: &Techniques) -> i32 {
+        if techniques.capture_history {
+            mvv_lva(pos, mv) * MVV_LVA_SCALE + self.capture_history(pos, mv)
+        } else {
+            mvv_lva(pos, mv)
+        }
+    }
+    // ANCHOR_END: noisy_score
+
     /// The killer moves at `ply`.
     pub fn killers(&self, ply: u32) -> [Option<Move>; 2] {
         self.killers[ply as usize]
@@ -316,11 +402,7 @@ impl OrderingTables {
             self.countermoves[slot][prev.to().index()] = Some(best);
         }
         let side = pos.side_to_move().index();
-        let bonus = (depth * depth).min(HISTORY_MAX as u32) as i32;
-        // Gravity: the nearer the cap, the smaller the change, so scores stay in range.
-        let gravity = |entry: &mut i32, change: i32| {
-            *entry += change - *entry * change.abs() / HISTORY_MAX;
-        };
+        let bonus = cutoff_bonus(depth);
         let mut update = |mv: Move, change: i32| {
             gravity(
                 &mut self.history[side][mv.from().index()][mv.to().index()],
@@ -343,6 +425,32 @@ impl OrderingTables {
         }
     }
     // ANCHOR_END: update
+
+    // ANCHOR: capture_update
+    /// Records a beta cutoff with `depth` left in capture history: `best` is the move that
+    /// caused it if that was a capture or queen promotion (`None` if it was quiet), and `tried`
+    /// are the captures and queen promotions searched before it, which failed to.
+    pub fn record_captures(
+        &mut self,
+        pos: &Position,
+        best: Option<Move>,
+        tried: &[Move],
+        depth: u32,
+    ) {
+        let bonus = cutoff_bonus(depth);
+        let mut update = |mv: Move, change: i32| {
+            if let Some(index) = capture_index(pos, mv) {
+                gravity(&mut self.captures[index], change);
+            }
+        };
+        if let Some(best) = best {
+            update(best, bonus);
+        }
+        for &mv in tried {
+            update(mv, -bonus);
+        }
+    }
+    // ANCHOR_END: capture_update
 }
 
 // ANCHOR: picker
@@ -378,11 +486,12 @@ impl MovePicker {
             if Some(mv) == tt_move {
                 TT_MOVE_KEY
             } else if techniques.mvv_lva && is_noisy(mv) {
+                let score = tables.noisy_score(pos, mv, techniques);
                 // Captures that lose material in the exchange go after the quiet moves.
                 if techniques.see_ordering && see(pos, mv) < 0 {
-                    BAD_CAPTURE_KEY + mvv_lva(pos, mv)
+                    BAD_CAPTURE_KEY + score
                 } else {
-                    NOISY_KEY + mvv_lva(pos, mv)
+                    NOISY_KEY + score
                 }
             } else if Some(mv) == killers[0] {
                 KILLER_KEYS[0]
@@ -658,6 +767,105 @@ mod tests {
         assert_eq!(score(true, false), 4);
         assert_eq!(score(false, true), 4);
         assert_eq!(score(false, false), 0);
+    }
+
+    /// White can take the knight on d5 with the pawn or the rook, or the pawn on b5 with the
+    /// other rook.
+    const CAPTURES: &str = "4k3/8/8/1p1n4/4P3/8/8/1R1RK3 w - - 0 1";
+
+    #[test]
+    fn capture_history_learns_by_piece_destination_and_victim() {
+        let pos = Position::from_fen(CAPTURES).unwrap();
+        let mv = |uci: &str| pos.parse_uci_move(uci).unwrap();
+        let mut tables = OrderingTables::default();
+        // Rxd5 cut off at depth 10 after exd5 failed to.
+        tables.record_captures(&pos, Some(mv("d1d5")), &[mv("e4d5")], 10);
+        assert_eq!(tables.capture_history(&pos, mv("d1d5")), 100);
+        assert_eq!(tables.capture_history(&pos, mv("e4d5")), -100);
+        assert_eq!(tables.capture_history(&pos, mv("b1b5")), 0);
+        // A quiet move cut off: the captures tried before it get the penalty only.
+        tables.record_captures(&pos, None, &[mv("b1b5")], 10);
+        assert_eq!(tables.capture_history(&pos, mv("b1b5")), -100);
+        // The same rook move taking a bishop instead is a different capture.
+        let bishop = Position::from_fen("4k3/8/8/1p1b4/4P3/8/8/1R1RK3 w - - 0 1").unwrap();
+        let rook_takes_bishop = bishop.parse_uci_move("d1d5").unwrap();
+        assert_eq!(tables.capture_history(&bishop, rook_takes_bishop), 0);
+        // Halved for a new search.
+        tables.new_search();
+        assert_eq!(tables.capture_history(&pos, mv("d1d5")), 50);
+    }
+
+    #[test]
+    fn queen_promotions_are_kept_apart_by_what_they_take() {
+        let pos = Position::from_fen("r3k3/1P6/8/8/8/8/8/4K3 w - - 0 1").unwrap();
+        let mv = |uci: &str| pos.parse_uci_move(uci).unwrap();
+        let mut tables = OrderingTables::default();
+        tables.record_captures(&pos, Some(mv("b7b8q")), &[], 10);
+        assert_eq!(tables.capture_history(&pos, mv("b7b8q")), 100);
+        assert_eq!(tables.capture_history(&pos, mv("b7a8q")), 0);
+        // En passant takes a pawn.
+        let ep = Position::from_fen("4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 2").unwrap();
+        let mut tables = OrderingTables::default();
+        tables.record_captures(&ep, Some(ep.parse_uci_move("e5d6").unwrap()), &[], 4);
+        let index = capture_index(&ep, ep.parse_uci_move("e5d6").unwrap()).unwrap();
+        assert_eq!(index % VICTIMS, PieceType::Pawn.index());
+        assert_eq!(tables.captures[index], 16);
+    }
+
+    #[test]
+    fn capture_history_reorders_captures_within_limits() {
+        let pos = Position::from_fen(CAPTURES).unwrap();
+        let moves: Vec<Move> = pos.legal_moves().iter().copied().collect();
+        let mv = |uci: &str| pos.parse_uci_move(uci).unwrap();
+        let captures = |tables: &OrderingTables, techniques: Techniques| -> Vec<String> {
+            MovePicker::new(
+                &pos,
+                &moves,
+                None,
+                0,
+                &Previous::default(),
+                tables,
+                &techniques,
+            )
+            .take(3)
+            .map(|m| pos.to_san(m))
+            .collect()
+        };
+        let on = Techniques {
+            capture_history: true,
+            ..Techniques::default()
+        };
+        let off = Techniques {
+            capture_history: false,
+            ..on
+        };
+        let mut tables = OrderingTables::default();
+        // With no history, MVV-LVA: the knight first, by the smaller attacker first.
+        assert_eq!(captures(&tables, on), ["exd5", "Rxd5", "Rxb5"]);
+        // Rxd5 keeps cutting off where exd5 didn't: among captures of the knight, history
+        // decides once it outweighs the attackers' difference (three ranks, 3,072).
+        for _ in 0..10 {
+            tables.record_captures(&pos, Some(mv("d1d5")), &[mv("e4d5")], 20);
+        }
+        assert_eq!(captures(&tables, on), ["Rxd5", "exd5", "Rxb5"]);
+        assert_eq!(captures(&tables, off), ["exd5", "Rxd5", "Rxb5"]);
+        // A capture of a pawn with the best history there is comes before captures of the
+        // knight without any.
+        let mut tables = OrderingTables::default();
+        for _ in 0..1000 {
+            tables.record_captures(&pos, Some(mv("b1b5")), &[], 40);
+        }
+        let best = tables.capture_history(&pos, mv("b1b5"));
+        assert!(
+            (HISTORY_MAX * 15 / 16..=HISTORY_MAX).contains(&best),
+            "{best}"
+        );
+        assert_eq!(captures(&tables, on), ["Rxb5", "exd5", "Rxd5"]);
+        // Lifted two victim ranks, it would come before a queen taking a bishop, but not
+        // before a king taking a rook.
+        let pawn_capture = tables.noisy_score(&pos, mv("b1b5"), &on);
+        assert!(pawn_capture > (3 * 8 - 5) * MVV_LVA_SCALE);
+        assert!(pawn_capture < (4 * 8 - 6) * MVV_LVA_SCALE);
     }
 
     #[test]

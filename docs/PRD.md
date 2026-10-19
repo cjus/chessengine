@@ -141,7 +141,7 @@ Each technique below is a separate function or clearly marked block, has its own
 | --- | --- |
 | Core | Negamax alpha-beta, iterative deepening, principal variation search, aspiration windows, quiescence search |
 | Transposition table | Zobrist keys, bucketed entries with age-based replacement, mate-score adjustment, prefetch, lock-free sharing between threads (checked keys) |
-| Move ordering | TT move, captures by MVV-LVA and SEE, killer moves, history heuristic, countermoves, continuation history, staged move generation |
+| Move ordering | TT move, captures by MVV-LVA and SEE, killer moves, history heuristic, countermoves, continuation history, capture history (M5), staged move generation |
 | Pruning and reductions | Null-move pruning, reverse futility pruning, futility pruning, late move pruning, late move reductions, razoring, SEE pruning in main and quiescence search, delta pruning, internal iterative reductions, mate distance pruning |
 | Extensions | Check extension; singular extensions (should-have) |
 | Static evaluation | Correction history: the static evaluation corrected by how far off it has been with the same pawns, learnt from the search (M5) |

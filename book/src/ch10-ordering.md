@@ -41,7 +41,12 @@ amount. Quiet moves are then searched in order of their history score.
 {{#include ../../crates/engine/src/ordering.rs:update}}
 ```
 
-(The `previous` argument and the continuation history lines came later, in chapter 10.1.)
+(The `previous` argument and the continuation history lines came later, in chapter 10.1.) The
+bonus and the update are two small functions, which chapter 10.2's capture history shares:
+
+```rust,ignore
+{{#include ../../crates/engine/src/ordering.rs:gravity}}
+```
 
 The update uses **gravity**: `change − score × |change| / MAX`. A bonus to a score near the
 maximum hardly moves it, while a penalty to it moves it a lot. Scores stay within ±16,384, and

@@ -443,6 +443,9 @@ pub struct Techniques {
     /// Continuation history: quiet moves are also ordered by how often they caused cutoffs
     /// after the moves one and two plies before.
     pub continuation_history: bool,
+    /// Capture history: captures and queen promotions are ordered by how often they caused
+    /// cutoffs as well as by MVV-LVA (needs MVV-LVA ordering).
+    pub capture_history: bool,
     /// Principal variation search: moves after the first get a null-window search first.
     pub pvs: bool,
     /// Aspiration windows: each iteration starts with a narrow window around the last score.
@@ -505,6 +508,7 @@ impl Default for Techniques {
             countermoves: true,
             history: true,
             continuation_history: true,
+            capture_history: true,
             pvs: true,
             aspiration: true,
             null_move: true,
@@ -1123,8 +1127,10 @@ impl<'a> Searcher<'a> {
         let mut best = -INFINITY;
         let mut best_move = None;
         let mut child_pv = Vec::new();
-        // Quiet moves searched so far that didn't cause a cutoff (for the history penalty).
+        // Quiet moves searched so far that didn't cause a cutoff (for the history penalty),
+        // and the same for captures and queen promotions (for capture history's).
         let mut quiets_tried = Vec::new();
+        let mut noisy_tried = Vec::new();
         // Moves actually searched (not pruned) so far.
         let mut searched = 0;
         self.keys.push(pos.hash());
@@ -1253,18 +1259,26 @@ impl<'a> Searcher<'a> {
                     pv.extend_from_slice(&child_pv);
                 }
             }
+            // ANCHOR: cutoff
             // Beta cutoff: the opponent won't allow this position, so stop looking.
             if self.techniques.alpha_beta && alpha >= beta {
                 self.note(Note::BetaCutoff(mv, searched));
-                if !is_noisy(mv) {
+                if quiet {
                     self.ordering
                         .record_cutoff(pos, mv, &quiets_tried, ply, depth, &previous);
                 }
+                // The captures tried before it failed, whichever kind of move cut off.
+                let noisy_best = (!quiet).then_some(mv);
+                self.ordering
+                    .record_captures(pos, noisy_best, &noisy_tried, depth);
                 break;
             }
-            if !is_noisy(mv) {
+            if quiet {
                 quiets_tried.push(mv);
+            } else {
+                noisy_tried.push(mv);
             }
+            // ANCHOR_END: cutoff
         }
         self.keys.pop();
 
@@ -1828,6 +1842,28 @@ mod tests {
             ordered.nodes,
             unordered.nodes
         );
+    }
+
+    #[test]
+    fn capture_history_changes_the_order_not_the_score() {
+        // Kiwipete and a middlegame with exchanges on the board: captures to order.
+        let fens = [
+            "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+            "r1bq1rk1/pppp1ppp/2n2n2/2b1p3/2B1P3/2N2N2/PPPP1PPP/R1BQ1RK1 w - - 0 1",
+        ];
+        for fen in fens {
+            let on = search(fen, 5, Techniques::sound());
+            let off = search(
+                fen,
+                5,
+                Techniques {
+                    capture_history: false,
+                    ..Techniques::sound()
+                },
+            );
+            assert_eq!(on.score, off.score, "{fen}");
+            assert_ne!(on.nodes, off.nodes, "{fen}");
+        }
     }
 
     #[test]
