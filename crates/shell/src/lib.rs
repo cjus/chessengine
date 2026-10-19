@@ -456,7 +456,7 @@ impl Shell {
             },
             "book" => self.book_moves(),
             // Anything else that is a legal move is played.
-            other if parse_move(self.game.position(), other).is_some() => self.play(line),
+            other if self.game.position().parse_move(other).is_ok() => self.play(line),
             other => Response::text(format!(
                 "Unknown command '{other}'. Type 'help' for a list."
             )),
@@ -503,12 +503,15 @@ impl Shell {
             if let Some(result) = self.game_over() {
                 return Response::text(format!("The game is over: {result} Type 'new' or 'undo'."));
             }
-            let Some(mv) = parse_move(self.game.position(), text) else {
-                let mut response = self.show();
-                response.output.push_str(&format!(
-                    "'{text}' is not a legal move here. Type 'legal' to list them.\n"
-                ));
-                return response;
+            let mv = match self.game.position().parse_move(text) {
+                Ok(mv) => mv,
+                Err(error) => {
+                    let mut response = self.show();
+                    response
+                        .output
+                        .push_str(&format!("{error}. Type 'legal' to list the legal moves.\n"));
+                    return response;
+                }
             };
             self.make_move(mv, None);
         }
@@ -1113,12 +1116,6 @@ impl Shell {
     }
 }
 
-/// Reads a move in UCI notation (`g1f3`) or algebraic notation (`Nf3`).
-fn parse_move(pos: &Position, text: &str) -> Option<Move> {
-    pos.parse_uci_move(text)
-        .or_else(|| pos.parse_san(text).ok())
-}
-
 /// Usage for the `set` command.
 const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set threads <N> | set eval hand|tuned | set alphabeta|quiescence|mvvlva|tt|ttbuckets|killers|countermoves|history|conthist|pvs|aspiration|nullmove|lmr|histlmr|lmp|rfp|razoring|futility|seeprune|delta|seeorder|checkext|singular|doubleext|multicut|negext|iir|improving|tmstability|tmscore|pst|tapered|mobility|pawns|pieces|kingsafety|tempo on|off";
 
@@ -1506,6 +1503,24 @@ mod tests {
         assert!(shell.execute("undo").output.contains("FEN:"));
         assert!(shell.execute("undo").output.contains("FEN:"));
         assert_eq!(shell.execute("undo").output, "Nothing to undo.");
+    }
+
+    #[test]
+    fn says_why_a_move_is_refused() {
+        let mut shell = ascii_shell();
+        let fen = "8/4P3/8/8/8/8/k7/4K3 w - - 0 1";
+        shell.execute(&format!("fen {fen}"));
+        for text in ["e7e8", "e8"] {
+            let response = shell.execute(&format!("move {text}"));
+            assert!(
+                response.output.contains(&format!(
+                    "'{text}' doesn't say which piece the pawn becomes"
+                )),
+                "{}",
+                response.output
+            );
+        }
+        assert_eq!(shell.position().to_fen(), fen);
     }
 
     #[test]

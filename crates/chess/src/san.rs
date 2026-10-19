@@ -18,7 +18,19 @@
 //! Reading is forgiving, because people and programs bend the rules: the check marks and
 //! annotations (`+ # ! ?`) are ignored, `0-0` works like `O-O`, the `=` before a promotion
 //! piece is optional, and unnecessary disambiguation is accepted. The text must still match
-//! exactly one legal move.
+//! exactly one legal move. When it doesn't, the error says why, so a program can ask the
+//! right question: it isn't shaped like a move, no legal move matches, more than one does,
+//! or it is a pawn move to the last rank that leaves out the piece (`e8`, where `e8=Q` and
+//! three others are legal).
+//!
+//! ## Reading either notation
+//!
+//! People type moves both ways: SAN (`Nf3`) and the coordinates UCI uses (`g1f3`, `e7e8q`).
+//! [`Position::parse_move`] reads both, for programs that take a move from a person (the
+//! shell, a GUI's chat). Text shaped like coordinates is read as coordinates, and anything
+//! else as SAN. The order matters: `g1f3` is a fine UCI move, but as SAN it would be a pawn
+//! move from g1, which doesn't exist. Coordinate-shaped text that is also SAN (`e2e4`, a
+//! pawn's move with its starting square) means the same move either way, so nothing is lost.
 //!
 //! See the Chess Programming Wiki, [Algebraic Chess Notation](https://www.chessprogramming.org/Algebraic_Chess_Notation).
 
@@ -29,7 +41,8 @@ use crate::piece::PieceType;
 use crate::position::Position;
 use crate::square::{File, Rank, Square};
 
-/// Why a SAN string doesn't name a legal move.
+/// Why move text (SAN, or coordinates for [`Position::parse_move`]) doesn't name a legal
+/// move. Each variant holds the text.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SanError {
     /// The text isn't shaped like a move.
@@ -38,6 +51,9 @@ pub enum SanError {
     Illegal(String),
     /// More than one legal move matches; more disambiguation is needed.
     Ambiguous(String),
+    /// A pawn move to the last rank that doesn't say which piece the pawn becomes (`e8`,
+    /// `e7e8`). The same text with a piece (`e8=Q`, `e7e8q`) is legal.
+    MissingPromotion(String),
 }
 
 impl fmt::Display for SanError {
@@ -46,6 +62,9 @@ impl fmt::Display for SanError {
             SanError::Syntax(s) => write!(f, "'{s}' is not a move in algebraic notation"),
             SanError::Illegal(s) => write!(f, "'{s}' is not a legal move here"),
             SanError::Ambiguous(s) => write!(f, "'{s}' could mean more than one move"),
+            SanError::MissingPromotion(s) => {
+                write!(f, "'{s}' doesn't say which piece the pawn becomes")
+            }
         }
     }
 }
@@ -205,7 +224,9 @@ impl Position {
             }
         }
 
-        let matches: Vec<Move> = candidates
+        // The moves the text could mean, whatever they promote to, then those that promote
+        // to what it says (nothing, for a move that doesn't promote).
+        let on_squares: Vec<Move> = candidates
             .iter()
             .copied()
             .filter(|mv| {
@@ -214,15 +235,85 @@ impl Position {
                     && self.piece_at(mv.from()).map(|p| p.piece_type) == Some(piece_type)
                     && from_file.is_none_or(|f| mv.from().file() == f)
                     && from_rank.is_none_or(|r| mv.from().rank() == r)
-                    && mv.promotion() == promotion
             })
             .collect();
+        let matches: Vec<&Move> = on_squares
+            .iter()
+            .filter(|mv| mv.promotion() == promotion)
+            .collect();
         match matches.as_slice() {
-            [mv] => Ok(*mv),
+            [mv] => Ok(**mv),
+            [_, _, ..] => Err(SanError::Ambiguous(san.to_string())),
+            // No piece named, and only promotions reach the square: one pawn's four, or
+            // several pawns' (which is ambiguous before the piece even matters).
+            [] if !on_squares.is_empty() && promotion.is_none() => {
+                if on_squares
+                    .iter()
+                    .all(|mv| mv.from() == on_squares[0].from())
+                {
+                    Err(SanError::MissingPromotion(san.to_string()))
+                } else {
+                    Err(SanError::Ambiguous(san.to_string()))
+                }
+            }
             [] => Err(SanError::Illegal(san.to_string())),
-            _ => Err(SanError::Ambiguous(san.to_string())),
         }
     }
+
+    /// Finds the legal move written as `text` in either notation (see [Reading either
+    /// notation](self)): UCI's coordinates (`g1f3`, `e7e8q`, castling as `e1g1` or as the king
+    /// taking its own rook, `e1h1`) or SAN (`Nf3`, `O-O`, `e8=Q`). Unlike
+    /// [`Position::parse_uci_move`], the error says why the text names no legal move, and
+    /// both notations report a promotion without its piece as
+    /// [`SanError::MissingPromotion`].
+    ///
+    /// ```
+    /// use cb2026_chess::{Position, SanError};
+    ///
+    /// let pos = Position::startpos();
+    /// assert_eq!(pos.parse_move("g1f3").unwrap().to_string(), "g1f3");
+    /// assert_eq!(pos.parse_move("Nf3").unwrap().to_string(), "g1f3");
+    /// assert_eq!(pos.parse_move("e2e5"), Err(SanError::Illegal("e2e5".to_string())));
+    ///
+    /// let pawn = Position::from_fen("8/4P3/8/8/8/8/k7/4K3 w - - 0 1").unwrap();
+    /// assert_eq!(pawn.parse_move("e7e8"), Err(SanError::MissingPromotion("e7e8".to_string())));
+    /// assert_eq!(pawn.parse_move("e8"), Err(SanError::MissingPromotion("e8".to_string())));
+    /// assert_eq!(pawn.parse_move("e7e8q").unwrap().to_string(), "e7e8q");
+    /// ```
+    pub fn parse_move(&self, text: &str) -> Result<Move, SanError> {
+        let trimmed = text.trim();
+        let Some((from, to, piece)) = coordinates(trimmed) else {
+            return self.parse_san(text);
+        };
+        if let Some(mv) = self.parse_uci_move(trimmed) {
+            return Ok(mv);
+        }
+        let promotes = self
+            .legal_moves()
+            .iter()
+            .any(|mv| mv.from() == from && mv.to() == to && mv.promotion().is_some());
+        if promotes && piece.is_none() {
+            Err(SanError::MissingPromotion(text.to_string()))
+        } else {
+            Err(SanError::Illegal(text.to_string()))
+        }
+    }
+}
+
+/// The squares and promotion letter of text shaped like UCI's coordinates: two squares, and
+/// a lower-case piece letter for a promotion (`e2e4`, `e7e8q`). `None` for anything else.
+fn coordinates(text: &str) -> Option<(Square, Square, Option<char>)> {
+    if !text.is_ascii() {
+        return None;
+    }
+    let piece = match text.len() {
+        4 => None,
+        5 => Some(text.chars().last().filter(|c| "nbrq".contains(*c))?),
+        _ => return None,
+    };
+    let from = text[..2].parse().ok()?;
+    let to = text[2..4].parse().ok()?;
+    Some((from, to, piece))
 }
 
 #[cfg(test)]
@@ -297,5 +388,82 @@ mod tests {
             two_knights.parse_san("Nd2"),
             Err(SanError::Ambiguous(_))
         ));
+    }
+
+    /// A white pawn on e7 with e8 free, and the kings out of the way.
+    const PAWN_ON_E7: &str = "8/4P3/8/8/8/8/k7/4K3 w - - 0 1";
+
+    fn missing(text: &str) -> Result<Move, SanError> {
+        Err(SanError::MissingPromotion(text.to_string()))
+    }
+
+    #[test]
+    fn a_promotion_without_its_piece_says_so() {
+        let pawn = Position::from_fen(PAWN_ON_E7).unwrap();
+        assert_eq!(pawn.parse_san("e8"), missing("e8"));
+        assert_eq!(pawn.parse_san("e8+"), missing("e8+"));
+        assert_eq!(pawn.parse_san("e8=N").unwrap().to_string(), "e7e8n");
+        // Two pawns can take on e8: which pawn matters before which piece.
+        let two = Position::from_fen("4r3/3P1P2/8/8/8/8/k7/4K3 w - - 0 1").unwrap();
+        assert!(matches!(two.parse_san("e8"), Err(SanError::Ambiguous(_))));
+        assert_eq!(two.parse_san("dxe8"), missing("dxe8"));
+        assert_eq!(two.parse_san("dxe8=Q").unwrap().to_string(), "d7e8q");
+    }
+
+    #[test]
+    fn reads_moves_in_either_notation() {
+        let pos = Position::startpos();
+        for (text, uci) in [
+            ("e4", "e2e4"),
+            ("e2e4", "e2e4"),
+            ("Nf3", "g1f3"),
+            // As SAN this would be a pawn on g1: coordinates are read first.
+            ("g1f3", "g1f3"),
+            (" b1c3 ", "b1c3"),
+        ] {
+            assert_eq!(pos.parse_move(text).unwrap().to_string(), uci, "{text}");
+        }
+        let castling = Position::from_fen("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1").unwrap();
+        for text in ["e1g1", "e1h1", "O-O", "0-0"] {
+            assert_eq!(
+                castling.parse_move(text).unwrap().to_string(),
+                "e1g1",
+                "{text}"
+            );
+        }
+        let pawn = Position::from_fen(PAWN_ON_E7).unwrap();
+        assert_eq!(pawn.parse_move("e7e8q").unwrap().to_string(), "e7e8q");
+        assert_eq!(pawn.parse_move("e8=Q").unwrap().to_string(), "e7e8q");
+    }
+
+    #[test]
+    fn says_why_a_move_in_either_notation_names_none() {
+        let pos = Position::startpos();
+        let illegal = |text: &str| Err(SanError::Illegal(text.to_string()));
+        assert_eq!(pos.parse_move("e2e5"), illegal("e2e5"));
+        assert_eq!(pos.parse_move("e2e4q"), illegal("e2e4q"));
+        assert_eq!(pos.parse_move("Nf4"), illegal("Nf4"));
+        assert!(matches!(pos.parse_move("hello"), Err(SanError::Syntax(_))));
+        // Not a promotion letter, so not coordinates; and not SAN either.
+        assert!(matches!(pos.parse_move("e2e4k"), Err(SanError::Syntax(_))));
+        // Text that isn't ASCII is never coordinates (and slicing it as if it were would
+        // panic in the middle of a character).
+        assert!(matches!(pos.parse_move("é2e4"), Err(SanError::Syntax(_))));
+        let pawn = Position::from_fen(PAWN_ON_E7).unwrap();
+        assert_eq!(pawn.parse_move("e7e8"), missing("e7e8"));
+        assert_eq!(pawn.parse_move("e8"), missing("e8"));
+    }
+
+    #[test]
+    fn every_legal_move_reads_back_in_either_notation() {
+        for case in crate::perft::parse_suite(include_str!("../../../tests/data/perft.epd")) {
+            let pos = Position::from_fen(&case.fen).unwrap();
+            for &mv in pos.legal_moves().iter() {
+                let san = pos.to_san(mv);
+                let uci = mv.to_uci(false);
+                assert_eq!(pos.parse_move(&san), Ok(mv), "{san} in {}", case.fen);
+                assert_eq!(pos.parse_move(&uci), Ok(mv), "{uci} in {}", case.fen);
+            }
+        }
     }
 }

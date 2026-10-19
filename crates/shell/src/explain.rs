@@ -18,7 +18,7 @@ use cb2026_engine::search::{INFINITY, to_score};
 use cb2026_engine::stats::{Note, SearchStats, SearchTree};
 use cb2026_engine::{Engine, Limits, SearchInfo, eval, levels, see};
 
-use crate::{Response, Shell, parse_move, pawns, pv_san, score_text};
+use crate::{Response, Shell, pawns, pv_san, score_text};
 
 /// A technique or evaluation term that can be switched on and off: its name in `set`, what
 /// it is, and where its switch lives in the engine.
@@ -390,7 +390,7 @@ impl Shell {
 
     /// `explain <move>`: searches the move and compares it with the engine's choice.
     pub(crate) fn explain(&mut self, args: &str) -> Response {
-        let Some(mv) = parse_move(self.game.position(), args) else {
+        let Ok(mv) = self.game.position().parse_move(args) else {
             return Response::text("Usage: explain <move>   (a legal move, like Nf3 or g1f3)");
         };
         let san = self.game.position().to_san(mv);
@@ -449,7 +449,7 @@ impl Shell {
 
     /// `eval diff <move>`: which evaluation terms the move changes, from White's side.
     pub(crate) fn eval_diff(&self, args: &str) -> Response {
-        let Some(mv) = parse_move(self.game.position(), args) else {
+        let Ok(mv) = self.game.position().parse_move(args) else {
             return Response::text("Usage: eval diff <move>");
         };
         let params = &self.engine.params;
@@ -498,7 +498,7 @@ impl Shell {
 
     /// `see <move>`: the static exchange evaluation.
     pub(crate) fn see_move(&self, args: &str) -> Response {
-        let Some(mv) = parse_move(self.game.position(), args) else {
+        let Ok(mv) = self.game.position().parse_move(args) else {
             return Response::text("Usage: see <move>");
         };
         let value = see::see(self.game.position(), mv);
