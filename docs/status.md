@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-19, 13:01 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-19, 13:42 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -29,7 +29,8 @@ the levels were recalibrated at 40+0.4, #106. 2026-10-19: the levels at 40+0.4 r
 `levels::RATINGS` set to them and `UCI_Elo` narrowed to 650–2450, #106; `Position::parse_move`
 reads a move in SAN or coordinates and says why text names none, including a promotion
 without its piece, for the shell and Solrac's chat, #113; correction history merged, +28.0 ±
-13.0, #112; capture history failed, −19.2 ± 11.9, so it is off by default, #115.*
+13.0, #112; capture history failed, −19.2 ± 11.9, so it is off by default, #115; ProbCut
+running on the M3, #117.*
 
 ## Stages
 
@@ -82,11 +83,19 @@ without its piece, for the shell and Solrac's chat, #113; correction history mer
 | `Position::parse_move`: a move typed in SAN or coordinates, and `SanError::MissingPromotion` when a pawn promotes without its piece; the shell uses it, and Solrac's chat will (cjus/chessgui#38) | #113 | 1098926 | Merged, no functional change |
 | M5: correction history (chapter 14.2) | #112 | 1065754 | Merged: +28.0 ± 13.0, 1,308 games, [0, 5] passed (M3 Max) |
 | M5: capture history (chapter 10.2) | #115 | 1065754 (943210 with capture history on) | Merged, off by default: −19.2 ± 11.9, 1,561 games, [0, 5] failed (M3 Max) |
+| M5: ProbCut (chapter 12.1) | #117, `claude/probcut` | 963637 | Draft, its SPRT running on the M3 Max: [0, 5] at 8+0.08 |
 
-**Nothing is running on the M3.** Capture history's SPRT (#115) finished on 2026-10-19 at
-12:53 MDT. It started at about 11:39 and failed in 1,561 games: **−19.2 ± 11.9**, though it took
-11.5% off the bench. It is merged off by default, with three untested ideas for a second
-version in chapter 10.2. The M3's next job is another M5 SPRT (item 3 below).
+**Running now: #117** (ProbCut: a node is cut off when a good capture beats beta by a margin
+in a shallower search; chapter 12.1), started on the M3 on 2026-10-19 at about 13:41 MDT. A
+new session should restart the watcher, `scripts/watch-sprt.sh 117`, or just read #117's
+comments if the result is already there. Then rebase #117 onto `main` (in `docs/status.md`
+take `main`'s side and edit it), record the result in chapter 12.1, the search module docs,
+the ledger and this file, and merge. If it fails, switch `probcut` off by default (with its
+comment and the shell's help) and merge as a record.
+
+Capture history's SPRT (#115) finished on 2026-10-19 at 12:53 MDT. It started at about 11:39
+and failed in 1,561 games: **−19.2 ± 11.9**, though it took 11.5% off the bench. It is merged
+off by default, with three untested ideas for a second version in chapter 10.2.
 
 Correction history's SPRT (#112) finished on 2026-10-19 at 10:53 MDT. It started at about 09:45
 and passed in 1,308 games: **+28.0 ± 13.0**, about as much as singular extensions and multi-cut
@@ -297,7 +306,7 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    games; about 255 games an hour on the M3, 10 hours).
 
    Next, in a rough order of value:
-   - **ProbCut**, a new technique and usually worth more than the parameter changes below.
+   - **ProbCut** (#117, chapter 12.1), its SPRT running now (see "Running now").
      Correction history passed (#112, +28.0); more correction tables, keyed by pieces other
      than the pawns as several strong engines do, could follow it. Capture history failed
      (#115, −19.2); chapter 10.2 lists three ideas for a second version.
