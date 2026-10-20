@@ -150,7 +150,7 @@ than 3, about **−7 Elo**, so the margin stays at 3 (see "What it's worth").
 
 The search answers one more question. Its score is the best any other move managed, so it says
 not only whether the hash move is singular but by how much. When no other move comes within
-`double_extension_margin` (50 centipawns; 20 at first, see below) of `singular_beta` either, the hash move is close to
+`double_extension_margin` (100 centipawns; 20 at first, then 50, see below) of `singular_beta` either, the hash move is close to
 the only move: a recapture with nothing else to do, the one defence that doesn't lose a piece.
 A mistake in its line costs the most of all, so it is searched two plies deeper instead of one.
 That is a **double extension**.
@@ -189,6 +189,21 @@ moves are extended twice at 50 (1,487 of 2,762), against seven in ten at 20.
 margins alone, since correction history came in between them, and their error bars overlap.
 Together they suggest, no more, that extending about half of the singular moves twice does
 better than extending most of them.
+
+A margin of 100 is the next step the same way (cjus/chessengine#127). Over the six positions at
+depths 9 to 11 it extends about two singular hash moves in five twice, where 50 extends a little
+over half. The trees don't follow in a straight line. Total nodes over the six positions:
+
+| Depth | Without double extensions | Margin 50 | Margin 100 |
+| --- | ---: | ---: | ---: |
+| 9 | 359,248 | 447,273 (+25%) | 388,698 (+8%) |
+| 10 | 634,430 | 703,714 (+11%) | 530,504 (−16%) |
+| 11 | 969,728 | 885,651 (−9%) | 895,527 (−8%) |
+
+At depth 11 both margins make the tree smaller than without double extensions. One likely
+reason: a hash move searched two plies deeper comes back with a more reliable score, and fewer
+of the moves around it need searching again. The bench, at depth 10, is 17% smaller at 100 than at 50 (945,934 nodes against
+1,136,500), which says more about depth 10 than about the margin. The games decide.
 
 The search without the hash move asks a different question from the node's own search, so it
 must not mix with it. It neither reads nor writes the transposition table (an entry about the
