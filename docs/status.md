@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-20, 12:07 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-20, 14:49 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -34,8 +34,8 @@ failed, −10.2 ± 9.1, so it is off by default, #117; correction history's piec
 ± 12.3, so they are off by default, #119. 2026-10-20: their second version, added to the pawn
 table instead of averaged with it, failed too, −0.4 ± 4.3 after 11,433 games, #121;
 `singular_tt_depth_margin` 4 instead of 3 failed, −7.4 ± 8.0, so it stays at 3, #123; double
-extensions at a margin of 50 merged on, +13.0 ± 8.3, #125; a margin of 100 running on the
-M3, #127.*
+extensions at a margin of 50 merged on, +13.0 ± 8.3, #125; a margin of 100 failed, −7.3 ± 8.0, so it
+stays at 50, #127.*
 
 ## Stages
 
@@ -93,16 +93,12 @@ M3, #127.*
 | M5: the piece tables' second version, added to the pawn table (chapter 14.2) | #121 | 1065754 (1094228 with the piece tables on) | Merged, off by default: −0.4 ± 4.3, 11,433 games, [0, 5] failed (M3 Max) |
 | M5: `singular_tt_depth_margin` 4 instead of 3 (chapter 14.1) | #123 | 1065754 (1028535 with the margin at 4) | Merged as a record, the margin back at 3: −7.4 ± 8.0, 3,345 games, [0, 5] failed (M3 Max) |
 | M5: double extensions at a margin of 50, on (chapter 14.1) | #125 | 1136500 | Merged: +13.0 ± 8.3, 3,167 games, [0, 5] passed (M3 Max) |
-| M5: double extensions at a margin of 100 instead of 50 (chapter 14.1) | #127, `claude/double-extensions-100` | 945934 | Draft, its SPRT running on the M3 Max: [0, 5] at 8+0.08 |
+| M5: double extensions at a margin of 100 instead of 50 (chapter 14.1) | #127 | 1136500 (945934 with the margin at 100) | Merged as a record, the margin back at 50: −7.3 ± 8.0, 3,368 games, [0, 5] failed (M3 Max) |
 
-**Running now: #127** (double extensions at a margin of 100 instead of 50; chapter 14.1),
-started on the M3 on 2026-10-20 at about 12:05 MDT. If the difference is small it may need
-9,000–14,000 games, about 7–13 hours. A new session should restart the watcher,
-`scripts/watch-sprt.sh 127`, or just read #127's comments if the result is already there. Then
-rebase #127 onto `main` (in `docs/status.md` take `main`'s side and edit it), record the result
-in chapter 14.1, the search module docs, the ledger and this file, and merge. If it fails, set
-`double_extension_margin` back to 50 (with its comment, the module doc and the chapter's value)
-and merge as a record.
+**Nothing is running on the M3.** The SPRT of double extensions at a margin of 100 instead of 50
+(#127) finished on 2026-10-20 at 14:48 MDT. It started at about 12:05 and failed in 3,368 games,
+about 2 hours 45 minutes: **−7.3 ± 8.0**, though it took 17% off the bench. The margin stays at
+50. The M3's next job is another M5 SPRT (item 3 below).
 
 The SPRT of double extensions at a margin of 50 (#125) finished on 2026-10-20 at 11:48 MDT. It
 started at about 09:20 and passed in 3,167 games, about 2 hours 30 minutes: **+13.0 ± 8.3**.
@@ -335,7 +331,8 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    (#119, −20.7 ± 12.3, 1,362 games, about 65 minutes; off by default) and, on 2026-10-20,
    their second version (#121, −0.4 ± 4.3, 11,433 games, about 9 hours; off by default) and
    `singular_tt_depth_margin` 4 (#123, −7.4 ± 8.0 against 3, 3,345 games, about 2 hours 40
-   minutes). No verdict, off: history in
+   minutes) and double extensions at a margin of 100 (#127, −7.3 ± 8.0 against 50, 3,368 games,
+   about 2 hours 45 minutes). No verdict, off: history in
    LMR's first version (#70) and, on 2026-10-17 at 40+0.4, transposition table buckets (#92,
    +1.6 ± 6.3 over 4,630 games, about 18 hours, stopped) and, at 8+0.08, double extensions
    at a margin of 20 (#96, +3.6 ± 4.9 over 8,670 games, about 7 hours, stopped; on at 50 since
@@ -358,8 +355,9 @@ Run the full test suite on every commit you replay, not only at the tip: each be
      settles the start depth and both margins for now. Double extensions,
      which extend a move two plies when it is singular by a wide margin (as in Stockfish,
      GPL-3.0), had no verdict at a margin of 20 (#96, +3.6 ± 4.9) and passed at 50 (#125,
-     +13.0 ± 8.3, 3,167 games). A margin of 100, a step further the same way, is running
-     now (#127, see "Running now"); after it, a limit of 3. Gains of about 5 Elo take 9,000–14,000 games, 7–13 hours on the M3.
+     +13.0 ± 8.3, 3,167 games); 100 failed against 50 (#127, −7.3 ± 8.0). Next for them, a
+     limit of 3 a line instead of 6, or a margin in between (35 or 70). Gains of about 5 Elo
+     take 9,000–14,000 games, 7–13 hours on the M3.
    - **Tuning adaptive time at 40+0.4**: the gain there (about 14 Elo) is smaller than at
      8+0.08 (about 33), and the scale's numbers were set by hand. Each run at 40+0.4 takes
      about 10 hours, so it waits behind cheaper candidates.

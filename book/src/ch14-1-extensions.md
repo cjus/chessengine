@@ -190,6 +190,23 @@ margins alone, since correction history came in between them, and their error ba
 Together they suggest, no more, that extending about half of the singular moves twice does
 better than extending most of them.
 
+A margin of 100 went a step further the same way (cjus/chessengine#127). Over the six positions at
+depths 9 to 11 it extends about two singular hash moves in five twice, where 50 extends a little
+over half. The trees don't follow in a straight line. Total nodes over the six positions:
+
+| Depth | Without double extensions | Margin 50 | Margin 100 |
+| --- | ---: | ---: | ---: |
+| 9 | 359,248 | 447,273 (+25%) | 388,698 (+8%) |
+| 10 | 634,430 | 703,714 (+11%) | 530,504 (−16%) |
+| 11 | 969,728 | 885,651 (−9%) | 895,527 (−8%) |
+
+At depth 11 both margins make the tree smaller than without double extensions. One likely
+reason: a hash move searched two plies deeper comes back with a more reliable score, and fewer
+of the moves around it need searching again. The bench, at depth 10, is 17% smaller at 100 than at 50 (945,934 nodes against
+1,136,500), which says more about depth 10 than about the margin. In the games, 100 was worse
+than 50, about **−7 Elo**, so the margin stays at 50 (see "What it's worth"). Whether a value
+in between, like 35 or 70, would do better than 50 is still open.
+
 The search without the hash move asks a different question from the node's own search, so it
 must not mix with it. It neither reads nor writes the transposition table (an entry about the
 node with all its moves would answer the wrong question, and its result would poison the
@@ -446,6 +463,7 @@ that it is small, about **+5 Elo**, and it took over 14,000 of them to say so.
 | `singular_tt_depth_margin` 4 vs `main` (3), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−7.4 ± 8.0 Elo** over 3,345 games (+735 −806 =1804): failed (LLR −2.97); the margin stays at 3 |
 | Double extensions (margin 20, at most 6 a line) vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | +3.6 ± 4.9 Elo over 8,670 games (+1988 −1897 =4785): no verdict (LLR 0.92), stopped; off by default |
 | Double extensions (margin 50, at most 6 a line) vs `main` without them (with correction history), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+13.0 ± 8.3 Elo** over 3,167 games (+798 −680 =1689): passed (LLR 2.94); on by default |
+| Double extensions at a margin of 100 vs `main` (50), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−7.3 ± 8.0 Elo** over 3,368 games (+747 −818 =1803): failed (LLR −2.95); the margin stays at 50 |
 
 ## Further reading
 
