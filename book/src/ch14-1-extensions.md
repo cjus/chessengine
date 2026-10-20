@@ -64,8 +64,8 @@ reaches `singular_beta`, the hash move is singular and is searched with one ply 
 {{#include ../../crates/engine/src/search.rs:singular}}
 ```
 
-The test needs a hash entry worth comparing against: a lower bound or an exact score, at most 4
-plies shallower than the node (`singular_tt_depth_margin`; 3 at first, see below). It applies from depth 4 on (`singular_min_depth`), so only
+The test needs a hash entry worth comparing against: a lower bound or an exact score, at most 3
+plies shallower than the node (`singular_tt_depth_margin`, see below). It applies from depth 4 on (`singular_min_depth`), so only
 with a few plies of the search still to come. And no extension is made beyond twice the root
 depth, so that a chain of them can't grow the search without limit.
 
@@ -145,8 +145,8 @@ fewer hash moves, but make 11% more multi-cuts and search 19% more hash moves sh
 from a shallower search is a rougher guess, and more of the extra tests end in a cutoff or a
 reduction than in an extension. A smaller tree is no promise. A `singular_margin` of 4 made
 the bench 8% smaller and failed, and so did capture history, ProbCut and the first version of
-correction history's piece tables (chapters 10.2, 12.1 and 14.2). So 4 goes to the games
-(cjus/chessengine#123).
+correction history's piece tables (chapters 10.2, 12.1 and 14.2). In the games, 4 was worse
+than 3, about **−7 Elo**, so the margin stays at 3 (see "What it's worth").
 
 The search answers one more question. Its score is the best any other move managed, so it says
 not only whether the hash move is singular but by how much. When no other move comes within
@@ -430,6 +430,7 @@ that it is small, about **+5 Elo**, and it took over 14,000 of them to say so.
 | Singular extensions from depth 4 vs `main` (from depth 6), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+6.1 ± 4.8 Elo** over 9,057 games (+2127 −1969 =4961): passed (LLR 2.96) |
 | `singular_margin` 3 vs `main` (2, from depth 4), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+5.2 ± 4.2 Elo** over 11,400 games (+2552 −2381 =6467): passed (LLR 2.96) |
 | `singular_margin` 4 vs `main` (3), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−1.8 ± 5.3 Elo** over 7,476 games (+1670 −1709 =4097): failed (LLR −2.95); the margin stays at 3 |
+| `singular_tt_depth_margin` 4 vs `main` (3), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−7.4 ± 8.0 Elo** over 3,345 games (+735 −806 =1804): failed (LLR −2.97); the margin stays at 3 |
 | Double extensions (margin 20, at most 6 a line) vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | +3.6 ± 4.9 Elo over 8,670 games (+1988 −1897 =4785): no verdict (LLR 0.92), stopped; off by default |
 
 ## Further reading
