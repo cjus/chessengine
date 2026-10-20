@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-20, 14:49 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-20, 15:57 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -35,7 +35,8 @@ failed, −10.2 ± 9.1, so it is off by default, #117; correction history's piec
 table instead of averaged with it, failed too, −0.4 ± 4.3 after 11,433 games, #121;
 `singular_tt_depth_margin` 4 instead of 3 failed, −7.4 ± 8.0, so it stays at 3, #123; double
 extensions at a margin of 50 merged on, +13.0 ± 8.3, #125; a margin of 100 failed, −7.3 ± 8.0, so it
-stays at 50, #127.*
+stays at 50, #127; capture history's second version, in Stockfish's form, running on the M3,
+#129.*
 
 ## Stages
 
@@ -94,11 +95,21 @@ stays at 50, #127.*
 | M5: `singular_tt_depth_margin` 4 instead of 3 (chapter 14.1) | #123 | 1065754 (1028535 with the margin at 4) | Merged as a record, the margin back at 3: −7.4 ± 8.0, 3,345 games, [0, 5] failed (M3 Max) |
 | M5: double extensions at a margin of 50, on (chapter 14.1) | #125 | 1136500 | Merged: +13.0 ± 8.3, 3,167 games, [0, 5] passed (M3 Max) |
 | M5: double extensions at a margin of 100 instead of 50 (chapter 14.1) | #127 | 1136500 (945934 with the margin at 100) | Merged as a record, the margin back at 50: −7.3 ± 8.0, 3,368 games, [0, 5] failed (M3 Max) |
+| M5: capture history, second version: the victim's value plus history, the attacker only breaking ties (chapter 10.2) | #129, `claude/capture-history-v2` | 998700 | Draft, its SPRT running on the M3 Max: [0, 5] at 8+0.08 |
 
-**Nothing is running on the M3.** The SPRT of double extensions at a margin of 100 instead of 50
-(#127) finished on 2026-10-20 at 14:48 MDT. It started at about 12:05 and failed in 3,368 games,
-about 2 hours 45 minutes: **−7.3 ± 8.0**, though it took 17% off the bench. The margin stays at
-50. The M3's next job is another M5 SPRT (item 3 below).
+**Running now: #129** (capture history's second version: a capture scored by what it wins
+times 32 plus its capture history, as in Stockfish, the attacker only breaking ties; chapter
+10.2), started on the M3 on 2026-10-20 at about 15:55 MDT. A clear result should take a few
+hours, a small difference 7–13. A new session should restart the watcher,
+`scripts/watch-sprt.sh 129`, or just read #129's comments if the result is already there. Then
+rebase #129 onto `main` (in `docs/status.md` take `main`'s side and edit it), record the result
+in chapter 10.2, the ordering module docs, the PRD's techniques table, the ledger and this
+file, and merge. If it fails, switch `capture_history` off by default again (with its comment,
+the switch's doc, the shell's help and the PRD) and merge as a record.
+
+The SPRT of double extensions at a margin of 100 instead of 50 (#127) finished on 2026-10-20 at
+14:48 MDT. It started at about 12:05 and failed in 3,368 games, about 2 hours 45 minutes:
+**−7.3 ± 8.0**, though it took 17% off the bench. The margin stays at 50.
 
 The SPRT of double extensions at a margin of 50 (#125) finished on 2026-10-20 at 11:48 MDT. It
 started at about 09:20 and passed in 3,167 games, about 2 hours 30 minutes: **+13.0 ± 8.3**.
@@ -348,7 +359,8 @@ Run the full test suite on every commit you replay, not only at the tip: each be
      (#119, −20.7) and added to it (#121, −0.4 over 11,433 games), and
      `singular_tt_depth_margin` 4 (#123, −7.4). All but #121 made the bench smaller and the
      engine weaker. The chapters of the first four (10.2, 12.1, 14.2) list untested settings
-     for another try. New techniques can wait while the parameter changes below are tried.
+     for another try. Capture history's second version, in Stockfish's form, is running now
+     (#129, see "Running now").
    - **Tuning singular extensions, continued**: depth 6 passed (#78) and depth 4 too (#80),
      which is about where Stockfish starts; `singular_margin` 3 passed too (#82), and 4
      failed (#84); `singular_tt_depth_margin` 4 failed against 3 (#123, −7.4 ± 8.0). That
