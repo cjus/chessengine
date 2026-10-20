@@ -208,8 +208,9 @@
 //! every static evaluation in the main and quiescence searches by that much (see
 //! [`crate::correction`]). It takes 3% off the bench and gained +28.0 ± 13.0 Elo after 1,308
 //! games at 8+0.08 (cjus/chessengine#112). Two more tables, keyed by each side's pieces other
-//! than pawns, add a small share to it ([`Techniques::correction_non_pawn`]). Averaged with it
-//! instead, they measured weaker, −20.7 ± 12.3 Elo after 1,362 games (cjus/chessengine#119).
+//! than pawns, can add a small share to it ([`Techniques::correction_non_pawn`]). Averaged with
+//! it they measured weaker, −20.7 ± 12.3 Elo after 1,362 games (cjus/chessengine#119); added,
+//! −0.4 ± 4.3 after 11,433 (cjus/chessengine#121). So they are off by default.
 //!
 //! ## ProbCut
 //!
@@ -540,7 +541,8 @@ pub struct Techniques {
     /// positions with the same pawns (see [`crate::correction`]).
     pub correction_history: bool,
     /// Correction history's piece tables: also learn and correct by each side's pieces other
-    /// than pawns, added to the pawn table at a small share (needs correction history).
+    /// than pawns, added to the pawn table at a small share (needs correction history; off by
+    /// default).
     pub correction_non_pawn: bool,
     /// ProbCut: cut a node off when a good capture beats beta by a margin in a shallower
     /// search (needs the quiescence search; off by default).
@@ -590,9 +592,11 @@ impl Default for Techniques {
             // Off by default: three versions measured weaker (see the module documentation).
             improving: false,
             correction_history: true,
-            // The first version, averaged with the pawn table, measured weaker: −20.7 ± 12.3 Elo
-            // after 1,362 games at 8+0.08 (cjus/chessengine#119); see chapter 14.2.
-            correction_non_pawn: true,
+            // Off by default. The first version, averaged with the pawn table, measured weaker:
+            // −20.7 ± 12.3 Elo after 1,362 games at 8+0.08 (cjus/chessengine#119). The second,
+            // added to it, made no difference: −0.4 ± 4.3 after 11,433 (cjus/chessengine#121).
+            // See chapter 14.2.
+            correction_non_pawn: false,
             // Off by default: it measured weaker, −10.2 ± 9.1 Elo after 2,593 games at 8+0.08
             // (cjus/chessengine#117), though it took 9.6% off the bench; see chapter 12.1.
             probcut: false,

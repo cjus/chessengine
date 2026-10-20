@@ -18,8 +18,8 @@ difference between them is the evaluation's error in that position.
 **Correction history** remembers those errors. It keeps a running average of the difference
 in a table indexed by the side to move and the pawn structure, and adds the average to every
 later static evaluation of a position with the same pawns. Two more tables do the same by each
-side's pieces (below): averaged with the pawn table they measured weaker, so the second
-version adds a little of them to it instead. Like chapter 14.1's techniques, it came after
+side's pieces (below): averaged with the pawn table they measured weaker, and added to it they
+made no difference, so they are off by default. Like chapter 14.1's techniques, it came after
 stage 20, so no stage tag contains it. Switch it with `set correction on|off`, and the piece
 tables with `set corrpieces on|off`.
 
@@ -169,6 +169,10 @@ The bench is 2.7% bigger with it: 1,094,228 nodes instead of 1,065,754, and with
 `set corrpieces off` it is `main`'s exactly. The search runs about 1% fewer nodes a second (two
 sets of five alternating pairs of bench runs, one sample left out as an outlier).
 
+It made no difference in games (below): −0.4 ± 4.3 Elo after 11,433. Kept small, the piece
+tables did no harm, and showed no gain either. So the pawn table corrects alone, as before,
+and the piece tables are off by default.
+
 ## Pitfalls
 
 - **Learning from the correction itself.** The searched score comes from a tree whose leaves
@@ -197,7 +201,10 @@ sets of five alternating pairs of bench runs, one sample left out as an outlier)
 | --- | --- |
 | Correction history vs `main` without it, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+28.0 ± 13.0 Elo** over 1,308 games (+362 −257 =689): passed (LLR 2.95), cjus/chessengine#112 |
 | The piece tables' first version, averaged with the pawn table, vs `main` with the pawn table alone, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−20.7 ± 12.3 Elo** over 1,362 games (+263 −344 =755): failed (LLR −2.96), cjus/chessengine#119 |
-| The second version, an eighth of each piece table added to the whole pawn table, vs `main` with the pawn table alone, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | Waiting for its SPRT (cjus/chessengine#121) |
+| The second version, an eighth of each piece table added to the whole pawn table, vs `main` with the pawn table alone, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−0.4 ± 4.3 Elo** over 11,433 games (+2605 −2617 =6211): failed (LLR −2.97), cjus/chessengine#121, so they are off by default |
+
+That second test took 11,433 games, about 9 hours: an SPRT needs many games to tell a change
+worth about nothing from one worth a few Elo.
 
 Other candidates, untested:
 

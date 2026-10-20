@@ -37,8 +37,12 @@
 //! 4.3% off the bench and measured weaker: −20.7 ± 12.3 Elo after 1,362 games at 8+0.08
 //! (cjus/chessengine#119). The piece tables weren't silent: at lookups they corrected by as
 //! much as the pawn table. So they replaced half of a correction that works with one as large
-//! and worse. This version keeps the pawn table whole and adds a little of the piece tables on
-//! top, so they can only add to it.
+//! and worse. The second version keeps the pawn table whole and adds a little of the piece
+//! tables on top, so they can only add to it. It made no difference: −0.4 ± 4.3 Elo after
+//! 11,433 games (cjus/chessengine#121).
+//!
+//! **Off by default**, then. The switch, the tables and both shares stay, so other keys can be
+//! tried (chapter 14.2 lists two).
 //!
 //! ## Which results it learns from
 //!

@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-19, 20:04 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-20, 05:08 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -31,8 +31,8 @@ reads a move in SAN or coordinates and says why text names none, including a pro
 without its piece, for the shell and Solrac's chat, #113; correction history merged, +28.0 ±
 13.0, #112; capture history failed, −19.2 ± 11.9, so it is off by default, #115; ProbCut
 failed, −10.2 ± 9.1, so it is off by default, #117; correction history's piece tables failed, −20.7
-± 12.3, so they are off by default, #119; their second version, added to the pawn table instead
-of averaged with it, running on the M3, #121.*
+± 12.3, so they are off by default, #119. 2026-10-20: their second version, added to the pawn
+table instead of averaged with it, failed too, −0.4 ± 4.3 after 11,433 games, #121.*
 
 ## Stages
 
@@ -87,16 +87,13 @@ of averaged with it, running on the M3, #121.*
 | M5: capture history (chapter 10.2) | #115 | 1065754 (943210 with capture history on) | Merged, off by default: −19.2 ± 11.9, 1,561 games, [0, 5] failed (M3 Max) |
 | M5: ProbCut (chapter 12.1) | #117 | 1065754 (963637 with ProbCut on) | Merged, off by default: −10.2 ± 9.1, 2,593 games, [0, 5] failed (M3 Max) |
 | M5: correction history's piece tables (chapter 14.2) | #119 | 1065754 (1019663 with the piece tables on) | Merged, off by default: −20.7 ± 12.3, 1,362 games, [0, 5] failed (M3 Max) |
-| M5: the piece tables' second version, added to the pawn table (chapter 14.2) | #121, `claude/correction-tables-added` | 1094228 | Draft, its SPRT running on the M3 Max: [0, 5] at 8+0.08 |
+| M5: the piece tables' second version, added to the pawn table (chapter 14.2) | #121 | 1065754 (1094228 with the piece tables on) | Merged, off by default: −0.4 ± 4.3, 11,433 games, [0, 5] failed (M3 Max) |
 
-**Running now: #121** (the piece tables' second version: the pawn table's correction whole,
-plus an eighth of each side's piece table's; chapter 14.2), started on the M3 on 2026-10-19 at
-about 20:03 MDT. A small change, so it may need 8,000 games or more. A new session should
-restart the watcher, `scripts/watch-sprt.sh 121`, or just read #121's comments if the result is
-already there. Then rebase #121 onto `main` (in `docs/status.md` take `main`'s side and edit
-it), record the result in chapter 14.2, the correction module docs, the ledger and this file,
-and merge. If it fails, switch `correction_non_pawn` off by default again (with its comment and
-the shell's help) and merge as a record.
+**Nothing is running on the M3.** The piece tables' second SPRT (#121) finished on 2026-10-20 at
+05:05 MDT. It started at about 20:03 the evening before and failed after 11,433 games, about 9
+hours: **−0.4 ± 4.3**. It was undecided at 8,000 games (+0.0 ± 5.2) and Claude proposed
+stopping it; it reached its verdict before Carlos answered. The piece tables are merged off by
+default. The M3's next job is another M5 SPRT (item 3 below).
 
 The piece tables' first SPRT (#119) finished on 2026-10-19 at 17:23 MDT. It started at about
 16:17 and failed in 1,362 games: **−20.7 ± 12.3**, though it took 4.3% off the bench. That
@@ -312,7 +309,8 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    2,685 games, about 2 hours; off by default) and, on 2026-10-19, capture history (#115,
    −19.2 ± 11.9, 1,561 games, about 75 minutes; off by default) and ProbCut (#117, −10.2 ±
    9.1, 2,593 games, about 2 hours; off by default) and correction history's piece tables
-   (#119, −20.7 ± 12.3, 1,362 games, about 65 minutes; off by default). No verdict, off: history in
+   (#119, −20.7 ± 12.3, 1,362 games, about 65 minutes; off by default) and, on 2026-10-20,
+   their second version (#121, −0.4 ± 4.3, 11,433 games, about 9 hours). No verdict, off: history in
    LMR's first version (#70) and, on 2026-10-17 at 40+0.4, transposition table buckets (#92,
    +1.6 ± 6.3 over 4,630 games, about 18 hours, stopped) and, at 8+0.08, double extensions
    (#96, +3.6 ± 4.9 over 8,670 games, about 7 hours, stopped). Failed as a simplification, so kept:
@@ -321,11 +319,12 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    games; about 255 games an hour on the M3, 10 hours).
 
    Next, in a rough order of value:
-   - **Three failures in a row** (2026-10-19): capture history (#115, −19.2), ProbCut (#117,
-     −10.2) and correction history's piece tables (#119, −20.7). Each made the bench smaller
-     and the engine weaker. Their chapters (10.2, 12.1, 14.2) list untested settings for
-     another try. The smallest, the piece tables added to the pawn table at an eighth each
-     rather than averaged with it, is running now (#121, see "Running now").
+   - **Four tries without a gain** (2026-10-19 and 20): capture history (#115, −19.2),
+     ProbCut (#117, −10.2), and correction history's piece tables, averaged with the pawn
+     table (#119, −20.7) and added to it (#121, −0.4 over 11,433 games). The first three made
+     the bench smaller and the engine weaker. Their chapters (10.2, 12.1, 14.2) list untested
+     settings for another try. New techniques can wait while the parameter changes below are
+     tried.
    - **Tuning singular extensions, continued**: depth 6 passed (#78) and depth 4 too (#80),
      which is about where Stockfish starts; `singular_margin` 3 passed too (#82), and 4
      failed (#84). That settles the start depth and the margin for now. Double extensions,

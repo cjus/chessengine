@@ -181,7 +181,7 @@ Commands:
                        has been with the same pawns
   set corrpieces on|off
                        Correction history's piece tables: by each side's pieces, added to
-                       the pawn table's correction
+                       the pawn table's correction (default off)
   set tmstability on|off
                        Time: stop sooner when the best move stays the same, later when it changes
   set tmscore on|off   Time: think longer when the score falls from one depth to the next
