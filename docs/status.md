@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-20, 05:08 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-20, 06:23 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -32,7 +32,8 @@ without its piece, for the shell and Solrac's chat, #113; correction history mer
 13.0, #112; capture history failed, −19.2 ± 11.9, so it is off by default, #115; ProbCut
 failed, −10.2 ± 9.1, so it is off by default, #117; correction history's piece tables failed, −20.7
 ± 12.3, so they are off by default, #119. 2026-10-20: their second version, added to the pawn
-table instead of averaged with it, failed too, −0.4 ± 4.3 after 11,433 games, #121.*
+table instead of averaged with it, failed too, −0.4 ± 4.3 after 11,433 games, #121;
+`singular_tt_depth_margin` 4 instead of 3 running on the M3, #123.*
 
 ## Stages
 
@@ -88,12 +89,21 @@ table instead of averaged with it, failed too, −0.4 ± 4.3 after 11,433 games,
 | M5: ProbCut (chapter 12.1) | #117 | 1065754 (963637 with ProbCut on) | Merged, off by default: −10.2 ± 9.1, 2,593 games, [0, 5] failed (M3 Max) |
 | M5: correction history's piece tables (chapter 14.2) | #119 | 1065754 (1019663 with the piece tables on) | Merged, off by default: −20.7 ± 12.3, 1,362 games, [0, 5] failed (M3 Max) |
 | M5: the piece tables' second version, added to the pawn table (chapter 14.2) | #121 | 1065754 (1094228 with the piece tables on) | Merged, off by default: −0.4 ± 4.3, 11,433 games, [0, 5] failed (M3 Max) |
+| M5: `singular_tt_depth_margin` 4 instead of 3 (chapter 14.1) | #123, `claude/singular-tt-depth-margin` | 1028535 | Draft, its SPRT running on the M3 Max: [0, 5] at 8+0.08 |
 
-**Nothing is running on the M3.** The piece tables' second SPRT (#121) finished on 2026-10-20 at
-05:05 MDT. It started at about 20:03 the evening before and failed after 11,433 games, about 9
-hours: **−0.4 ± 4.3**. It was undecided at 8,000 games (+0.0 ± 5.2) and Claude proposed
-stopping it; it reached its verdict before Carlos answered. The piece tables are merged off by
-default. The M3's next job is another M5 SPRT (item 3 below).
+**Running now: #123** (`singular_tt_depth_margin` 4 instead of 3: the singular test takes a
+hash entry up to 4 plies shallower than the node; chapter 14.1), started on the M3 on 2026-10-20
+at about 06:20 MDT. A small change, so it may need 9,000–14,000 games, about 7–13 hours. A new
+session should restart the watcher, `scripts/watch-sprt.sh 123`, or just read #123's comments
+if the result is already there. Then rebase #123 onto `main` (in `docs/status.md` take
+`main`'s side and edit it), record the result in chapter 14.1, the search module docs, the
+ledger and this file, and merge. If it fails, set `singular_tt_depth_margin` back to 3 (with
+its comment and the module doc) and merge as a record.
+
+The piece tables' second SPRT (#121) finished on 2026-10-20 at 05:05 MDT. It started at about
+20:03 the evening before and failed after 11,433 games, about 9 hours: **−0.4 ± 4.3**. It was
+undecided at 8,000 games (+0.0 ± 5.2) and Claude proposed stopping it; it reached its verdict
+before Carlos answered. The piece tables are merged off by default.
 
 The piece tables' first SPRT (#119) finished on 2026-10-19 at 17:23 MDT. It started at about
 16:17 and failed in 1,362 games: **−20.7 ± 12.3**, though it took 4.3% off the bench. That
@@ -330,9 +340,9 @@ Run the full test suite on every commit you replay, not only at the tip: each be
      failed (#84). That settles the start depth and the margin for now. Double extensions,
      which extend a move two plies when it is singular by a wide margin (as in Stockfish,
      GPL-3.0), had no verdict (#96, +3.6 ± 4.9) and are off; next for them, a margin of 50
-     (the depth-10 tree 30% bigger instead of 44%), a limit of 3 (23%), or 40+0.4. Still
-     untried: the hash entry's depth margin (`singular_tt_depth_margin`, 3). Gains this size
-     take 9,000–14,000 games, 7–13 hours on the M3.
+     (the depth-10 tree 30% bigger instead of 44%), a limit of 3 (23%), or 40+0.4. The hash
+     entry's depth margin, `singular_tt_depth_margin` 4 instead of 3, is running now (#123, see
+     "Running now"). Gains this size take 9,000–14,000 games, 7–13 hours on the M3.
    - **Tuning adaptive time at 40+0.4**: the gain there (about 14 Elo) is smaller than at
      8+0.08 (about 33), and the scale's numbers were set by hand. Each run at 40+0.4 takes
      about 10 hours, so it waits behind cheaper candidates.
