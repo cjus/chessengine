@@ -150,7 +150,7 @@ than 3, about **−7 Elo**, so the margin stays at 3 (see "What it's worth").
 
 The search answers one more question. Its score is the best any other move managed, so it says
 not only whether the hash move is singular but by how much. When no other move comes within
-`double_extension_margin` (20 centipawns) of `singular_beta` either, the hash move is close to
+`double_extension_margin` (50 centipawns; 20 at first, see below) of `singular_beta` either, the hash move is close to
 the only move: a recapture with nothing else to do, the one defence that doesn't lose a piece.
 A mistake in its line costs the most of all, so it is searched two plies deeper instead of one.
 That is a **double extension**.
@@ -167,15 +167,28 @@ seven singular hash moves in ten are extended twice, and with a margin of 200 ce
 still would be. With the margin at 20 the depth-10 tree is 44% bigger and the bench 14%
 (1,248,666 nodes against 1,098,926). A margin of 50 makes the tree 30% bigger, and 100 only 9%.
 At this depth the limit hardly matters: at a margin of 50, a limit of 12 gives the same tree as
-6, and only a limit of 3 takes the margin of 20's growth down to 23%. The margin is small, as in
-Stockfish.
+6, and only a limit of 3 takes the margin of 20's growth down to 23%. The first margin, 20, was
+small, as in Stockfish.
 
-**Double extensions had no verdict.** An SPRT against the same engine without them found about
+**At a margin of 20, double extensions had no verdict.** An SPRT against the same engine without them found about
 +4 Elo, give or take 5, after 8,670 games (see "What it's worth"). Like the first version of
 history in LMR (below), that sits between the test's two hypotheses, 0 and 5 Elo, where an SPRT
-takes longest, so the test was stopped and double extensions are off by default (`set doubleext
-on` turns them on). The candidates for another test are the ones that grow the tree less, a
-margin of 50 or a limit of 3, and the long time control, 40+0.4.
+takes longest, so the test was stopped and double extensions were switched off by default. The
+candidates for another test were the ones that grow the tree less, a margin of 50 or a limit of
+3, and the long time control, 40+0.4.
+
+The second test is at a margin of 50 (cjus/chessengine#125), with double extensions on again
+(`set doubleext off` switches them off). Since correction history (chapter 14.2), the trees grow
+less than they did. At a margin of 20 the depth-10 tree is 29% bigger than without double
+extensions (819,182 nodes against 634,430) and the bench 12% (1,189,432 against 1,065,754). At
+50 they are 11% bigger (703,714) and 7% (1,136,500). A little over half of the singular hash
+moves are extended twice at 50 (1,487 of 2,762), against seven in ten at 20.
+
+**At a margin of 50, double extensions passed**: about **+13 Elo** after 3,167 games (see
+"What it's worth"), so they are on by default. The two tests aren't quite a comparison of the
+margins alone, since correction history came in between them, and their error bars overlap.
+Together they suggest, no more, that extending about half of the singular moves twice does
+better than extending most of them.
 
 The search without the hash move asks a different question from the node's own search, so it
 must not mix with it. It neither reads nor writes the transposition table (an entry about the
@@ -432,6 +445,7 @@ that it is small, about **+5 Elo**, and it took over 14,000 of them to say so.
 | `singular_margin` 4 vs `main` (3), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−1.8 ± 5.3 Elo** over 7,476 games (+1670 −1709 =4097): failed (LLR −2.95); the margin stays at 3 |
 | `singular_tt_depth_margin` 4 vs `main` (3), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−7.4 ± 8.0 Elo** over 3,345 games (+735 −806 =1804): failed (LLR −2.97); the margin stays at 3 |
 | Double extensions (margin 20, at most 6 a line) vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | +3.6 ± 4.9 Elo over 8,670 games (+1988 −1897 =4785): no verdict (LLR 0.92), stopped; off by default |
+| Double extensions (margin 50, at most 6 a line) vs `main` without them (with correction history), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+13.0 ± 8.3 Elo** over 3,167 games (+798 −680 =1689): passed (LLR 2.94); on by default |
 
 ## Further reading
 
