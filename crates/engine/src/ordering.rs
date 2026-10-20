@@ -67,25 +67,28 @@
 //! capture or queen promotion itself, it gets a bonus. The bonus, the gravity and the halving
 //! between searches are history's.
 //!
-//! A capture's ordering key is then its MVV-LVA key times [`MVV_LVA_SCALE`], plus its capture
-//! history score. The scale makes one victim rank worth half of [`HISTORY_MAX`], so a capture's
-//! history can lift it or drop it by up to two victim ranks, and reorders freely among captures
-//! of the same piece. The split by static exchange evaluation stays: a losing capture still
+//! A capture's ordering key is then [`capture_value`], what it wins in material by static
+//! exchange evaluation's piece values, times [`CAPTURE_VALUE_SCALE`], plus its capture history
+//! score. The attacker only breaks ties, so among captures of the same piece, history decides
+//! as soon as it tells them apart.
+//! A pawn is worth a fifth of [`HISTORY_MAX`] and a queen 1.76 times it, so a capture of a pawn
+//! with the best history there is comes before a capture of a rook with none, but never before
+//! a capture of a queen. The split by static exchange evaluation stays: a losing capture still
 //! goes after the quiet moves however good its history.
 //!
-//! The Chess Programming Wiki credits capture history to Stefan Geschwentner (2016); Stockfish
-//! (GPL-3.0) uses it, scoring a capture by its victim's value and its capture history alone.
-//! This code is cb2026's own, and keeps MVV-LVA's attacker term, which orders captures until
-//! their history says otherwise.
+//! The Chess Programming Wiki credits capture history to Stefan Geschwentner (2016). This form,
+//! the victim's value plus capture history with no attacker term, is Stockfish's (GPL-3.0), in
+//! about its proportions (see [`CAPTURE_VALUE_SCALE`]); the code is cb2026's own.
 //!
-//! **Off by default.** It took 11.5% off the bench and measured weaker: −19.2 ± 11.9 Elo after
-//! 1,561 games at 8+0.08 (cjus/chessengine#115). The switch and the table stay, so a second
-//! version can be tested.
+//! **The first version** kept MVV-LVA's attacker term: its key was the MVV-LVA key times 1,024
+//! plus capture history, so history moved a capture two victim ranks at most. It took 11.5%
+//! off the bench and measured weaker: −19.2 ± 11.9 Elo after 1,561 games at 8+0.08
+//! (cjus/chessengine#115). This second version is being tested (cjus/chessengine#129).
 //!
 //! ## The order, and staged picking
 //!
 //! 1. The transposition table move.
-//! 2. Captures and queen promotions, by MVV-LVA and capture history (from stage 14, only those
+//! 2. Captures and queen promotions, by MVV-LVA or capture history (from stage 14, only those
 //!    that don't lose material by static exchange evaluation).
 //! 3. The two killers, then the countermove.
 //! 4. The other quiet moves, by history plus continuation history.
@@ -106,7 +109,7 @@
 use cb2026_chess::{Color, Move, MoveKind, PieceType, Position};
 
 use crate::search::{MAX_PLY, Techniques};
-use crate::see::see;
+use crate::see::{SEE_VALUES, see};
 
 // ANCHOR: mvv_lva
 /// The MVV-LVA key of `mv` in `pos`: higher means search earlier. Quiet moves score 0;
@@ -147,6 +150,29 @@ pub fn order_moves(pos: &Position, moves: &mut [Move]) {
     moves.sort_by_cached_key(|&mv| -mvv_lva(pos, mv));
 }
 
+// ANCHOR: capture_value
+/// What `mv`, a capture or queen promotion in `pos`, wins in material if nothing is taken back,
+/// by static exchange evaluation's piece values: the victim's value, plus a queen less a pawn
+/// for a queen promotion. Capture history's ordering starts from this.
+pub fn capture_value(pos: &Position, mv: Move) -> i32 {
+    let value = |pt: PieceType| SEE_VALUES[pt.index()];
+    let mut gain = 0;
+    if mv.is_capture() {
+        let victim = match mv.kind() {
+            MoveKind::EnPassant => PieceType::Pawn,
+            _ => pos
+                .piece_at(mv.to())
+                .map_or(PieceType::Pawn, |p| p.piece_type),
+        };
+        gain += value(victim);
+    }
+    if mv.promotion() == Some(PieceType::Queen) {
+        gain += value(PieceType::Queen) - value(PieceType::Pawn);
+    }
+    gain
+}
+// ANCHOR_END: capture_value
+
 /// Whether the quiescence search looks at `mv`: captures and queen promotions (but not
 /// under-promotions, which almost never matter).
 pub fn is_noisy(mv: Move) -> bool {
@@ -158,8 +184,9 @@ pub fn is_noisy(mv: Move) -> bool {
 
 /// Ordering keys: higher is searched first. The bands keep the stages apart; a quiet move's
 /// score, the sum of three history scores, stays within ±3 × [`HISTORY_MAX`], below every
-/// band, and a capture's key (at most 79 × [`MVV_LVA_SCALE`] + [`HISTORY_MAX`], about 97,000)
-/// stays within 100,000 of its band's.
+/// band, and a capture's key (at most 1,700 × [`CAPTURE_VALUE_SCALE`] + [`HISTORY_MAX`], about
+/// 71,000, and at least 100 × [`CAPTURE_VALUE_SCALE`] − [`HISTORY_MAX`], about −13,000) stays
+/// within 100,000 of its band's.
 const TT_MOVE_KEY: i32 = 3_000_000;
 const NOISY_KEY: i32 = 2_000_000;
 const KILLER_KEYS: [i32; 2] = [1_000_000, 900_000];
@@ -167,10 +194,12 @@ const COUNTERMOVE_KEY: i32 = 800_000;
 const BAD_CAPTURE_KEY: i32 = -1_000_000;
 /// The largest a history score can get (in either direction).
 pub const HISTORY_MAX: i32 = 16_384;
-/// With capture history on, a capture's MVV-LVA key is multiplied by this before its capture
-/// history score is added. A victim rank is 8 MVV-LVA steps, so it is worth half of
-/// [`HISTORY_MAX`], and an attacker rank an eighth of that.
-pub const MVV_LVA_SCALE: i32 = HISTORY_MAX / 16;
+/// With capture history on, a capture's [`capture_value`] (in centipawns) is multiplied by this
+/// before its capture history score is added. A pawn is then worth 3,200, a fifth of
+/// [`HISTORY_MAX`], and a queen 28,800, 1.76 times it. Stockfish 16 (GPL-3.0) adds 7 times the
+/// victim's middlegame value to a capture history limited to 10,692, which puts a queen at 1.66
+/// times the limit.
+pub const CAPTURE_VALUE_SCALE: i32 = HISTORY_MAX / 512;
 /// How many earlier moves continuation history looks back at: one ply (the opponent's last
 /// move) and two (the side to move's own move before that).
 pub const CONTINUATION_PLIES: usize = 2;
@@ -361,11 +390,17 @@ impl OrderingTables {
 
     // ANCHOR: noisy_score
     /// The score that orders `mv`, a capture or queen promotion in `pos`, among the others:
-    /// its MVV-LVA key, or with capture history on, that key scaled up plus its capture history
-    /// score.
+    /// its MVV-LVA key, or with capture history on, the material it wins scaled up plus its
+    /// capture history score, less the attacker's rank (pawn 1 … king 6) to break ties.
     pub fn noisy_score(&self, pos: &Position, mv: Move, techniques: &Techniques) -> i32 {
         if techniques.capture_history {
-            mvv_lva(pos, mv) * MVV_LVA_SCALE + self.capture_history(pos, mv)
+            // The attacker's rank is smaller than any history update from depth 3 on (a bonus
+            // of 9), so it only decides between captures that history can't tell apart, at
+            // first all of them: then the smaller attacker goes first, as in MVV-LVA.
+            let attacker = pos
+                .piece_at(mv.from())
+                .map_or(1, |p| p.piece_type.index() as i32 + 1);
+            capture_value(pos, mv) * CAPTURE_VALUE_SCALE + self.capture_history(pos, mv) - attacker
         } else {
             mvv_lva(pos, mv)
         }
@@ -844,14 +879,13 @@ mod tests {
             ..on
         };
         let mut tables = OrderingTables::default();
-        // With no history, MVV-LVA: the knight first, by the smaller attacker first.
+        // With no history, the knight's captures first, the smaller attacker breaking the tie.
         assert_eq!(captures(&tables, on), ["exd5", "Rxd5", "Rxb5"]);
-        // Rxd5 keeps cutting off where exd5 didn't: among captures of the knight, history
-        // decides once it outweighs the attackers' difference (three ranks, 3,072).
-        for _ in 0..10 {
-            tables.record_captures(&pos, Some(mv("d1d5")), &[mv("e4d5")], 20);
-        }
+        // Rxd5 cuts off where exd5 didn't: among captures of the knight, history decides as
+        // soon as it tells them apart, here after one cutoff at depth 3.
+        tables.record_captures(&pos, Some(mv("d1d5")), &[mv("e4d5")], 3);
         assert_eq!(captures(&tables, on), ["Rxd5", "exd5", "Rxb5"]);
+        // Off, MVV-LVA: the smaller attacker first.
         assert_eq!(captures(&tables, off), ["exd5", "Rxd5", "Rxb5"]);
         // A capture of a pawn with the best history there is comes before captures of the
         // knight without any.
@@ -865,11 +899,11 @@ mod tests {
             "{best}"
         );
         assert_eq!(captures(&tables, on), ["Rxb5", "exd5", "Rxd5"]);
-        // Lifted two victim ranks, it would come before a queen taking a bishop, but not
-        // before a king taking a rook.
+        // With that history it would come before a capture of a rook with none, but not
+        // before a capture of a queen.
         let pawn_capture = tables.noisy_score(&pos, mv("b1b5"), &on);
-        assert!(pawn_capture > (3 * 8 - 5) * MVV_LVA_SCALE);
-        assert!(pawn_capture < (4 * 8 - 6) * MVV_LVA_SCALE);
+        assert!(pawn_capture > SEE_VALUES[PieceType::Rook.index()] * CAPTURE_VALUE_SCALE);
+        assert!(pawn_capture < SEE_VALUES[PieceType::Queen.index()] * CAPTURE_VALUE_SCALE);
     }
 
     #[test]
