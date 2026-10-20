@@ -197,7 +197,7 @@ pub(crate) const SWITCHES: &[Switch] = &[
     },
     Switch {
         name: "corrpieces",
-        description: "Correction history's piece tables (each side's pieces as well as the pawns; off by default)",
+        description: "Correction history's piece tables (each side's pieces, added to the pawns'; off by default)",
         flag: |e| &mut e.techniques.correction_non_pawn,
     },
     Switch {
