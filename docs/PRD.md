@@ -144,7 +144,7 @@ Each technique below is a separate function or clearly marked block, has its own
 | Move ordering | TT move, captures by MVV-LVA and SEE, killer moves, history heuristic, countermoves, continuation history, capture history (M5; off by default, measured weaker), staged move generation |
 | Pruning and reductions | Null-move pruning, ProbCut (M5; off by default, measured weaker), reverse futility pruning, futility pruning, late move pruning, late move reductions, razoring, SEE pruning in main and quiescence search, delta pruning, internal iterative reductions, mate distance pruning |
 | Extensions | Check extension; singular extensions (should-have) |
-| Static evaluation | Correction history: the static evaluation corrected by how far off it has been with the same pawns, learnt from the search (M5) |
+| Static evaluation | Correction history: the static evaluation corrected by how far off it has been with the same pawns, learnt from the search (M5); tables by each side's pieces as well (off by default, measured weaker) |
 | Draws | Repetition detection (with the search path and game history), fifty-move rule, insufficient material |
 | Parallel | Lazy SMP: up to 256 threads sharing one transposition table |
 | Time management | Hard and soft limits from clock, increment and moves-to-go; extra time when the best move changes or the score drops; a `Move Overhead` safety margin |

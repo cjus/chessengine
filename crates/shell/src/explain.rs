@@ -196,6 +196,11 @@ pub(crate) const SWITCHES: &[Switch] = &[
         flag: |e| &mut e.techniques.correction_history,
     },
     Switch {
+        name: "corrpieces",
+        description: "Correction history's piece tables (each side's pieces as well as the pawns; off by default)",
+        flag: |e| &mut e.techniques.correction_non_pawn,
+    },
+    Switch {
         name: "tmstability",
         description: "Time: stop sooner when the best move is stable",
         flag: |e| &mut e.time.best_move_stability,
