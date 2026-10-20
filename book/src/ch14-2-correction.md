@@ -17,10 +17,10 @@ difference between them is the evaluation's error in that position.
 
 **Correction history** remembers those errors. It keeps a running average of the difference
 in a table indexed by the side to move and the pawn structure, and adds the average to every
-later static evaluation of a position with the same pawns. Two more tables do the same by
-each side's pieces (below). Like chapter 14.1's techniques, it came after stage 20, so no stage
-tag contains it. Switch it with `set correction on|off`, and the piece tables with
-`set corrpieces on|off`.
+later static evaluation of a position with the same pawns. Two more tables can do the same by
+each side's pieces (below), but they measured weaker and are off by default. Like chapter
+14.1's techniques, it came after stage 20, so no stage tag contains it. Switch it with
+`set correction on|off`, and the piece tables with `set corrpieces on|off`.
 
 ## The table
 
@@ -147,6 +147,14 @@ The bench is 4.3% smaller with them: 1,019,663 nodes instead of 1,065,754, and w
 lookup computes two more keys, of five bitboards each, and the two tables add 256 KB that
 compete for the cache. So the bench takes about as long either way.
 
+They lost in games (below). They weren't silent: over the 14 bench positions searched to depth
+13 one after another, the corrections applied at lookups averaged 2.4 centipawns from the pawn
+table and 2.4 from the piece tables' average, and 2.25 combined. So the piece tables replaced
+half of the pawn table's correction with corrections as large and, by the result, worse. Why
+isn't measured. A side's piece key changes whenever one of its pieces moves, the king
+included, so each entry may learn from fewer and more varied positions than a pawn entry and
+average more noise than error.
+
 ## Pitfalls
 
 - **Learning from the correction itself.** The searched score comes from a tree whose leaves
@@ -172,7 +180,17 @@ compete for the cache. So the bench takes about as long either way.
 | Test | Result |
 | --- | --- |
 | Correction history vs `main` without it, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+28.0 ± 13.0 Elo** over 1,308 games (+362 −257 =689): passed (LLR 2.95), cjus/chessengine#112 |
-| The piece tables, averaged with the pawn table, vs `main` with the pawn table alone, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | Waiting for its SPRT (cjus/chessengine#119) |
+| The piece tables, averaged with the pawn table, vs `main` with the pawn table alone, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−20.7 ± 12.3 Elo** over 1,362 games (+263 −344 =755): failed (LLR −2.96), cjus/chessengine#119, so they are off by default |
+
+The pawn table stays on by itself. The piece tables and their switch stay for another try.
+Untested candidates:
+
+- **Added, not averaged**: the pawn table at its full weight, and a small share of each piece
+  table on top, so that the piece tables can only add to what already works.
+- **Keys without the king**, which moves often and makes a side's key change more than its
+  pieces do.
+- **Fewer pieces per key**, for example knights and bishops in one key and rooks and queens in
+  another, so that each entry is shared by more positions.
 
 ## Further reading
 

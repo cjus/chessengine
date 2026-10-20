@@ -30,6 +30,10 @@
 //! the positions that matter. Stockfish (GPL-3.0) keeps tables like these, one keyed by each
 //! side's pieces other than pawns, among others; this code is cb2026's own.
 //!
+//! **Off by default.** The piece tables took 4.3% off the bench and measured weaker: −20.7 ±
+//! 12.3 Elo after 1,362 games at 8+0.08 (cjus/chessengine#119). The switch and the tables stay,
+//! so another weighting can be tested.
+//!
 //! ## Which results it learns from
 //!
 //! - Only the main search's nodes, which have a depth: a quiescence node's score is mostly its

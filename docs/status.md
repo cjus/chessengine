@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-19, 16:17 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-19, 18:04 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -30,8 +30,8 @@ the levels were recalibrated at 40+0.4, #106. 2026-10-19: the levels at 40+0.4 r
 reads a move in SAN or coordinates and says why text names none, including a promotion
 without its piece, for the shell and Solrac's chat, #113; correction history merged, +28.0 ±
 13.0, #112; capture history failed, −19.2 ± 11.9, so it is off by default, #115; ProbCut
-failed, −10.2 ± 9.1, so it is off by default, #117; correction history's piece tables running
-on the M3, #119.*
+failed, −10.2 ± 9.1, so it is off by default, #117; correction history's piece tables failed, −20.7
+± 12.3, so they are off by default, #119.*
 
 ## Stages
 
@@ -85,16 +85,12 @@ on the M3, #119.*
 | M5: correction history (chapter 14.2) | #112 | 1065754 | Merged: +28.0 ± 13.0, 1,308 games, [0, 5] passed (M3 Max) |
 | M5: capture history (chapter 10.2) | #115 | 1065754 (943210 with capture history on) | Merged, off by default: −19.2 ± 11.9, 1,561 games, [0, 5] failed (M3 Max) |
 | M5: ProbCut (chapter 12.1) | #117 | 1065754 (963637 with ProbCut on) | Merged, off by default: −10.2 ± 9.1, 2,593 games, [0, 5] failed (M3 Max) |
-| M5: correction history's piece tables (chapter 14.2) | #119, `claude/correction-tables` | 1019663 | Draft, its SPRT running on the M3 Max: [0, 5] at 8+0.08 |
+| M5: correction history's piece tables (chapter 14.2) | #119 | 1065754 (1019663 with the piece tables on) | Merged, off by default: −20.7 ± 12.3, 1,362 games, [0, 5] failed (M3 Max) |
 
-**Running now: #119** (correction history's piece tables: two more tables, keyed by each
-side's pieces other than pawns, averaged with the pawn table; chapter 14.2), started on the M3
-on 2026-10-19 at about 16:17 MDT. A new session should restart the watcher,
-`scripts/watch-sprt.sh 119`, or just read #119's comments if the result is already there. Then
-rebase #119 onto `main` (in `docs/status.md` take `main`'s side and edit it), record the result
-in chapter 14.2, the correction module docs, the ledger and this file, and merge. If it fails,
-switch `correction_non_pawn` off by default (with its comment and the shell's help) and merge
-as a record.
+**Nothing is running on the M3.** The piece tables' SPRT (#119) finished on 2026-10-19 at 17:23
+MDT. It started at about 16:17 and failed in 1,362 games: **−20.7 ± 12.3**, though it took 4.3%
+off the bench. They are merged off by default, with three untested ideas for another try in
+chapter 14.2. The M3's next job is another M5 SPRT (item 3 below).
 
 ProbCut's SPRT (#117) finished on 2026-10-19 at 15:43 MDT. It started at about 13:41 and failed
 in 2,593 games: **−10.2 ± 9.1**, though it took 9.6% off the bench. It is merged off by default,
@@ -305,7 +301,8 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    against 3, 7,476 games, about 6 hours) and transposition table buckets (#86, −8.8 ± 8.6,
    2,685 games, about 2 hours; off by default) and, on 2026-10-19, capture history (#115,
    −19.2 ± 11.9, 1,561 games, about 75 minutes; off by default) and ProbCut (#117, −10.2 ±
-   9.1, 2,593 games, about 2 hours; off by default). No verdict, off: history in
+   9.1, 2,593 games, about 2 hours; off by default) and correction history's piece tables
+   (#119, −20.7 ± 12.3, 1,362 games, about 65 minutes; off by default). No verdict, off: history in
    LMR's first version (#70) and, on 2026-10-17 at 40+0.4, transposition table buckets (#92,
    +1.6 ± 6.3 over 4,630 games, about 18 hours, stopped) and, at 8+0.08, double extensions
    (#96, +3.6 ± 4.9 over 8,670 games, about 7 hours, stopped). Failed as a simplification, so kept:
@@ -314,8 +311,11 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    games; about 255 games an hour on the M3, 10 hours).
 
    Next, in a rough order of value:
-   - **More correction tables** (#119, chapter 14.2), its SPRT running now (see "Running
-     now"): tables keyed by each side's pieces, next to the pawn table that passed (#112).
+   - **Three failures in a row** (2026-10-19): capture history (#115, −19.2), ProbCut (#117,
+     −10.2) and correction history's piece tables (#119, −20.7). Each made the bench smaller
+     and the engine weaker. Their chapters (10.2, 12.1, 14.2) list untested settings for
+     another try. The piece tables added to the pawn table at a small share, rather than
+     averaged with it, is the smallest change of them.
      ProbCut (#117, −10.2) and capture history (#115, −19.2) failed and are off; chapters
      12.1 and 10.2 list settings for another try.
    - **Tuning singular extensions, continued**: depth 6 passed (#78) and depth 4 too (#80),
