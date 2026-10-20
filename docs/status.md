@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-20, 09:04 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-20, 09:21 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -33,7 +33,8 @@ without its piece, for the shell and Solrac's chat, #113; correction history mer
 failed, −10.2 ± 9.1, so it is off by default, #117; correction history's piece tables failed, −20.7
 ± 12.3, so they are off by default, #119. 2026-10-20: their second version, added to the pawn
 table instead of averaged with it, failed too, −0.4 ± 4.3 after 11,433 games, #121;
-`singular_tt_depth_margin` 4 instead of 3 failed, −7.4 ± 8.0, so it stays at 3, #123.*
+`singular_tt_depth_margin` 4 instead of 3 failed, −7.4 ± 8.0, so it stays at 3, #123; double
+extensions at a margin of 50 running on the M3, #125.*
 
 ## Stages
 
@@ -90,11 +91,20 @@ table instead of averaged with it, failed too, −0.4 ± 4.3 after 11,433 games,
 | M5: correction history's piece tables (chapter 14.2) | #119 | 1065754 (1019663 with the piece tables on) | Merged, off by default: −20.7 ± 12.3, 1,362 games, [0, 5] failed (M3 Max) |
 | M5: the piece tables' second version, added to the pawn table (chapter 14.2) | #121 | 1065754 (1094228 with the piece tables on) | Merged, off by default: −0.4 ± 4.3, 11,433 games, [0, 5] failed (M3 Max) |
 | M5: `singular_tt_depth_margin` 4 instead of 3 (chapter 14.1) | #123 | 1065754 (1028535 with the margin at 4) | Merged as a record, the margin back at 3: −7.4 ± 8.0, 3,345 games, [0, 5] failed (M3 Max) |
+| M5: double extensions at a margin of 50, on (chapter 14.1) | #125, `claude/double-extensions-50` | 1136500 | Draft, its SPRT running on the M3 Max: [0, 5] at 8+0.08 |
 
-**Nothing is running on the M3.** The SPRT of `singular_tt_depth_margin` 4 instead of 3 (#123)
-finished on 2026-10-20 at 09:00 MDT. It started at about 06:20 and failed in 3,345 games, about
-2 hours 40 minutes: **−7.4 ± 8.0**, though it took 3.5% off the bench. The margin stays at 3,
-Stockfish's value. The M3's next job is another M5 SPRT (item 3 below).
+**Running now: #125** (double extensions on again, at a margin of 50 instead of 20; chapter
+14.1), started on the M3 on 2026-10-20 at about 09:20 MDT. The first test (#96) sat between 0
+and 5 Elo, so this one may need 9,000–14,000 games, about 7–13 hours. A new session should
+restart the watcher, `scripts/watch-sprt.sh 125`, or just read #125's comments if the result
+is already there. Then rebase #125 onto `main` (in `docs/status.md` take `main`'s side and
+edit it), record the result in chapter 14.1, the search module docs, the ledger and this file,
+and merge. If it fails, switch `double_extension` off by default again (with its comment, the
+unit test's comment and the shell's help) and merge as a record.
+
+The SPRT of `singular_tt_depth_margin` 4 instead of 3 (#123) finished on 2026-10-20 at 09:00
+MDT. It started at about 06:20 and failed in 3,345 games, about 2 hours 40 minutes: **−7.4 ±
+8.0**, though it took 3.5% off the bench. The margin stays at 3, Stockfish's value.
 
 The piece tables' second SPRT (#121) finished on 2026-10-20 at 05:05 MDT. It started at about
 20:03 the evening before and failed after 11,433 games, about 9 hours: **−0.4 ± 4.3**. It was
@@ -338,9 +348,9 @@ Run the full test suite on every commit you replay, not only at the tip: each be
      failed (#84); `singular_tt_depth_margin` 4 failed against 3 (#123, −7.4 ± 8.0). That
      settles the start depth and both margins for now. Double extensions,
      which extend a move two plies when it is singular by a wide margin (as in Stockfish,
-     GPL-3.0), had no verdict (#96, +3.6 ± 4.9) and are off; next for them, a margin of 50
-     (the depth-10 tree 30% bigger instead of 44%), a limit of 3 (23%), or 40+0.4. Gains this
-     size take 9,000–14,000 games, 7–13 hours on the M3.
+     GPL-3.0), had no verdict at a margin of 20 (#96, +3.6 ± 4.9). A margin of 50 is running
+     now (#125, see "Running now"); after it, a limit of 3 or 40+0.4. Gains this size take
+     9,000–14,000 games, 7–13 hours on the M3.
    - **Tuning adaptive time at 40+0.4**: the gain there (about 14 Elo) is smaller than at
      8+0.08 (about 33), and the scale's numbers were set by hand. Each run at 40+0.4 takes
      about 10 hours, so it waits behind cheaper candidates.
