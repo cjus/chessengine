@@ -64,8 +64,8 @@ reaches `singular_beta`, the hash move is singular and is searched with one ply 
 {{#include ../../crates/engine/src/search.rs:singular}}
 ```
 
-The test needs a hash entry worth comparing against: a lower bound or an exact score, at most 3
-plies shallower than the node. It applies from depth 4 on (`singular_min_depth`), so only
+The test needs a hash entry worth comparing against: a lower bound or an exact score, at most 4
+plies shallower than the node (`singular_tt_depth_margin`; 3 at first, see below). It applies from depth 4 on (`singular_min_depth`), so only
 with a few plies of the search still to come. And no extension is made beyond twice the root
 depth, so that a chain of them can't grow the search without limit.
 
@@ -133,6 +133,20 @@ grow by 3%: it extends 4% fewer hash moves than 3 and makes 13% more multi-cuts.
 first pull winning: from 3 to 4, multi-cuts went up, where from 2 to 3 they went down. In the
 games, 4 was no better than 3, about **−2 Elo**, so the margin stays at 3 (see "What it's
 worth").
+
+The test's other number is how deep the hash entry has to be. With `singular_tt_depth_margin`
+at 3, as in Stockfish (GPL-3.0), an entry counts if it is at most 3 plies shallower than the
+node, so at depth 4 an entry from a one-ply search will do. cb2026 stores no entries from the
+quiescence search, so every entry has a depth of at least 1, and a margin of 4 changes nothing
+at depth 4: from depth 5 on, it lets in entries a ply shallower than before. That makes the
+bench 3.5% smaller (1,028,535 nodes against 1,065,754), and the six positions of "What it
+saves" at depth 10 9% smaller (574,643 against 634,430). They run 3% more tests and extend 4%
+fewer hash moves, but make 11% more multi-cuts and search 19% more hash moves shallower: a score
+from a shallower search is a rougher guess, and more of the extra tests end in a cutoff or a
+reduction than in an extension. A smaller tree is no promise. A `singular_margin` of 4 made
+the bench 8% smaller and failed, and so did capture history, ProbCut and the first version of
+correction history's piece tables (chapters 10.2, 12.1 and 14.2). So 4 goes to the games
+(cjus/chessengine#123).
 
 The search answers one more question. Its score is the best any other move managed, so it says
 not only whether the hash move is singular but by how much. When no other move comes within
@@ -388,7 +402,8 @@ that it is small, about **+5 Elo**, and it took over 14,000 of them to say so.
 - **A negative extension trusts the hash score.** It reduces the move the node expects to cut
   off with, on the strength of a score from an earlier search. If that score was too
   optimistic, the move's shallower search is the one that has to find out. It applies only
-  where the singular test has run, with an entry at most 3 plies shallower than the node.
+  where the singular test has run, with an entry at most `singular_tt_depth_margin` plies
+  shallower than the node.
 - **Count along the line, and take the count off on every way out.** The limit on double
   extensions is per line, so the searcher keeps a count that each double-extended move adds to
   before its search and takes off after it. A count that some exit skips (a cutoff, a stopped

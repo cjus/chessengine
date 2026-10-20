@@ -164,7 +164,7 @@
 //! depth and without the hash move, with a null window at `singular_beta`, the hash move's
 //! score less `singular_margin` (3) centipawns per ply of depth. If no other move reaches it,
 //! the hash move is singular. This needs a hash entry that is a lower bound or exact and at
-//! most `singular_tt_depth_margin` (3) plies shallower than the node, from depth
+//! most `singular_tt_depth_margin` (4) plies shallower than the node, from depth
 //! `singular_min_depth` (4) on, and stops at twice the root depth, so that a chain of
 //! extensions can't grow without limit.
 //!
@@ -432,7 +432,8 @@ impl Default for SearchParams {
             // The first version started at 8 (cjus/chessengine#71); 6 gained +5.0 ± 4.1
             // (cjus/chessengine#78); 4 gained +6.1 ± 4.8 more (cjus/chessengine#80).
             singular_min_depth: 4,
-            singular_tt_depth_margin: 3,
+            // 3 at first, as in Stockfish (GPL-3.0); 4 is being tested (cjus/chessengine#123).
+            singular_tt_depth_margin: 4,
             // 2 until 4 became the start depth; 3 gained +5.2 ± 4.2 (cjus/chessengine#82); 4
             // failed, −1.8 ± 5.3 against 3 (cjus/chessengine#84).
             singular_margin: 3,
