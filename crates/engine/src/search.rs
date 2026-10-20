@@ -208,9 +208,8 @@
 //! every static evaluation in the main and quiescence searches by that much (see
 //! [`crate::correction`]). It takes 3% off the bench and gained +28.0 ± 13.0 Elo after 1,308
 //! games at 8+0.08 (cjus/chessengine#112). Two more tables, keyed by each side's pieces other
-//! than pawns, can be averaged in with it ([`Techniques::correction_non_pawn`]); they measured
-//! weaker, −20.7 ± 12.3 Elo after 1,362 games (cjus/chessengine#119), so they are off by
-//! default.
+//! than pawns, add a small share to it ([`Techniques::correction_non_pawn`]). Averaged with it
+//! instead, they measured weaker, −20.7 ± 12.3 Elo after 1,362 games (cjus/chessengine#119).
 //!
 //! ## ProbCut
 //!
@@ -382,8 +381,9 @@ pub struct SearchParams {
     pub correction_max_weight: i32,
     /// ...and no entry corrects by more than this many centipawns either way.
     pub correction_limit: i32,
-    /// With the piece tables on, each side's counts this many 256ths of the correction, and
-    /// the pawn table the rest (keep it at most 128).
+    /// With the piece tables on, the pawn table's correction counts this many 256ths...
+    pub correction_pawn_share: i32,
+    /// ...and each side's piece table's this many, added to it.
     pub correction_non_pawn_share: i32,
     /// ProbCut applies from this depth on...
     pub probcut_min_depth: u32,
@@ -440,8 +440,11 @@ impl Default for SearchParams {
             negative_extension_plies: 1,
             correction_max_weight: 16,
             correction_limit: 64,
-            // Half for the pawns, a quarter for each side's pieces: set by hand, not tuned.
-            correction_non_pawn_share: 64,
+            // All of the pawn table's and an eighth of each piece table's, added: set by hand,
+            // not tuned. The first version averaged them, 128 and 64, and measured weaker
+            // (cjus/chessengine#119).
+            correction_pawn_share: 256,
+            correction_non_pawn_share: 32,
             // Set by hand, not tuned: a pawn above beta, four plies shallower.
             probcut_min_depth: 5,
             probcut_margin: 100,
@@ -537,7 +540,7 @@ pub struct Techniques {
     /// positions with the same pawns (see [`crate::correction`]).
     pub correction_history: bool,
     /// Correction history's piece tables: also learn and correct by each side's pieces other
-    /// than pawns, averaged with the pawn table (needs correction history; off by default).
+    /// than pawns, added to the pawn table at a small share (needs correction history).
     pub correction_non_pawn: bool,
     /// ProbCut: cut a node off when a good capture beats beta by a margin in a shallower
     /// search (needs the quiescence search; off by default).
@@ -587,9 +590,9 @@ impl Default for Techniques {
             // Off by default: three versions measured weaker (see the module documentation).
             improving: false,
             correction_history: true,
-            // Off by default: it measured weaker, −20.7 ± 12.3 Elo after 1,362 games at 8+0.08
-            // (cjus/chessengine#119), though it took 4.3% off the bench; see chapter 14.2.
-            correction_non_pawn: false,
+            // The first version, averaged with the pawn table, measured weaker: −20.7 ± 12.3 Elo
+            // after 1,362 games at 8+0.08 (cjus/chessengine#119); see chapter 14.2.
+            correction_non_pawn: true,
             // Off by default: it measured weaker, −10.2 ± 9.1 Elo after 2,593 games at 8+0.08
             // (cjus/chessengine#117), though it took 9.6% off the bench; see chapter 12.1.
             probcut: false,

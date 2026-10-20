@@ -17,10 +17,11 @@ difference between them is the evaluation's error in that position.
 
 **Correction history** remembers those errors. It keeps a running average of the difference
 in a table indexed by the side to move and the pawn structure, and adds the average to every
-later static evaluation of a position with the same pawns. Two more tables can do the same by
-each side's pieces (below), but they measured weaker and are off by default. Like chapter
-14.1's techniques, it came after stage 20, so no stage tag contains it. Switch it with
-`set correction on|off`, and the piece tables with `set corrpieces on|off`.
+later static evaluation of a position with the same pawns. Two more tables do the same by each
+side's pieces (below): averaged with the pawn table they measured weaker, so the second
+version adds a little of them to it instead. Like chapter 14.1's techniques, it came after
+stage 20, so no stage tag contains it. Switch it with `set correction on|off`, and the piece
+tables with `set corrpieces on|off`.
 
 ## The table
 
@@ -121,39 +122,52 @@ Black's in the other:
 {{#include ../../crates/engine/src/correction.rs:non_pawn_key}}
 ```
 
-Every update teaches all three tables the same difference. The correction is their weighted
-average: half the pawn table's, and a quarter each piece table's (`correction_non_pawn_share`,
-64 of 256):
-
-```rust,ignore
-{{#include ../../crates/engine/src/correction.rs:correction}}
-```
-
-An average, not a sum, because each table learns the whole error. Summed, three tables that
-agree would correct three times over. Averaged, they correct by what each has learnt; where
-only some of them know the position, they correct by less.
-
-A move changes one side's pieces at most, or both sides' with a capture, so the positions a
-search visits share their piece keys with many others nearby: after a White move, Black's key
-is the one it was. The piece tables learn from the positions the search is in.
+Every update teaches all three tables the same difference. A move changes one side's pieces at
+most, or both sides' with a capture, so the positions a search visits share their piece keys
+with many others nearby: after a White move, Black's key is the one it was. The piece tables
+learn from the positions the search is in.
 
 Stockfish (GPL-3.0) keeps tables like these, one keyed by each side's pieces other than pawns,
 among others. The code here is cb2026's own. With `set corrpieces off`, the pawn table
 corrects alone, as before.
 
-The bench is 4.3% smaller with them: 1,019,663 nodes instead of 1,065,754, and with
-`set corrpieces off` it is `main`'s exactly. The search runs about 2.5% fewer nodes a second
-(1.54 million against 1.58 million, averaged over five alternating pairs of bench runs): each
-lookup computes two more keys, of five bitboards each, and the two tables add 256 KB that
-compete for the cache. So the bench takes about as long either way.
+### The first version: an average
 
-They lost in games (below). They weren't silent: over the 14 bench positions searched to depth
-13 one after another, the corrections applied at lookups averaged 2.4 centipawns from the pawn
-table and 2.4 from the piece tables' average, and 2.25 combined. So the piece tables replaced
-half of the pawn table's correction with corrections as large and, by the result, worse. Why
-isn't measured. A side's piece key changes whenever one of its pieces moves, the king
-included, so each entry may learn from fewer and more varied positions than a pawn entry and
-average more noise than error.
+The first version's correction was the tables' weighted average: half the pawn table's, and a
+quarter each piece table's (`correction_pawn_share` 128 and `correction_non_pawn_share` 64, of
+256). An average, not a sum, because each table learns the whole error: summed, three tables
+that agree would correct three times over.
+
+The bench was 4.3% smaller with it, 1,019,663 nodes instead of 1,065,754, and the search ran
+about 2.5% fewer nodes a second: each lookup computes two more keys, of five bitboards each,
+and the two tables add 256 KB that compete for the cache. It lost in games (below).
+
+The piece tables weren't silent. Over the 14 bench positions searched to depth 13 one after
+another, the corrections applied at lookups averaged 2.4 centipawns from the pawn table and 2.4
+from the piece tables' average, and 2.25 combined. So the piece tables replaced half of the
+pawn table's correction with corrections as large and, by the result, worse. Why isn't
+measured. A side's piece key changes whenever one of its pieces moves, the king included, so
+each entry may learn from fewer and more varied positions than a pawn entry, and average more
+noise than error.
+
+### The second version: added
+
+The second version keeps the pawn table's correction whole and adds an eighth of each piece
+table's (`correction_pawn_share` 256, `correction_non_pawn_share` 32), keeping the sum within
+`correction_limit`:
+
+```rust,ignore
+{{#include ../../crates/engine/src/correction.rs:correction}}
+```
+
+Where the pawn table alone knows the position, it corrects as before. Where all three agree,
+the correction is a quarter bigger. A piece table that is wrong can move the evaluation by an
+eighth of its error at most, where in the first version it moved it by a quarter and took half
+of the pawn table's say away.
+
+The bench is 2.7% bigger with it: 1,094,228 nodes instead of 1,065,754, and with
+`set corrpieces off` it is `main`'s exactly. The search runs about 1% fewer nodes a second (two
+sets of five alternating pairs of bench runs, one sample left out as an outlier).
 
 ## Pitfalls
 
@@ -161,8 +175,10 @@ average more noise than error.
   were corrected. If the table learnt the difference from the *corrected* evaluation, each
   correction would build on the last. Measured against the raw evaluation, an entry is an average
   of how far the raw evaluation was off, and it settles.
-- **Averaging dilutes.** With the piece tables on, the pawn table counts half as much as it
-  did alone. Where only it has learnt something, the correction is half as big.
+- **Averaging dilutes.** In the first version the pawn table counted half as much as it did
+  alone, so where only it had learnt something, the correction was half as big. Adding keeps
+  it whole, at the cost of correcting by more than any one table where they agree; the limit
+  still holds.
 - **Collisions.** Every pawn structure the search meets shares 16,384 entries per side, so
   unrelated structures can share an average. A bigger table collides less, but each entry learns
   more slowly.
@@ -180,13 +196,11 @@ average more noise than error.
 | Test | Result |
 | --- | --- |
 | Correction history vs `main` without it, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+28.0 ± 13.0 Elo** over 1,308 games (+362 −257 =689): passed (LLR 2.95), cjus/chessengine#112 |
-| The piece tables, averaged with the pawn table, vs `main` with the pawn table alone, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−20.7 ± 12.3 Elo** over 1,362 games (+263 −344 =755): failed (LLR −2.96), cjus/chessengine#119, so they are off by default |
+| The piece tables' first version, averaged with the pawn table, vs `main` with the pawn table alone, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−20.7 ± 12.3 Elo** over 1,362 games (+263 −344 =755): failed (LLR −2.96), cjus/chessengine#119 |
+| The second version, an eighth of each piece table added to the whole pawn table, vs `main` with the pawn table alone, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | Waiting for its SPRT (cjus/chessengine#121) |
 
-The pawn table stays on by itself. The piece tables and their switch stay for another try.
-Untested candidates:
+Other candidates, untested:
 
-- **Added, not averaged**: the pawn table at its full weight, and a small share of each piece
-  table on top, so that the piece tables can only add to what already works.
 - **Keys without the king**, which moves often and makes a side's key change more than its
   pieces do.
 - **Fewer pieces per key**, for example knights and bishops in one key and rooks and queens in

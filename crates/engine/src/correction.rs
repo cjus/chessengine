@@ -20,8 +20,10 @@
 //! underrates. Two more tables, indexed the same way by the side to move and a key, use each
 //! side's pieces other than pawns (knights, bishops, rooks, queens and king) as the key:
 //! White's in one table, Black's in the other ([`non_pawn_key`]). Every update teaches all
-//! three tables the same difference, and the correction is their weighted average: each piece
-//! table counts `correction_non_pawn_share` 256ths (64), the pawn table the rest (128). With
+//! three tables the same difference. The correction is then the pawn table's, counting
+//! `correction_pawn_share` 256ths (all of it, 256), plus each piece table's, counting
+//! `correction_non_pawn_share` 256ths (an eighth, 32), and no more than `correction_limit`
+//! either way. With
 //! [`Techniques::correction_non_pawn`](crate::search::Techniques::correction_non_pawn) off, the
 //! pawn table alone corrects, as before.
 //!
@@ -30,9 +32,13 @@
 //! the positions that matter. Stockfish (GPL-3.0) keeps tables like these, one keyed by each
 //! side's pieces other than pawns, among others; this code is cb2026's own.
 //!
-//! **Off by default.** The piece tables took 4.3% off the bench and measured weaker: −20.7 ±
-//! 12.3 Elo after 1,362 games at 8+0.08 (cjus/chessengine#119). The switch and the tables stay,
-//! so another weighting can be tested.
+//! **The first version averaged the tables**: half the pawn table's correction and a quarter
+//! of each piece table's (`correction_pawn_share` 128, `correction_non_pawn_share` 64). It took
+//! 4.3% off the bench and measured weaker: −20.7 ± 12.3 Elo after 1,362 games at 8+0.08
+//! (cjus/chessengine#119). The piece tables weren't silent: at lookups they corrected by as
+//! much as the pawn table. So they replaced half of a correction that works with one as large
+//! and worse. This version keeps the pawn table whole and adds a little of the piece tables on
+//! top, so they can only add to it.
 //!
 //! ## Which results it learns from
 //!
@@ -78,8 +84,9 @@
 //!   pruning have margins of 80 centipawns or more per ply, so a correction of 10 or 20 changes
 //!   few of their decisions. Null-move pruning, which only needs the evaluation at beta, and the
 //!   stand pat feel it more directly.
-//! - **Averaging dilutes.** With the piece tables on, the pawn table counts half as much as
-//!   alone. Where only it knows something, the correction is half as big.
+//! - **Averaging dilutes.** The first version counted the pawn table half as much as alone,
+//!   which may be what lost it. Adding instead keeps the pawn table's correction, at the cost
+//!   of correcting by more than any one table where they agree; the limit still holds.
 //! - **Mate range.** A corrected evaluation is kept clear of the mate scores, so a large
 //!   correction of a large evaluation can't look like a mate.
 //!
@@ -115,8 +122,11 @@ const NON_PAWN_PIECES: [PieceType; 5] = [
 pub struct CorrectionSettings {
     /// An update moves an entry at most this many 256ths of the way (`correction_max_weight`).
     pub max_weight: i32,
-    /// No entry corrects by more than this many centipawns (`correction_limit`).
+    /// No entry, and no correction, goes beyond this many centipawns (`correction_limit`).
     pub limit: i32,
+    /// With the piece tables on, the pawn table's share of the correction, in 256ths
+    /// (`correction_pawn_share`).
+    pub pawn_share: i32,
     /// Each piece table's share of the correction, in 256ths (`correction_non_pawn_share`): 0
     /// when the piece tables are off, and then they don't learn either.
     pub non_pawn_share: i32,
@@ -128,6 +138,7 @@ impl CorrectionSettings {
         CorrectionSettings {
             max_weight: params.correction_max_weight,
             limit: params.correction_limit,
+            pawn_share: params.correction_pawn_share,
             non_pawn_share: if non_pawn {
                 params.correction_non_pawn_share
             } else {
@@ -171,8 +182,8 @@ impl CorrectionHistory {
 
     // ANCHOR: correction
     /// The correction for `pos`'s static evaluation, in centipawns. With the piece tables off
-    /// it is the pawn table's; on, each side's piece table counts `non_pawn_share` 256ths of it
-    /// and the pawn table the rest.
+    /// it is the pawn table's; on, the pawn table's counts `pawn_share` 256ths and each side's
+    /// piece table's `non_pawn_share` 256ths, added up and kept within the limit.
     pub fn correction(&self, pos: &Position, settings: &CorrectionSettings) -> i32 {
         let pawn = self.pawn[index(pos, pawn_key(pos))];
         let non_pawn_share = settings.non_pawn_share;
@@ -183,8 +194,8 @@ impl CorrectionHistory {
             .iter()
             .map(|&color| self.non_pawn[color.index()][index(pos, non_pawn_key(pos, color))])
             .sum();
-        let pawn_share = SHARE_SCALE - 2 * non_pawn_share;
-        (pawn * pawn_share + pieces * non_pawn_share) / (SHARE_SCALE * GRAIN)
+        let sum = pawn * settings.pawn_share + pieces * non_pawn_share;
+        (sum / (SHARE_SCALE * GRAIN)).clamp(-settings.limit, settings.limit)
     }
     // ANCHOR_END: correction
 
@@ -344,30 +355,35 @@ mod tests {
             history.correction(&after(&["g1f3", "g8f6"]), &pawn_only()),
             learnt
         );
-        // The piece tables weren't taught, so averaged in they halve it.
-        assert_eq!(history.correction(&pos, &all_tables()), learnt / 2);
+        // The piece tables weren't taught, so added in they change nothing.
+        assert_eq!(history.correction(&pos, &all_tables()), learnt);
     }
 
     #[test]
-    fn the_piece_tables_learn_and_average_in() {
+    fn the_piece_tables_learn_and_add_to_the_pawn_table() {
         let pos = Position::startpos();
         let mut history = CorrectionHistory::default();
         for _ in 0..200 {
             history.update(&pos, 20, 20, 50, Bound::Exact, &all_tables());
         }
-        // All three tables learnt the same error, so their average is the same.
+        // All three tables learnt the same error: the pawn table's whole, plus an eighth of
+        // each piece table's, makes a quarter more.
         let alone = history.correction(&pos, &pawn_only());
         assert!((28..=30).contains(&alone), "{alone}");
-        assert_eq!(history.correction(&pos, &all_tables()), alone);
-        // After 1. Nf3 Nf6 the pawns are as they were, but both sides' pieces have moved: only
-        // the pawn table's half is left.
+        let added = history.correction(&pos, &all_tables());
+        assert!(
+            (alone + alone / 4..=alone + alone / 4 + 1).contains(&added),
+            "{added}"
+        );
+        // After 1. Nf3 Nf6 the pawns are as they were, but both sides' pieces have moved: the
+        // pawn table's correction is left, whole.
         let knights_out = after(&["g1f3", "g8f6"]);
         assert_eq!(history.correction(&knights_out, &pawn_only()), alone);
-        assert_eq!(history.correction(&knights_out, &all_tables()), alone / 2);
-        // After 1. e4 e5 only the pawns have changed: only the piece tables' half is left.
+        assert_eq!(history.correction(&knights_out, &all_tables()), alone);
+        // After 1. e4 e5 only the pawns have changed: only the piece tables' eighths are left.
         let e4_e5 = after(&["e2e4", "e7e5"]);
         assert_eq!(history.correction(&e4_e5, &pawn_only()), 0);
-        assert_eq!(history.correction(&e4_e5, &all_tables()), alone / 2);
+        assert_eq!(history.correction(&e4_e5, &all_tables()), alone / 4);
         history.clear();
         assert_eq!(history.correction(&pos, &all_tables()), 0);
     }
