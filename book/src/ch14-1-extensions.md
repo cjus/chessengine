@@ -167,10 +167,10 @@ seven singular hash moves in ten are extended twice, and with a margin of 200 ce
 still would be. With the margin at 20 the depth-10 tree is 44% bigger and the bench 14%
 (1,248,666 nodes against 1,098,926). A margin of 50 makes the tree 30% bigger, and 100 only 9%.
 At this depth the limit hardly matters: at a margin of 50, a limit of 12 gives the same tree as
-6, and only a limit of 3 takes the margin of 20's growth down to 23%. The margin is small, as in
-Stockfish.
+6, and only a limit of 3 takes the margin of 20's growth down to 23%. The first margin, 20, was
+small, as in Stockfish.
 
-**Double extensions had no verdict.** An SPRT against the same engine without them found about
+**At a margin of 20, double extensions had no verdict.** An SPRT against the same engine without them found about
 +4 Elo, give or take 5, after 8,670 games (see "What it's worth"). Like the first version of
 history in LMR (below), that sits between the test's two hypotheses, 0 and 5 Elo, where an SPRT
 takes longest, so the test was stopped and double extensions were switched off by default. The
@@ -183,6 +183,12 @@ less than they did. At a margin of 20 the depth-10 tree is 29% bigger than witho
 extensions (819,182 nodes against 634,430) and the bench 12% (1,189,432 against 1,065,754). At
 50 they are 11% bigger (703,714) and 7% (1,136,500). A little over half of the singular hash
 moves are extended twice at 50 (1,487 of 2,762), against seven in ten at 20.
+
+**At a margin of 50, double extensions passed**: about **+13 Elo** after 3,167 games (see
+"What it's worth"), so they are on by default. The two tests aren't quite a comparison of the
+margins alone, since correction history came in between them, and their error bars overlap.
+Together they suggest, no more, that extending about half of the singular moves twice does
+better than extending most of them.
 
 The search without the hash move asks a different question from the node's own search, so it
 must not mix with it. It neither reads nor writes the transposition table (an entry about the
@@ -439,6 +445,7 @@ that it is small, about **+5 Elo**, and it took over 14,000 of them to say so.
 | `singular_margin` 4 vs `main` (3), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−1.8 ± 5.3 Elo** over 7,476 games (+1670 −1709 =4097): failed (LLR −2.95); the margin stays at 3 |
 | `singular_tt_depth_margin` 4 vs `main` (3), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−7.4 ± 8.0 Elo** over 3,345 games (+735 −806 =1804): failed (LLR −2.97); the margin stays at 3 |
 | Double extensions (margin 20, at most 6 a line) vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | +3.6 ± 4.9 Elo over 8,670 games (+1988 −1897 =4785): no verdict (LLR 0.92), stopped; off by default |
+| Double extensions (margin 50, at most 6 a line) vs `main` without them (with correction history), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+13.0 ± 8.3 Elo** over 3,167 games (+798 −680 =1689): passed (LLR 2.94); on by default |
 
 ## Further reading
 

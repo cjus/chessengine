@@ -198,9 +198,9 @@
 //! (cjus/chessengine#80). A `singular_margin` of 3 instead of 2 gained +5.2 ± 4.2 after 11,400
 //! (cjus/chessengine#82). A `singular_tt_depth_margin` of 4 instead of 3 made the bench 3.5%
 //! smaller and failed: −7.4 ± 8.0 Elo after 3,345 games (cjus/chessengine#123). Double
-//! extensions, which make the bench 14% bigger, had no verdict:
-//! +3.6 ± 4.9 Elo after 8,670 games, stopped there (cjus/chessengine#96). They are off by
-//! default.
+//! extensions at a margin of 20 had no verdict: +3.6 ± 4.9 Elo after 8,670 games, stopped
+//! there (cjus/chessengine#96). At a margin of 50, which makes the bench 7% bigger, they
+//! passed: +13.0 ± 8.3 after 3,167 games (cjus/chessengine#125).
 //!
 //! ## Correction history
 //!
@@ -440,8 +440,8 @@ impl Default for SearchParams {
             // 2 until 4 became the start depth; 3 gained +5.2 ± 4.2 (cjus/chessengine#82); 4
             // failed, −1.8 ± 5.3 against 3 (cjus/chessengine#84).
             singular_margin: 3,
-            // 20 at first, as in Stockfish (GPL-3.0) (cjus/chessengine#96); 50 is being tested
-            // (cjus/chessengine#125).
+            // 20 at first, as in Stockfish (GPL-3.0), had no verdict (cjus/chessengine#96); 50
+            // gained +13.0 ± 8.3 (cjus/chessengine#125).
             double_extension_margin: 50,
             double_extension_limit: 6,
             negative_extension_plies: 1,
@@ -590,7 +590,7 @@ impl Default for Techniques {
             check_extension: false,
             singular_extension: true,
             // No verdict at a margin of 20, +3.6 ± 4.9 Elo after 8,670 games at 8+0.08
-            // (cjus/chessengine#96); on at a margin of 50 for a second test
+            // (cjus/chessengine#96); at a margin of 50, +13.0 ± 8.3 after 3,167
             // (cjus/chessengine#125); see chapter 14.1.
             double_extension: true,
             multi_cut: true,
