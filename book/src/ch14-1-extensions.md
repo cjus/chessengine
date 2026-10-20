@@ -150,7 +150,7 @@ than 3, about **−7 Elo**, so the margin stays at 3 (see "What it's worth").
 
 The search answers one more question. Its score is the best any other move managed, so it says
 not only whether the hash move is singular but by how much. When no other move comes within
-`double_extension_margin` (20 centipawns) of `singular_beta` either, the hash move is close to
+`double_extension_margin` (50 centipawns; 20 at first, see below) of `singular_beta` either, the hash move is close to
 the only move: a recapture with nothing else to do, the one defence that doesn't lose a piece.
 A mistake in its line costs the most of all, so it is searched two plies deeper instead of one.
 That is a **double extension**.
@@ -173,9 +173,16 @@ Stockfish.
 **Double extensions had no verdict.** An SPRT against the same engine without them found about
 +4 Elo, give or take 5, after 8,670 games (see "What it's worth"). Like the first version of
 history in LMR (below), that sits between the test's two hypotheses, 0 and 5 Elo, where an SPRT
-takes longest, so the test was stopped and double extensions are off by default (`set doubleext
-on` turns them on). The candidates for another test are the ones that grow the tree less, a
-margin of 50 or a limit of 3, and the long time control, 40+0.4.
+takes longest, so the test was stopped and double extensions were switched off by default. The
+candidates for another test were the ones that grow the tree less, a margin of 50 or a limit of
+3, and the long time control, 40+0.4.
+
+The second test is at a margin of 50 (cjus/chessengine#125), with double extensions on again
+(`set doubleext off` switches them off). Since correction history (chapter 14.2), the trees grow
+less than they did. At a margin of 20 the depth-10 tree is 29% bigger than without double
+extensions (819,182 nodes against 634,430) and the bench 12% (1,189,432 against 1,065,754). At
+50 they are 11% bigger (703,714) and 7% (1,136,500). A little over half of the singular hash
+moves are extended twice at 50 (1,487 of 2,762), against seven in ten at 20.
 
 The search without the hash move asks a different question from the node's own search, so it
 must not mix with it. It neither reads nor writes the transposition table (an entry about the

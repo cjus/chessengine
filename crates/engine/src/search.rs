@@ -177,7 +177,7 @@
 //! **negative extension**.
 //!
 //! And a fourth. The search's score is the best any other move managed, so it says by how much
-//! the hash move is singular. If no other move comes within `double_extension_margin` (20)
+//! the hash move is singular. If no other move comes within `double_extension_margin` (50)
 //! centipawns of `singular_beta` either, the hash move is close to the only move, and at a node
 //! off the principal variation it is searched two plies deeper instead of one: a **double
 //! extension**. A line can have at most `double_extension_limit` (6) of them, on top of the
@@ -440,7 +440,9 @@ impl Default for SearchParams {
             // 2 until 4 became the start depth; 3 gained +5.2 ± 4.2 (cjus/chessengine#82); 4
             // failed, −1.8 ± 5.3 against 3 (cjus/chessengine#84).
             singular_margin: 3,
-            double_extension_margin: 20,
+            // 20 at first, as in Stockfish (GPL-3.0) (cjus/chessengine#96); 50 is being tested
+            // (cjus/chessengine#125).
+            double_extension_margin: 50,
             double_extension_limit: 6,
             negative_extension_plies: 1,
             correction_max_weight: 16,
@@ -587,9 +589,10 @@ impl Default for Techniques {
             // Off by default: it didn't measure stronger (see the module documentation).
             check_extension: false,
             singular_extension: true,
-            // Off by default: no verdict, +3.6 ± 4.9 Elo after 8,670 games at 8+0.08
-            // (cjus/chessengine#96); see chapter 14.1.
-            double_extension: false,
+            // No verdict at a margin of 20, +3.6 ± 4.9 Elo after 8,670 games at 8+0.08
+            // (cjus/chessengine#96); on at a margin of 50 for a second test
+            // (cjus/chessengine#125); see chapter 14.1.
+            double_extension: true,
             multi_cut: true,
             negative_extension: true,
             iir: true,
@@ -2365,8 +2368,11 @@ mod tests {
         let on = counts(with, SearchParams::default());
         assert!(on.double_extensions > 0);
         assert!(on.double_extensions <= on.singular_extensions);
-        // Off by default.
-        let off = counts(Techniques::default(), SearchParams::default());
+        let without = Techniques {
+            double_extension: false,
+            ..Techniques::default()
+        };
+        let off = counts(without, SearchParams::default());
         assert_eq!(off.double_extensions, 0);
         let no_room = SearchParams {
             double_extension_limit: 0,
