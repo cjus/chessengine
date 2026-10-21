@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-21, 12:11 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-21, 12:53 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -40,7 +40,7 @@ stays at 50, #127; capture history's second version, in Stockfish's form, failed
 above 2026-10-18, #131; a flag falling against material that can't mate is a draw (FIDE 6.9),
 #137; capture history's third version, in the main search only, failed too, −2.9 ± 5.9 after
 6,301 games, so it stays off by default, #134; double extensions at a margin of 70 failed,
-−20.5 ± 12.2, so the margin stays at 50, #138.*
+−20.5 ± 12.2, so the margin stays at 50, #138; history pruning running on the M3, #140.*
 
 ## Stages
 
@@ -103,8 +103,16 @@ above 2026-10-18, #131; a flag falling against material that can't mate is a dra
 | M5: capture history, second version: the victim's value plus history, the attacker only breaking ties (chapter 10.2) | #129 | 1136500 (998700 with capture history on) | Merged, off by default: −6.8 ± 7.8, 3,512 games, [0, 5] failed (M3 Max) |
 | M5: capture history, third version: the second in the main search only, the quiescence search keeping MVV-LVA (chapter 10.2) | #134 | 1136500 (1003431 with capture history on) | Merged, off by default: −2.9 ± 5.9, 6,301 games, [0, 5] failed (M3 Max) |
 | M5: double extensions at a margin of 70 instead of 50 (chapter 14.1) | #138 | 1136500 (1054909 with the margin at 70) | Merged as a record, the margin back at 50: −20.5 ± 12.2, 1,407 games, [0, 5] failed (M3 Max) |
+| M5: history pruning: quiet moves with a bad history skipped near the leaves (chapter 13.1) | #140, `claude/history-pruning` | 1022919 | Draft, its SPRT running on the M3 Max: [0, 5] at 8+0.08 |
 
-**Nothing is running on the M3 now.**
+**Running now: #140** (history pruning; chapter 13.1), started on the M3 on 2026-10-21 at about
+12:50 MDT. A clear result should take 1–3 hours, a small difference 5–8. A new session should
+restart the watcher, `scripts/watch-sprt.sh 140`, or just read #140's comments if the result is
+already there. Then rebase #140 onto `main` (in `docs/status.md` take `main`'s side and edit
+it), record the result in chapter 13.1, the search module docs, the switch's comment, the PRD's
+techniques table, the ledger and this file, and merge. If it fails, switch `history_pruning` off
+by default (with its comment, the switch's doc, the shell's help and the PRD) and merge as a
+record.
 
 The SPRT of double extensions at a margin of 70 instead of 50 (#138) finished on 2026-10-21 at
 12:08 MDT. It started at about 11:00 and failed in 1,407 games, about 1 hour 10 minutes:
@@ -388,9 +396,10 @@ Run the full test suite on every commit you replay, not only at the tip: each be
      failure but #121 made the bench smaller. Chapters 10.2, 12.1 and 14.2 list untested
      settings for another try. Capture history has lost three times, so it waits behind the
      candidates below.
-   - **New techniques with more to gain than more tuning**: history pruning (late quiet moves
-     with a bad history skipped at low depth) and larger reductions at expected cut nodes.
-     cb2026 has neither.
+   - **New techniques**: history pruning (quiet moves with a bad history skipped near the
+     leaves) is running now (#140, see "Running now"); larger reductions at expected cut nodes,
+     which cb2026 doesn't have either, could be next. Stockfish's own estimates for its
+     versions of both are small, about 2 and 3 Elo.
    - **Tuning singular extensions, continued**: depth 6 passed (#78) and depth 4 too (#80),
      which is about where Stockfish starts; `singular_margin` 3 passed too (#82), and 4
      failed (#84); `singular_tt_depth_margin` 4 failed against 3 (#123, −7.4 ± 8.0). That
