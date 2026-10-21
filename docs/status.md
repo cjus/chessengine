@@ -255,7 +255,8 @@ section:
    so only its own commits replay.
 2. Open its PR. Then commit the result to the chapter's "What it's worth"
    table and a `docs/elo-ledger.md` row with the PR number, as a separate commit.
-3. Wait for the three CI checks, then merge (CLAUDE.md: Claude may merge its own green PRs).
+3. Mark the PR ready (`gh pr ready`), wait for its `CI` check, then merge (CLAUDE.md: Claude may
+   merge its own green PRs).
    Push the stage's tag (`git tag -a stage-NN-<name> <merge commit> -m "..."`); from a cloud
    session, which can't push tags, add the command to a `needs-carlos` issue instead.
 4. Rebase the rest of the stack onto the new branch head, and point each branch at its rebased
