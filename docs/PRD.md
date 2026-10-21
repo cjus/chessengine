@@ -550,12 +550,23 @@ and short SPRT matches itself. What Claude can't do is look at GUIs or run long 
 tests, quick perft, bench, conformance, book build) must be green; the PR states bench and SPRT
 results. Each stage ends with a tag, a book chapter and an Elo ledger entry. `main` is
 protected by the ruleset `main: PR + CI` (since 2026-10-10): every change arrives through a PR,
-the three CI checks (`fmt, clippy, test, doc`, `licences and advisories`, `book`) must pass, and
-force pushes and branch deletion are blocked.
+its CI check must pass (`CI`, one job since 2026-10-21; three checks before), and force pushes
+and branch deletion are blocked.
 
 **CI cost.** GitHub Actions minutes are limited on private repos, and macOS and Windows minutes
-have historically cost 10× and 2× Linux minutes. So PRs run on Linux; macOS and Windows builds run nightly and on
-release tags. Releases build binaries for every platform in the table above.
+have historically cost 10× and 2× Linux minutes. So PRs run on Linux; macOS and Windows builds run
+weekly and on release tags. Releases build binaries for every platform in the table above. The
+account's minutes, shared with chessgui, ran out on 2026-10-21 (cjus/chessgui#73), about 1,800 of
+them having gone here in three weeks. Since then:
+- CI is one job (GitHub bills each job to the next whole minute).
+- There is no run after a merge (the PR's run checked it). `main` is checked nightly instead,
+  only if it changed.
+- A PR that changes only documentation skips the build.
+- Only `main` saves build caches.
+- Fuzzing runs weekly.
+- Draft PRs aren't checked.
+
+The repository becoming public (planned, cjus/chessgui#71) makes its CI free.
 
 ## License and IP
 

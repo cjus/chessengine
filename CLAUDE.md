@@ -35,11 +35,16 @@ changes the picture.
    unchanged bench.
 5. Book chapter and `docs/elo-ledger.md` updated when a technique is added or changed.
 6. Work is on a `claude/<topic>` branch from the latest `main`, with a PR to `main` and green CI.
-   `main` is protected (ruleset `main: PR + CI`): changes land only through a PR whose three CI
-   checks (`fmt, clippy, test, doc`, `licences and advisories`, `book`) passed. Never try to get
-   around it.
-   **Claude may merge its own PRs** (granted by Carlos 2026-10-10) once all three checks are green
-   on the latest commit, the PR merges cleanly and no review comment is unanswered. After a
+   `main` is protected (ruleset `main: PR + CI`): changes land only through a PR whose CI check
+   (`CI`: fmt, clippy, tests, perft, docs, licences and advisories, and the book, in one job)
+   passed. Never try to get around it.
+   **Claude may merge its own PRs** (granted by Carlos 2026-10-10) once `CI` is green on the
+   latest commit, the PR merges cleanly and no review comment is unanswered.
+   **Spend few Actions minutes** (they ran out in October 2026, cjus/chessgui#73). Open a PR as a
+   draft (`gh pr create --draft`) and mark it ready (`gh pr ready`) when its work is done: CI
+   checks only PRs that are ready, and again on each push after that, so push a PR's commits
+   together. A PR that changes only `docs/` or Markdown outside the book passes in seconds.
+   `.github/workflows/ci.yml` says what else saves minutes. After a
    stage's last PR merges, it gets a `stage-NN-<name>` tag on `main`. Cloud sessions can't push
    tags (the git proxy refuses them), so add the tag command to the open `needs-carlos` issue
    "Push stage tags" (cjus/chessengine#17, or a new one if that is closed).
