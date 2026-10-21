@@ -502,8 +502,11 @@ pub struct Techniques {
     pub continuation_history: bool,
     /// Capture history: captures and queen promotions are ordered by what they win and how
     /// often they caused cutoffs, instead of by MVV-LVA (needs MVV-LVA ordering, the switch
-    /// that orders captures first; off by default).
+    /// that orders captures first).
     pub capture_history: bool,
+    /// Capture history in the quiescence search's order too (needs capture history). Off, the
+    /// quiescence search, which never teaches the table, keeps MVV-LVA's order.
+    pub capture_history_quiescence: bool,
     /// Principal variation search: moves after the first get a null-window search first.
     pub pvs: bool,
     /// Aspiration windows: each iteration starts with a narrow window around the last score.
@@ -573,11 +576,14 @@ impl Default for Techniques {
             countermoves: true,
             history: true,
             continuation_history: true,
-            // Off by default. The first version, with MVV-LVA's attacker term, measured weaker:
-            // −19.2 ± 11.9 Elo after 1,561 games at 8+0.08 (cjus/chessengine#115). So did the
-            // second, in Stockfish's form: −6.8 ± 7.8 after 3,512 (cjus/chessengine#129). See
+            // The first version, with MVV-LVA's attacker term, measured weaker: −19.2 ± 11.9 Elo
+            // after 1,561 games at 8+0.08 (cjus/chessengine#115). So did the second, in
+            // Stockfish's form: −6.8 ± 7.8 after 3,512 (cjus/chessengine#129). The third, the
+            // second in the main search only, is on for its test (cjus/chessengine#134). See
             // chapter 10.2.
-            capture_history: false,
+            capture_history: true,
+            // Off: the second version ordered the quiescence search too (cjus/chessengine#129).
+            capture_history_quiescence: false,
             pvs: true,
             aspiration: true,
             null_move: true,
@@ -1639,6 +1645,15 @@ impl<'a> Searcher<'a> {
             .copied()
             .filter(|&mv| in_check || is_noisy(mv))
             .collect();
+        // ANCHOR: quiescence_order
+        // Capture history is taught by the main search only, since a cutoff's bonus is depth².
+        // Unless `capture_history_quiescence` is on, the quiescence search keeps MVV-LVA's order.
+        let techniques = Techniques {
+            capture_history: self.techniques.capture_history
+                && self.techniques.capture_history_quiescence,
+            ..self.techniques
+        };
+        // ANCHOR_END: quiescence_order
         let picker = MovePicker::new(
             pos,
             &moves,
@@ -1646,7 +1661,7 @@ impl<'a> Searcher<'a> {
             ply,
             &Previous::default(),
             self.ordering,
-            &self.techniques,
+            &techniques,
         );
         let stand_pat = best;
         let mut child_pv = Vec::new();
@@ -2046,6 +2061,29 @@ mod tests {
             assert_eq!(with.score, without.score, "{fen}");
             assert_ne!(with.nodes, without.nodes, "{fen}");
         }
+    }
+
+    #[test]
+    fn capture_history_orders_the_quiescence_search_only_when_asked() {
+        let fen = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
+        let with = |capture_history, capture_history_quiescence| {
+            search(
+                fen,
+                5,
+                Techniques {
+                    capture_history,
+                    capture_history_quiescence,
+                    ..Techniques::sound()
+                },
+            )
+        };
+        // With capture history on, the quiescence search's order changes the tree, not the
+        // score.
+        let (main_only, everywhere) = (with(true, false), with(true, true));
+        assert_eq!(main_only.score, everywhere.score);
+        assert_ne!(main_only.nodes, everywhere.nodes);
+        // With it off, the quiescence switch does nothing.
+        assert_eq!(with(false, true).nodes, with(false, false).nodes);
     }
 
     #[test]

@@ -85,9 +85,12 @@
 //! off the bench and measured weaker: −19.2 ± 11.9 Elo after 1,561 games at 8+0.08
 //! (cjus/chessengine#115).
 //!
-//! **Off by default.** The second version measured weaker too: −6.8 ± 7.8 Elo after 3,512
-//! games at 8+0.08 (cjus/chessengine#129), though it took 12.1% off the bench. The switch and
-//! the table stay, for another try.
+//! The second version measured weaker too: −6.8 ± 7.8 Elo after 3,512 games at 8+0.08
+//! (cjus/chessengine#129), though it took 12.1% off the bench. It ordered the quiescence
+//! search's captures by the table as well, though only the main search teaches it. **The third
+//! version** is the second in the main search only: the quiescence search keeps MVV-LVA's
+//! order unless [`Techniques::capture_history_quiescence`] is on. It is being tested
+//! (cjus/chessengine#134).
 //!
 //! ## The order, and staged picking
 //!

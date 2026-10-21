@@ -87,8 +87,13 @@ pub(crate) const SWITCHES: &[Switch] = &[
     },
     Switch {
         name: "capthist",
-        description: "Capture history: captures ordered by what they win and their cutoffs (off by default)",
+        description: "Capture history: captures ordered by what they win and their cutoffs",
         flag: |e| &mut e.techniques.capture_history,
+    },
+    Switch {
+        name: "capthistq",
+        description: "Capture history in the quiescence search too (needs capthist; off by default)",
+        flag: |e| &mut e.techniques.capture_history_quiescence,
     },
     Switch {
         name: "pvs",
