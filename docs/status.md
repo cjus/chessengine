@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-21, 17:15 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-21, 17:58 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -46,7 +46,7 @@ Syzygy, the first step of Solrac's M1b (cjus/chessgui#71, #98);
 cb2026 speaks the Chess Node Protocol (`--cnp`, `crates/cnp`), passing every conformance
 session that applies (38; the window's is skipped), M1b's step 4 (cjus/chessgui#98; CI needs
 the deploy key of #143); v1.0 started: `scripts/mac-robustness.sh` for the robustness run,
-#146, which follows #145.*
+#146, which follows #145; larger reductions at expected cut nodes running on the M3, #145.*
 
 ## Stages
 
@@ -110,8 +110,17 @@ the deploy key of #143); v1.0 started: `scripts/mac-robustness.sh` for the robus
 | M5: capture history, third version: the second in the main search only, the quiescence search keeping MVV-LVA (chapter 10.2) | #134 | 1136500 (1003431 with capture history on) | Merged, off by default: −2.9 ± 5.9, 6,301 games, [0, 5] failed (M3 Max) |
 | M5: double extensions at a margin of 70 instead of 50 (chapter 14.1) | #138 | 1136500 (1054909 with the margin at 70) | Merged as a record, the margin back at 50: −20.5 ± 12.2, 1,407 games, [0, 5] failed (M3 Max) |
 | M5: history pruning: quiet moves with a bad history skipped near the leaves (chapter 13.1) | #140 | 1136500 (1022919 with history pruning on) | Merged, off by default: −5.3 ± 7.1, 4,548 games, [0, 5] failed (M3 Max) |
+| M5: larger reductions at expected cut nodes (chapter 14.1) | #145, `claude/cut-node-reductions` | 1078861 | Draft, its SPRT running on the M3 Max: [0, 5] at 8+0.08 |
 
-**Nothing is running on the M3 now.**
+**Running now: #145** (larger reductions at expected cut nodes; chapter 14.1), started on the M3
+on 2026-10-21 at about 17:15 MDT. A clear result should take 1–3 hours, a small difference 5–8.
+A new session should restart the watcher, `scripts/watch-sprt.sh 145`, or just read #145's
+comments if the result is already there. Then rebase #145 onto `main` (in `docs/status.md` take
+`main`'s side and edit it), record the result in chapter 14.1, the search module docs, the
+switch's comment, the PRD's techniques table, the ledger and this file, and merge. If it fails,
+switch `cut_node_reductions` off by default (with its comment, the switch's doc, the shell's
+help and the PRD) and merge as a record. Either way, then comment on #146 that `main` is ready
+for the robustness run.
 
 The SPRT of history pruning (#140) finished on 2026-10-21 at 16:29 MDT. It started at about
 12:50 and failed in 4,548 games, about 3 hours 40 minutes: **−5.3 ± 7.1**, though it took 10%
