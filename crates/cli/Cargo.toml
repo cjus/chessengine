@@ -13,10 +13,14 @@ name = "cb2026"
 path = "src/main.rs"
 
 [dependencies]
+cb2026-cnp.workspace = true
 cb2026-engine.workspace = true
 cb2026-protocol.workspace = true
 cb2026-shell.workspace = true
 cb2026-syzygy = { workspace = true, optional = true }
+
+[dev-dependencies]
+cnp-conformance.workspace = true
 
 [features]
 default = ["syzygy"]

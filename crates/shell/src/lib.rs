@@ -96,6 +96,7 @@ use cb2026_engine::tablebase::{self, TbWdl};
 use cb2026_engine::tt::MAX_HASH_MB;
 use cb2026_engine::{Engine, Limits, MAX_THREADS, NAME, Score, SearchInfo, bench, eval, search};
 pub use cb2026_protocol::Protocol;
+pub use explain::{SWITCHES, Switch};
 use game::Clock;
 pub use render::Style;
 

@@ -107,10 +107,11 @@ tests/data/   perft suites, EPD test suites, bench positions.
 scripts/      SPRT and gauntlet runners for the test Mac, release helpers.
 ```
 
-**One binary, three modes.** GUIs launch the engine and send `uci` (or `xboard`) as their first
-line, so the binary chooses its mode from that first line: `uci` → UCI, `xboard` → CECP, anything
-else on an interactive terminal → the shell. `--uci`, `--xboard` and `--shell` force a mode, and
-`cb2026 bench` runs the benchmark (see Testing).
+**One binary, four modes.** GUIs launch the engine and send `uci` (or `xboard`) as their first
+line, so the binary chooses its mode from that first line: `uci` → UCI, `xboard` → CECP, a JSON
+message → the Chess Node Protocol (Solrac, below), anything else on an interactive terminal → the
+shell. `--uci`, `--xboard`, `--cnp` and `--shell` force a mode, and `cb2026 bench` runs the
+benchmark (see Testing).
 
 **Engine API.** `Engine::search(position, limits, options, on_info)` returns a best move (and a
 ponder move), and calls `on_info` with depth, score, PV, nodes, speed and other statistics while it
@@ -240,6 +241,18 @@ Protocol version 2 through the same Engine API: `protover 2` features (`setboard
 
 Through `UCI_Chess960` and XBoard `variant fischerandom`, with Shredder-FEN and X-FEN castling
 rights both accepted. Chess960 perft and Chess960 test matches are part of the test suite.
+
+### Chess Node Protocol (Solrac)
+
+Solrac, the 3D board that teaches (`cjus/chessgui`), reaches cb2026 through the
+[Chess Node Protocol](https://github.com/cjus/chess-node-protocol) (CNP): JSON-RPC 2.0 over
+stdin/stdout, which Solrac's milestone M1b defines (cjus/chessgui#98). Every request carries the
+whole position and every option, so cb2026 can one day be one node of a distributed engine.
+`crates/cnp` (`cb2026-cnp`) answers it. A search has the limits UCI's `go` has, plus a level,
+MultiPV, root moves, technique switches (the shell's, by the same names), a deterministic mode
+and progress reports. `engine/techniques` and `engine/levels` list the switches and the measured
+levels. Every capability is offered except a root score window. Every conformance session in the
+protocol's repository runs against the real binary in `cargo test` (`crates/cli/tests/cnp.rs`).
 
 ### Lichess bot (must)
 
@@ -792,6 +805,11 @@ about 26 s, and the M1 Max played about 970 games an hour.
 - [x] `UCI_Elo` range: 650–2450, level 0's and level 19's ratings at 40+0.4 rounded inward to
       50. It was 1000–2400 at first, then 800–2600 after the calibration at 8+0.08
       (cjus/chessengine#106, 2026-10-18).
+- [x] cb2026 speaks the Chess Node Protocol (`--cnp`, or a JSON first line) for Solrac, beside
+      UCI and XBoard: one search at a time, every capability but the root window, the shell's
+      switches as its techniques. The protocol's crates come from the private
+      `cjus/chess-node-protocol` by git, with a read-only deploy key in CI
+      (cjus/chessgui#98, cjus/chessengine#143, 2026-10-21).
 
 ## Open questions
 

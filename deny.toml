@@ -43,6 +43,7 @@ wildcards = "deny"
 allow-wildcard-paths = true
 
 [sources]
-# Only crates.io; no git dependencies or other registries.
+# Only crates.io, and the Chess Node Protocol's own repository (cjus/chessgui#98).
 unknown-registry = "deny"
 unknown-git = "deny"
+allow-git = ["https://github.com/cjus/chess-node-protocol"]

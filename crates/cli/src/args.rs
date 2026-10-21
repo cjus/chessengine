@@ -20,7 +20,8 @@ pub enum Command {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
     /// Decide from the input: a terminal gets the shell; otherwise the first line decides
-    /// between UCI, XBoard and shell commands (see [`cb2026_protocol::detect`]).
+    /// between UCI, XBoard, the Chess Node Protocol (a line of JSON) and shell commands (see
+    /// [`cb2026_protocol::detect`]).
     Auto,
     /// The interactive shell.
     Shell,
@@ -28,14 +29,17 @@ pub enum Mode {
     Uci,
     /// The XBoard / CECP protocol.
     Xboard,
+    /// The Chess Node Protocol, which Solrac speaks (`cb2026_cnp`).
+    Cnp,
 }
 
 /// Usage text for `--help` and argument errors.
 pub const USAGE: &str = "\
 Usage: cb2026 [COMMAND | OPTION]
 
-With no arguments, cb2026 opens the shell in a terminal, or speaks UCI or XBoard when a GUI
-starts it (the GUI's first line, `uci` or `xboard`, decides).
+With no arguments, cb2026 opens the shell in a terminal, or speaks UCI, XBoard or the Chess
+Node Protocol when a program starts it (its first line, `uci`, `xboard` or a JSON message,
+decides).
 
 Commands:
   bench          Run the fixed benchmark; prints total nodes and speed
@@ -44,6 +48,7 @@ Options:
   --shell        Force the interactive shell
   --uci          Force UCI mode
   --xboard       Force XBoard/CECP mode
+  --cnp          Force Chess Node Protocol mode (JSON-RPC, one message per line)
   -V, --version  Print name and version
   -h, --help     Print this help";
 
@@ -58,6 +63,7 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
             "--shell" => Ok(Command::Run(Mode::Shell)),
             "--uci" => Ok(Command::Run(Mode::Uci)),
             "--xboard" => Ok(Command::Run(Mode::Xboard)),
+            "--cnp" => Ok(Command::Run(Mode::Cnp)),
             "bench" => Ok(Command::Bench),
             "-V" | "--version" => Ok(Command::Version),
             "-h" | "--help" => Ok(Command::Help),
@@ -86,6 +92,7 @@ mod tests {
         assert_eq!(parse_strs(&["--shell"]), Ok(Command::Run(Mode::Shell)));
         assert_eq!(parse_strs(&["--uci"]), Ok(Command::Run(Mode::Uci)));
         assert_eq!(parse_strs(&["--xboard"]), Ok(Command::Run(Mode::Xboard)));
+        assert_eq!(parse_strs(&["--cnp"]), Ok(Command::Run(Mode::Cnp)));
     }
 
     #[test]

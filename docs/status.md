@@ -41,7 +41,10 @@ above 2026-10-18, #131; a flag falling against material that can't mate is a dra
 #137; capture history's third version, in the main search only, failed too, −2.9 ± 5.9 after
 6,301 games, so it stays off by default, #134; double extensions at a margin of 70 failed,
 −20.5 ± 12.2, so the margin stays at 50, #138; history pruning running on the M3, #140; cb2026 relicensed `MIT OR Apache-2.0`, with GPL
-only in a binary built with Syzygy, the first step of Solrac's M1b (cjus/chessgui#71, #98).*
+only in a binary built with Syzygy, the first step of Solrac's M1b (cjus/chessgui#71, #98);
+cb2026 speaks the Chess Node Protocol (`--cnp`, `crates/cnp`), passing every conformance
+session that applies (38; the window's is skipped), M1b's step 4 (cjus/chessgui#98; CI needs
+the deploy key of #143).*
 
 ## Stages
 

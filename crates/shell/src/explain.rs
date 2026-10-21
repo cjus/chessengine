@@ -21,15 +21,19 @@ use cb2026_engine::{Engine, Limits, SearchInfo, eval, levels, see};
 use crate::{Response, Shell, pawns, pv_san, score_text};
 
 /// A technique or evaluation term that can be switched on and off: its name in `set`, what
-/// it is, and where its switch lives in the engine.
-pub(crate) struct Switch {
-    pub(crate) name: &'static str,
-    pub(crate) description: &'static str,
-    pub(crate) flag: fn(&mut Engine) -> &mut bool,
+/// it is, and where its switch lives in the engine. The Chess Node Protocol node lists the same
+/// switches (`engine/techniques`, `cb2026-cnp`).
+pub struct Switch {
+    /// Its name, in `set <name> on|off` and in a CNP search's `techniques`.
+    pub name: &'static str,
+    /// What it is, in a few words, sometimes with a note in parentheses.
+    pub description: &'static str,
+    /// Where it lives in the engine.
+    pub flag: fn(&mut Engine) -> &mut bool,
 }
 
 /// Every switch, in the order the stages added them.
-pub(crate) const SWITCHES: &[Switch] = &[
+pub const SWITCHES: &[Switch] = &[
     Switch {
         name: "alphabeta",
         description: "Alpha-beta pruning (off: plain minimax)",
