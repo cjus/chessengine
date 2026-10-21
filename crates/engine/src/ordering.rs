@@ -83,7 +83,11 @@
 //! **The first version** kept MVV-LVA's attacker term: its key was the MVV-LVA key times 1,024
 //! plus capture history, so history moved a capture two victim ranks at most. It took 11.5%
 //! off the bench and measured weaker: −19.2 ± 11.9 Elo after 1,561 games at 8+0.08
-//! (cjus/chessengine#115). This second version is being tested (cjus/chessengine#129).
+//! (cjus/chessengine#115).
+//!
+//! **Off by default.** The second version measured weaker too: −6.8 ± 7.8 Elo after 3,512
+//! games at 8+0.08 (cjus/chessengine#129), though it took 12.1% off the bench. The switch and
+//! the table stay, for another try.
 //!
 //! ## The order, and staged picking
 //!

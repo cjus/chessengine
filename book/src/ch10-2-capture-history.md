@@ -13,9 +13,8 @@ Chapter 10 had the same problem with quiet moves and solved it with the history 
 learns from the search which moves cause cutoffs. **Capture history** does the same for
 captures. Its table is indexed by the piece that captures, the square it captures on and the
 piece it takes, and it learns the way history does. Like chapter 14.1's techniques, it came
-after stage 20, so no stage tag contains it. Its first version measured weaker. The second, in
-Stockfish's form, is on for its test (cjus/chessengine#129); `set capthist off` switches it
-off.
+after stage 20, so no stage tag contains it. Both its versions measured weaker, the second in
+Stockfish's form, so it is **off by default**; `set capthist on` switches it on.
 
 ## The table
 
@@ -155,16 +154,22 @@ null-move pruning and the rest are allowed and a good capture can be missed.
 | Test | Result |
 | --- | --- |
 | Capture history vs `main` without it, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−19.2 ± 11.9 Elo** over 1,561 games (+328 −414 =819): failed (LLR −2.96), cjus/chessengine#115, so it is off by default |
+| Capture history's second version (the victim's value plus history, the attacker only breaking ties) vs `main` without it (with double extensions), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−6.8 ± 7.8 Elo** over 3,512 games (+771 −840 =1901): failed (LLR −2.96), cjus/chessengine#129, so it stays off by default |
 
 Like switching history off in chapter 10.1, the first version made the tree smaller and the
 engine weaker. The switch and the table stayed for a second version, in Stockfish's form: the
-victim's value plus capture history, with the attacker only breaking ties. It is being tested
-(cjus/chessengine#129). Still untested:
+victim's value plus capture history, with the attacker only breaking ties. It lost too, by
+less: about **−7 Elo** (cjus/chessengine#129), again with a smaller bench. Both versions
+made the bench about 12% smaller and the engine weaker; why isn't measured. Still
+untested:
 
 - **History only among captures of the same piece**: a scale large enough that a victim rank
   outweighs any history score, so history only reorders the attackers.
 - **No penalty for the captures tried before a quiet move's cutoff**, so that a capture is
   marked down only when another capture did better.
+- **The main search only.** The quiescence search, about half of the nodes, orders its
+  captures by the table but never teaches it, since its nodes have no depth for a bonus. It
+  could keep MVV-LVA's order.
 
 ## Further reading
 
