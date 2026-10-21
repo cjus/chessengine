@@ -6,8 +6,8 @@ tag. Claude's cloud sessions can't push tags, so the tag is Carlos's step.
 ## Before a release
 
 1. The milestone's gates have passed (`docs/PRD.md`, "Milestones"): for v1.0 (M5), the
-   rating gauntlet, a clean 10,000-game robustness run (`docs/testing.md`, "Robustness runs")
-   and the GUI compatibility matrix (`docs/gui-compat.md`).
+   rating gauntlet, a clean 10,000-game robustness run (`scripts/mac-robustness.sh`;
+   `docs/testing.md`, "Robustness runs") and the GUI compatibility matrix (`docs/gui-compat.md`).
 2. The version in the root `Cargo.toml` (`[workspace.package] version`) is the new version, and
    `docs/elo-ledger.md` and the book are up to date. Claude prepares this in a PR.
 

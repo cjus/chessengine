@@ -91,9 +91,21 @@ half its remaining clock, so its own losses should be the second kind.) Save the
 `--pgn <file>` to look at the ones that went wrong.
 
 A robustness run is a long match at each of those time controls (`--tc 1+0.01`, `--tc 10+0.1`,
-`--tc 40/60`), for example against the previous release.
+`--tc 40/60`). `scripts/mac-robustness.sh` runs one on the test Mac: cb2026 against itself, as
+two copies so that a problem names the side at fault, by default 6,000 games at 1+0.01, 3,000
+at 10+0.1 and 1,000 at 40/60, 10,000 in all and about 10–11 hours. After each time control it
+updates a progress comment on an issue, and at the end it posts the counts for each:
 
 ```sh
+git checkout main && git pull
+nohup scripts/mac-robustness.sh <issue> > ~/robustness.log 2>&1 &
+tail -f ~/robustness.log
+```
+
+The run is clean when every count is zero. `ROBUSTNESS="1+0.01:6000 10+0.1:3000 40/60:1000"`
+changes the time controls and game counts, and a second argument builds another git ref than
+`origin/main`.
+
 ## Quick matches from the shell
 
 `match <engine> <games> [tc]` and `selfplay <games> [tc]` in the shell play a few games with
