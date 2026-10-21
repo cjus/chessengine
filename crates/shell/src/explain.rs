@@ -130,6 +130,11 @@ pub const SWITCHES: &[Switch] = &[
         flag: |e| &mut e.techniques.late_move_pruning,
     },
     Switch {
+        name: "histprune",
+        description: "History pruning: quiet moves with a bad history skipped near the leaves",
+        flag: |e| &mut e.techniques.history_pruning,
+    },
+    Switch {
         name: "rfp",
         description: "Reverse futility pruning",
         flag: |e| &mut e.techniques.reverse_futility,
@@ -397,8 +402,8 @@ impl Shell {
             s.reverse_futility, s.razoring, s.tablebase
         ));
         out.push_str(&format!(
-            "  Moves skipped: late move pruning {}, futility {}, SEE {}, delta {}\n",
-            s.late_move_pruning, s.futility, s.see_pruning, s.delta_pruning
+            "  Moves skipped: late move pruning {}, history {}, futility {}, SEE {}, delta {}\n",
+            s.late_move_pruning, s.history_pruning, s.futility, s.see_pruning, s.delta_pruning
         ));
         out.push_str(&format!(
             "  Late move reductions: {} moves reduced, {} searched again ({:.1}%)\n",
@@ -679,9 +684,13 @@ fn render_tree(root: &Position, tree: &SearchTree) -> String {
             Note::BetaCutoff(mv, index) => {
                 Some(format!("beta cutoff by {} (move {index})", san_of(mv)))
             }
-            Note::LateMovePruning(mv) | Note::Futility(mv) | Note::SeePruning(mv) => {
+            Note::LateMovePruning(mv)
+            | Note::HistoryPruning(mv)
+            | Note::Futility(mv)
+            | Note::SeePruning(mv) => {
                 let why = match event.note {
                     Note::LateMovePruning(_) => "late move pruning",
+                    Note::HistoryPruning(_) => "history pruning",
                     Note::Futility(_) => "futility",
                     _ => "SEE",
                 };

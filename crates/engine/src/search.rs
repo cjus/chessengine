@@ -156,6 +156,26 @@
 //! move with a bad score more as well as a good one less. It passed: +22.2 ± 11.4 Elo after
 //! 1,661 games at 8+0.08 (cjus/chessengine#74).
 //!
+//! ## History pruning
+//!
+//! Late move pruning skips quiet moves by how late they come; **history pruning** skips them by
+//! their history. Up to depth `history_pruning_max_depth` (4), a quiet move whose quiet-move
+//! score ([`OrderingTables::quiet_score`], history plus continuation history) is below
+//! `-history_pruning_margin` (16) per ply of depth is skipped. A cutoff at depth 4 gives the
+//! quiet moves tried before it a penalty of 16 each, so at depth `d` the move is pruned when its
+//! score is worse than `d` such penalties. As with late move pruning and futility pruning, it
+//! applies off the principal variation, out of check, to moves that don't give check, and only
+//! once a move has been searched.
+//!
+//! Stockfish (GPL-3.0) prunes this way with continuation history alone; the code here is
+//! cb2026's own. cb2026 uses the score that orders its quiet moves, which adds the history
+//! table. Over a game's positions, a quiet move with a negative continuation score raised alpha
+//! more often than one with no score at all, at every depth up to 6. With the quiet-move score,
+//! a move below the margin at depth 3 or 4 raised alpha about as rarely as a move with no
+//! score (0.5% and 0.3%), against 3% to 5% for a move with a positive one. The margin and the
+//! depth were set from those measurements, not tuned. It is on for its test
+//! (cjus/chessengine#140); see chapter 13.1.
+//!
 //! ## Singular extensions and multi-cut
 //!
 //! A hash move is **singular** if it is much better than every other move: then it is probably
@@ -339,6 +359,10 @@ pub struct SearchParams {
     pub lmp_base: u32,
     /// ...times this when the side to move is improving (1: no change).
     pub lmp_improving: u32,
+    /// History pruning applies up to this depth...
+    pub history_pruning_max_depth: u32,
+    /// ...to a quiet move whose quiet-move score is below minus this much per ply of depth.
+    pub history_pruning_margin: i32,
     /// Reverse futility pruning applies up to this depth...
     pub rfp_max_depth: u32,
     /// ...when the static evaluation beats beta by this much per ply of depth...
@@ -420,6 +444,10 @@ impl Default for SearchParams {
             lmp_base: 3,
             // Doubling it when improving was part of both failed versions (#60, #63).
             lmp_improving: 1,
+            // Below one depth-4 cutoff's penalty (16) per ply of depth, up to depth 4: set from
+            // measurements over a game's positions, not tuned (see chapter 13.1).
+            history_pruning_max_depth: 4,
+            history_pruning_margin: 16,
             rfp_max_depth: 7,
             rfp_margin: 80,
             rfp_improving: 40,
@@ -522,6 +550,8 @@ pub struct Techniques {
     pub history_lmr: bool,
     /// Late move pruning: skip late quiet moves near the leaves.
     pub late_move_pruning: bool,
+    /// History pruning: skip quiet moves with a bad history near the leaves.
+    pub history_pruning: bool,
     /// Reverse futility pruning (static null move).
     pub reverse_futility: bool,
     /// Razoring: drop into the quiescence search when far below alpha.
@@ -593,6 +623,8 @@ impl Default for Techniques {
             // The second version passed its SPRT (cjus/chessengine#74); the first had no verdict.
             history_lmr: true,
             late_move_pruning: true,
+            // On for its test (cjus/chessengine#140); see chapter 13.1.
+            history_pruning: true,
             reverse_futility: true,
             razoring: true,
             futility: true,
@@ -636,6 +668,7 @@ impl Techniques {
             lmr: false,
             history_lmr: false,
             late_move_pruning: false,
+            history_pruning: false,
             reverse_futility: false,
             razoring: false,
             futility: false,
@@ -1341,6 +1374,25 @@ impl<'a> Searcher<'a> {
                 continue;
             }
             // ANCHOR_END: lmp
+
+            // ANCHOR: history_pruning
+            // History pruning: near the leaves, skip a quiet move whose history says it keeps
+            // failing where other moves cut off, by more the deeper the node. As in Stockfish
+            // (GPL-3.0), which scores the move by continuation history alone.
+            if self.techniques.history_pruning
+                && ordinary
+                && !pv_node
+                && depth <= p.history_pruning_max_depth
+                && best > -MATE + MAX_PLY as i32
+                && self
+                    .ordering
+                    .quiet_score(pos, mv, &previous, &self.techniques)
+                    < -p.history_pruning_margin * depth as i32
+            {
+                self.note(Note::HistoryPruning(mv));
+                continue;
+            }
+            // ANCHOR_END: history_pruning
 
             // ANCHOR: futility
             // Futility pruning: a quiet move can't lift a hopeless static evaluation to alpha.
@@ -2424,5 +2476,62 @@ mod tests {
             ..SearchParams::default()
         };
         assert_eq!(counts(with, no_room).double_extensions, 0);
+    }
+
+    #[test]
+    fn history_pruning_skips_only_quiet_moves_with_a_bad_enough_history() {
+        // Depths 1 to 8 in one searcher, so that the history tables fill as in a real search.
+        let counts = |techniques: Techniques, search_params: SearchParams| {
+            let pos = Position::from_fen(
+                "r2q1rk1/pp2bppp/2n1pn2/3p4/3P4/2NBPN2/PP3PPP/R2Q1RK1 w - - 0 10",
+            )
+            .unwrap();
+            let params = EvalParams::material_only();
+            let stop = AtomicBool::new(false);
+            let tt = TranspositionTable::new(1);
+            let mut ordering = OrderingTables::default();
+            let mut searcher = Searcher::new(
+                &params,
+                search_params,
+                &tt,
+                &mut ordering,
+                techniques,
+                StopConditions {
+                    stop: &stop,
+                    deadline: None,
+                    max_nodes: None,
+                },
+                &[],
+            );
+            let mut moves: Vec<Move> = pos.legal_moves().iter().copied().collect();
+            for depth in 1..=8 {
+                searcher.search_depth(&pos, &mut moves, depth, None);
+            }
+            searcher.stats().history_pruning
+        };
+        // One search's tables are still sparse, so a small margin, to see the mechanism.
+        let eager = SearchParams {
+            history_pruning_margin: 1,
+            ..SearchParams::default()
+        };
+        assert!(counts(Techniques::default(), eager) > 0);
+        let off = Techniques {
+            history_pruning: false,
+            ..Techniques::default()
+        };
+        assert_eq!(counts(off, eager), 0);
+        // No history score gets that low.
+        let out_of_reach = SearchParams {
+            history_pruning_margin: 1_000_000,
+            ..SearchParams::default()
+        };
+        assert_eq!(counts(Techniques::default(), out_of_reach), 0);
+        // Without the history tables every quiet move scores 0, and none is pruned.
+        let no_history = Techniques {
+            history: false,
+            continuation_history: false,
+            ..Techniques::default()
+        };
+        assert_eq!(counts(no_history, eager), 0);
     }
 }

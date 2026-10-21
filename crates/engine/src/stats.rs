@@ -63,6 +63,8 @@ pub enum Note {
     ProbCutCutoff(Move),
     /// Late move pruning skipped this move.
     LateMovePruning(Move),
+    /// History pruning skipped this quiet move.
+    HistoryPruning(Move),
     /// Futility pruning skipped this quiet move.
     Futility(Move),
     /// SEE pruning skipped this move (main search or quiescence).
@@ -121,6 +123,8 @@ pub struct SearchStats {
     pub razoring: u64,
     /// Moves skipped by late move pruning.
     pub late_move_pruning: u64,
+    /// Quiet moves skipped by history pruning.
+    pub history_pruning: u64,
     /// Moves skipped by futility pruning.
     pub futility: u64,
     /// Moves skipped by SEE pruning.
@@ -161,6 +165,7 @@ impl SearchStats {
             Note::ProbCut => &mut self.probcuts,
             Note::ProbCutCutoff(_) => &mut self.probcut_cutoffs,
             Note::LateMovePruning(_) => &mut self.late_move_pruning,
+            Note::HistoryPruning(_) => &mut self.history_pruning,
             Note::Futility(_) => &mut self.futility,
             Note::SeePruning(_) => &mut self.see_pruning,
             Note::DeltaPruning(_) => &mut self.delta_pruning,
@@ -200,6 +205,7 @@ impl SearchStats {
             reverse_futility,
             razoring,
             late_move_pruning,
+            history_pruning,
             futility,
             see_pruning,
             delta_pruning,
@@ -226,6 +232,7 @@ impl SearchStats {
         self.reverse_futility += reverse_futility;
         self.razoring += razoring;
         self.late_move_pruning += late_move_pruning;
+        self.history_pruning += history_pruning;
         self.futility += futility;
         self.see_pruning += see_pruning;
         self.delta_pruning += delta_pruning;
