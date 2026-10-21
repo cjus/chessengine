@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-20, 21:20 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-21, 01:21 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -36,7 +36,8 @@ table instead of averaged with it, failed too, −0.4 ± 4.3 after 11,433 games,
 `singular_tt_depth_margin` 4 instead of 3 failed, −7.4 ± 8.0, so it stays at 3, #123; double
 extensions at a margin of 50 merged on, +13.0 ± 8.3, #125; a margin of 100 failed, −7.3 ± 8.0, so it
 stays at 50, #127; capture history's second version, in Stockfish's form, failed too, −6.8
-± 7.8, so it stays off by default, #129; a gauntlet on `main` running on the M3, #131.*
+± 7.8, so it stays off by default, #129. 2026-10-21: `main` rated 2782 ± 11 by gauntlet, 68 ± 15
+above 2026-10-18, #131.*
 
 ## Stages
 
@@ -97,12 +98,11 @@ stays at 50, #127; capture history's second version, in Stockfish's form, failed
 | M5: double extensions at a margin of 100 instead of 50 (chapter 14.1) | #127 | 1136500 (945934 with the margin at 100) | Merged as a record, the margin back at 50: −7.3 ± 8.0, 3,368 games, [0, 5] failed (M3 Max) |
 | M5: capture history, second version: the victim's value plus history, the attacker only breaking ties (chapter 10.2) | #129 | 1136500 (998700 with capture history on) | Merged, off by default: −6.8 ± 7.8, 3,512 games, [0, 5] failed (M3 Max) |
 
-**Running now: a gauntlet on `main`** (#131, `main` at `a422e69`), started on the M3 on 2026-10-20
-at about 21:18 MDT: 800 games against each of the seven reference engines at 8+0.08, about 4
-hours. The last one rated `main` 2714 ± 10 (#36); correction history and double extensions
-have passed since. The result posts to #131 as a comment marked `<!-- gauntlet -->`. A new
-session should read #131's comments, then record the rating in `docs/elo-ledger.md`, the PRD's
-"Milestones" and this file, and close #131.
+**Nothing is running on the M3.** The gauntlet on `main` (#131, `main` at `a422e69`) finished on
+2026-10-21 at 01:16 MDT, about 4 hours after it started: **2782 ± 11**, 68 ± 15 above the
+gauntlet of 2026-10-18 (2714 ± 10, #36). Correction history (+28.0) and double extensions
+(+13.0) passed in between, about +41 in self-play, so this time the gauntlet found more than
+self-play did. The M3's next job is another M5 SPRT (item 3 below).
 
 The SPRT of capture history's second version (#129) finished on 2026-10-20 at 18:41 MDT. It
 started at about 15:55 and failed in 3,512 games, about 2 hours 45 minutes: **−6.8 ± 7.8**,
@@ -166,8 +166,10 @@ The rating gauntlets (#36) finished on 2026-10-18 at 06:50 MDT, 800 games agains
 seven reference engines at 8+0.08, about 4 hours a version: stage 14 **2442 ± 11** (M2 passed),
 stage 16 **2669 ± 10** (M3 passed), and `main` **2714 ± 10**, all recorded in the PRD's
 "Milestones" and the ledger. `main` is only 45 ± 14 above stage 16, though the M5 SPRTs that
-passed add up to about +136 in self-play: self-play overstates gains against other engines about
-threefold here.
+passed add up to about +136 in self-play: self-play overstated gains against other engines about
+threefold there. The next gauntlet on `main` (#131, 2026-10-21) found the opposite: **2782 ±
+11**, +68 ± 15 for about +41 in self-play. Over M5 so far, from stage 16, the gauntlets found
++113 where the SPRTs add up to about +177.
 
 When several PRs wait for the M3, they run one at a time, and **before each SPRT starts, rebase
 that PR onto the current `main`** and re-measure its `Bench:` line: `scripts/mac-sprt.sh` plays
@@ -205,7 +207,7 @@ passed; the rest wait on GUI checks, level calibration or the v1.0 work.
 | M2 Classical search | stages 8–14 | **Passed** 2026-10-18: stage 14 rated 2442 ± 11 by gauntlet at 8+0.08 (gate ~2200 CCRL), #36 |
 | M3 Evaluation | stages 15–16 | **Passed** 2026-10-18: stage 16 rated 2669 ± 10 by gauntlet at 8+0.08 (gate ≥2400 CCRL), #36 |
 | M4 Complete engine | stages 17–20 | Merged (#46–#55); levels calibrated at 40+0.4 on 2026-10-19, 629–2483 (#106); GUI matrix (#37) open |
-| M5 v1.0 | strength work, release | Started (the M5 branches above); release workflow merged (#40); `main` rated 2714 ± 10 by gauntlet on 2026-10-18, above the gate (≥2400, goal 2600+), #36 |
+| M5 v1.0 | strength work, release | Started (the M5 branches above); release workflow merged (#40); `main` rated 2782 ± 11 by gauntlet on 2026-10-21 (#131; 2714 ± 10 on 2026-10-18, #36), above the gate (≥2400, goal 2600+) |
 | M6 NNUE | stage 21 | Not started |
 
 ## Waiting on Carlos
@@ -322,7 +324,7 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    "Testing and strength measurement"), and `scripts/fetch-gauntlet-engines.sh` builds them. Carlos
    started the M2 and M3 gauntlets on the M3 on 2026-10-17 (the stage 14 and 16 tags), then one
    on `main`. Stage 14 rated 2442 ± 11, so M2 passed; stage 16 2669 ± 10, so M3 passed; and
-   `main` 2714 ± 10. The levels are calibrated too (#103): five weaker engines (1058–1794,
+   `main` 2714 ± 10, then 2782 ± 11 on 2026-10-21 (#131). The levels are calibrated too (#103): five weaker engines (1058–1794,
    #101) joined the seven in `levels.txt`, `scripts/mac-levels.sh` rated each Skill Level
    against the four nearest it, from 752 (level 0) to 2599 (level 19), and `UCI_Elo` maps onto
    those ratings. The straight line it replaced was too flat: about 250 too high at the bottom,
@@ -356,13 +358,10 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    games; about 255 games an hour on the M3, 10 hours).
 
    Next, in a rough order of value:
-   - **A gauntlet on `main`** (about 4 hours on the M3, `scripts/mac-gauntlet.sh`), running now
-     (#131, see "Running now"): the last one rated `main` 2714 ± 10 (#36, 2026-10-18). Since then correction history (#112, +28.0)
-     and double extensions (#125, +13.0) have passed in self-play, which overstated gains about
-     threefold last time. A gauntlet says how much of the +41 holds against other engines.
    - **Mostly failures since correction history** (#112, 2026-10-19): of the eight tries
-     after it, only double extensions at 50 passed (#125). Failed: capture history twice (#115, −19.2; #129 in Stockfish's form, −6.8),
-     ProbCut (#117, −10.2), correction history's piece tables averaged with the pawn table
+     after it, only double extensions at 50 passed (#125). Failed: capture history twice
+     (#115, −19.2; #129 in Stockfish's form, −6.8), ProbCut (#117, −10.2), correction
+     history's piece tables averaged with the pawn table
      (#119, −20.7) and added to it (#121, −0.4 over 11,433 games), `singular_tt_depth_margin`
      4 (#123, −7.4) and double extensions at 100 (#127, −7.3). Every failure but #121 made the
      bench smaller. Chapters 10.2, 12.1 and 14.2 list untested settings for another try.

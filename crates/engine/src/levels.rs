@@ -40,11 +40,11 @@ pub const ELO_RANGE: (u32, u32) = (650, 2450);
 /// Levels 0, 2, 4, …, 18 and 19 played 800 games each against the four reference engines nearest
 /// them, ± 23 to 55 (level 0, weaker than every reference engine, has the widest margin). Each
 /// odd level below 19 is halfway between its neighbours. Full strength: the gauntlet of `main`
-/// on 2026-10-18, 2714 ± 10 at 8+0.08 (cjus/chessengine#36); it uses the clock, so it gains from
-/// more time like its opponents.
+/// on 2026-10-21, 2782 ± 11 at 8+0.08 (cjus/chessengine#131; 2714 ± 10 on 2026-10-18,
+/// cjus/chessengine#36); it uses the clock, so it gains from more time like its opponents.
 pub const RATINGS: [u32; FULL_STRENGTH as usize + 1] = [
     629, 703, 777, 833, 888, 957, 1025, 1112, 1198, 1295, 1391, 1501, 1610, 1731, 1852, 1974, 2096,
-    2217, 2337, 2483, 2714,
+    2217, 2337, 2483, 2782,
 ];
 // ANCHOR_END: ratings
 
@@ -203,7 +203,7 @@ mod tests {
         for elo in (ELO_RANGE.0..=ELO_RANGE.1).step_by(50) {
             assert_eq!(rating(level_for_elo(elo)), elo, "{elo}");
         }
-        assert_eq!(rating(f64::from(FULL_STRENGTH)), 2714);
+        assert_eq!(rating(f64::from(FULL_STRENGTH)), 2782);
     }
 
     #[test]
