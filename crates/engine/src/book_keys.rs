@@ -2,10 +2,13 @@
 //!
 //! These are fixed by the format: a book's positions are found by hashing with exactly
 //! these numbers, so they can't be generated afresh like cb2026's own Zobrist keys. The
-//! array comes from the PolyGlot format by Fabien Letouzey (the "Random64" array of its
-//! book specification); this copy was taken from python-chess (`chess/polyglot.py`, by
-//! Niklas Fiekas, GPL-3.0-or-later) and checked against the format's published test hashes
-//! (see `book.rs`).
+//! array is PolyGlot's "Random64" (Fabien Letouzey), as given in the format's published
+//! description, [Polyglot book format](http://hgm.nubati.net/book_format.html). That page
+//! says the format may be implemented by any program, closed-source ones included, and that a
+//! table of random numbers can't be covered by copyright. The 781 numbers here were checked
+//! against that page, all equal (2026-10-21), and against the format's published test hashes
+//! (see `book.rs`). They were first copied from python-chess (GPL-3.0-or-later) and are the
+//! same numbers; the page is the source cb2026 relies on (cjus/chessgui#98).
 //!
 //! Layout: 768 piece-square keys (12 piece kinds × 64 squares), 4 castling keys,
 //! 8 en passant file keys, and 1 key for White to move.

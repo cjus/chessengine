@@ -8,6 +8,12 @@
 //! prober from scratch would be thousands of lines for no strength gain (`docs/PRD.md`,
 //! "Tablebase probing").
 //!
+//! **Licence.** This crate's own code is `MIT OR Apache-2.0`, like the rest of cb2026, but
+//! `shakmaty-syzygy` and `shakmaty` are GPL-3.0-or-later. So a binary that links this crate
+//! (`cb2026` with its default `syzygy` feature, as released) is GPL-3.0-or-later as a whole,
+//! and is distributed with `LICENSE-GPL-3.0` and its source. Built with
+//! `--no-default-features`, cb2026 has no Syzygy probing and no GPL code.
+//!
 //! `shakmaty` has its own position type, so each probe converts cb2026's position through its
 //! FEN. Probes only happen with seven pieces or fewer, where that costs little next to reading
 //! the table.

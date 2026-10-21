@@ -12,9 +12,10 @@ changes the picture.
 1. **Chess logic lives in library crates with no I/O** (`crates/chess`, `crates/engine`).
    `crates/protocol`, `crates/shell` and `crates/cli` are thin adapters over the Engine API.
 2. **Chess code is written from scratch.** No chess crates for the board, move generation,
-   search, evaluation or book reader. Tooling crates are fine if their licence is
-   GPL-3.0-compatible (`cargo deny check licenses`). The one exception is `shakmaty-syzygy`
-   for tablebase probing, used only behind the `Tablebase` trait (PRD "Tablebase probing").
+   search, evaluation or book reader. Tooling crates are fine if their licence is permissive
+   (`cargo deny check licenses`): cb2026 is `MIT OR Apache-2.0`. The one exception is
+   `shakmaty-syzygy` (GPL) for tablebase probing, used only behind the `Tablebase` trait and
+   the `syzygy` feature (PRD "Tablebase probing", "License and IP").
 3. **Every technique is switchable** at runtime and documented: module docs say what it does,
    why it works, its pitfalls and links (Chess Programming Wiki, papers). Every public item has
    rustdoc (`#![deny(missing_docs)]`).
@@ -22,7 +23,9 @@ changes the picture.
 5. **`unsafe` only in marked modules** (SIMD, lock-free hash table) with `// SAFETY:` comments;
    every other crate has `#![forbid(unsafe_code)]`.
 6. **Credit sources.** When an idea or code comes from a specific engine, name it and its licence
-   in a comment. Only GPL-3.0-compatible code. No other engines' nets or training data.
+   in a comment. Ideas may come from any engine, GPL ones included; **code only from permissive
+   sources** (MIT, Apache-2.0, BSD, ISC, Zlib, public domain), never from GPL engines such as
+   Stockfish, because cb2026 is `MIT OR Apache-2.0`. No other engines' nets or training data.
 7. Tunable numbers are named parameters, never magic numbers in logic.
 
 ## Definition of done for a change

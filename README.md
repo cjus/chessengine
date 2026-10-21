@@ -24,4 +24,23 @@ Releases are made from version tags; see [`docs/releasing.md`](docs/releasing.md
 
 ## License
 
-GPL-3.0. See [`LICENSE`](LICENSE).
+cb2026, its book and its tools are licensed under either of
+
+- Apache License, Version 2.0 ([`LICENSE-APACHE`](LICENSE-APACHE))
+- MIT license ([`LICENSE-MIT`](LICENSE-MIT))
+
+at your option.
+
+The one exception is Syzygy tablebase probing. The `cb2026-syzygy` crate links
+[`shakmaty-syzygy`](https://crates.io/crates/shakmaty-syzygy), which is GPL-3.0-or-later, so a
+`cb2026` binary built with the `syzygy` feature (on by default, and in the released binaries)
+is GPL-3.0-or-later as a whole: see
+[`crates/syzygy/LICENSE-GPL-3.0`](crates/syzygy/LICENSE-GPL-3.0). Built with
+`cargo build --release --no-default-features`, cb2026 has no Syzygy probing and is
+`MIT OR Apache-2.0` throughout.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion
+in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above,
+without any additional terms or conditions.

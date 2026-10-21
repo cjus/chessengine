@@ -36,8 +36,8 @@ and the search tree.
   cjus/chessengine#9).
 - No Monte Carlo tree search or large GPU neural networks (the AlphaZero/Leela family).
 - No chess variants beyond Chess960.
-- No code, nets or training data copied from other engines unless the license allows it and we
-  credit it (see "License and IP").
+- No code, nets or training data copied from other engines unless the licence is permissive and
+  we credit it (see "License and IP").
 
 ## Background: what "modern" means here
 
@@ -183,7 +183,7 @@ the probing code is a real choice:
 
 | Option | For | Against |
 | --- | --- | --- |
-| `shakmaty-syzygy` (pure Rust, GPL-3.0) | Builds with cargo on every platform; no C toolchain, no `unsafe` FFI; mature (used by Lichess's tablebase server); licence matches ours | Brings in the `shakmaty` chess library, and each probe converts our position to its type |
+| `shakmaty-syzygy` (pure Rust, GPL-3.0) | Builds with cargo on every platform; no C toolchain, no `unsafe` FFI; mature (used by Lichess's tablebase server); its GPL matched cb2026's licence until 2026-10-20, and now makes a binary built with it GPL as a whole ("License and IP") | Brings in the `shakmaty` chess library, and each probe converts our position to its type |
 | Fathom (C, MIT) through FFI | Used by many engines; takes bitboards directly; fast | C build on three platforms (MSVC is awkward), `unsafe` FFI, C code in a Rust teaching project |
 | Our own port | Best learning value | 2,000+ lines of tricky decompression code; a big bug risk for no strength gain |
 
@@ -570,18 +570,36 @@ The repository becoming public (planned, cjus/chessgui#71) makes its CI free.
 
 ## License and IP
 
-- **License: GPL-3.0 (decided 2026-10-10).** This is the most common licence for open chess
-  engines. The repo starts private and goes public around October 2027 (decided 2026-10-10);
-  the book is published on GitHub Pages at the same time.
-- GPL-3.0 lets us study and adapt code from GPL engines (Stockfish, Ethereal, Berserk and others).
-  The learning goal means we write our own code anyway; when an idea or code comes from a specific
-  engine, the comment names the source and its licence. No code from engines with incompatible or
-  unclear licences.
+- **License: `MIT OR Apache-2.0` (decided 2026-10-20, cjus/chessgui#71; replaces GPL-3.0,
+  decided 2026-10-10).** Carlos's rule: the open-source licence that gives us the most freedom
+  while staying compliant. Solrac, the 3D board, is to be closed source and still use cb2026,
+  through the Chess Node Protocol for the engine and in-process for the rules (`cb2026-chess`);
+  cb2026 is also to become a node of a distributed engine. The dual licence is the Rust
+  convention: each user picks MIT, which is compatible with every licence (GPL-2.0-only
+  included), or Apache-2.0, which adds a patent grant from contributors and grants no trademark
+  rights. Contributions come in under the same terms (README, "Contribution"). The book is
+  under the same licence, as the Rust book is. © Carlos Justiniano.
+- **The one GPL part is Syzygy probing.** `shakmaty-syzygy` and `shakmaty` are
+  GPL-3.0-or-later, so a `cb2026` binary built with the `syzygy` feature (on by default, and in
+  the releases) is GPL-3.0-or-later as a whole and ships with `crates/syzygy/LICENSE-GPL-3.0`;
+  `--no-default-features` builds one with no GPL code. A permissive prober (Fathom, MIT) would
+  remove the exception; see "Tablebase probing".
+- **Code from other engines: ideas yes, GPL code no.** Ideas aren't covered by copyright, so the
+  book and the code keep learning from Stockfish, Ethereal, Berserk and the rest, and say so.
+  Code may be adapted only from permissive sources (MIT, Apache-2.0, BSD, ISC, Zlib, public
+  domain), with the comment naming the source and its licence. Before the change, cb2026's
+  code was checked (2026-10-20, again 2026-10-21): it is all Carlos's and Claude's, except the
+  Polyglot keys, which were copied from python-chess (GPL) and are now taken from the format's
+  published description (`book_keys.rs`), and the Syzygy crate above.
+- **Public:** the repo starts private and goes public around October 2027 (decided
+  2026-10-10), or before Solrac is given to anyone if that comes first (cjus/chessgui#71); the
+  book is published on GitHub Pages at the same time.
 - **Dependencies:** chess logic (board, move generation, search, evaluation, book reader) is
   written from scratch, with no chess crates. Tooling crates are fine (line editing, terminal
-  colour, argument parsing, property testing, benchmarks) if their licence is GPL-3.0-compatible.
-  `cargo deny` checks licences in CI. The one exception is `shakmaty-syzygy` for tablebase
-  probing, kept behind an adapter (see "Tablebase probing").
+  colour, argument parsing, property testing, benchmarks) if their licence is permissive, or
+  MPL-2.0, which covers only its own files. `cargo deny` checks licences in CI. The one
+  exception is `shakmaty-syzygy` for tablebase probing, kept behind an adapter (see
+  "Tablebase probing").
 - **Data and nets:** tuning data and any NNUE nets are generated from our own engine's self-play,
   so we own them outright. No Stockfish or Leela nets or training data.
 - Test books, EPD suites and reference engines are downloaded by scripts, with their source and
@@ -726,8 +744,12 @@ about 26 s, and the M1 Max played about 970 games an hour.
 - [x] Language: Rust, stable toolchain (2026-10-10).
 - [x] Strength target: 2400–2700 CCRL; v1.0 gate ≥2400 Blitz, goal 2600+ (2026-10-10).
 - [x] Evaluation: tuned HCE for v1; NNUE as a stretch milestone, with HCE kept as a mode (2026-10-10).
-- [x] Licence: GPL-3.0; repo private at first (2026-10-10). Crates declare `GPL-3.0-or-later`
-      (cjus/chessengine#7, 2026-10-10).
+- [x] ~~Licence: GPL-3.0; repo private at first (2026-10-10). Crates declare `GPL-3.0-or-later`
+      (cjus/chessengine#7, 2026-10-10).~~ Replaced on 2026-10-20 by the next entry.
+- [x] Licence: `MIT OR Apache-2.0`, © Carlos Justiniano, so a closed-source Solrac can use
+      cb2026; GPL only in a binary built with the `syzygy` feature; code adapted only from
+      permissive sources; the repo private at first (cjus/chessgui#71, 2026-10-20; done in
+      cjus/chessgui#98's first step, 2026-10-21).
 - [x] Protocols: UCI, XBoard/CECP, Chess960, Lichess bot setup (2026-10-10).
 - [x] Shell: rich line-based REPL. No full-screen TUI at all: cb2026 is an engine used under
       chess GUIs (cjus/chessengine#9, 2026-10-10).
