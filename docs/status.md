@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-21, 01:21 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-21, 05:35 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -37,7 +37,8 @@ table instead of averaged with it, failed too, −0.4 ± 4.3 after 11,433 games,
 extensions at a margin of 50 merged on, +13.0 ± 8.3, #125; a margin of 100 failed, −7.3 ± 8.0, so it
 stays at 50, #127; capture history's second version, in Stockfish's form, failed too, −6.8
 ± 7.8, so it stays off by default, #129. 2026-10-21: `main` rated 2782 ± 11 by gauntlet, 68 ± 15
-above 2026-10-18, #131.*
+above 2026-10-18, #131; capture history's third version, in the main search only, running on the
+M3, #134.*
 
 ## Stages
 
@@ -97,12 +98,21 @@ above 2026-10-18, #131.*
 | M5: double extensions at a margin of 50, on (chapter 14.1) | #125 | 1136500 | Merged: +13.0 ± 8.3, 3,167 games, [0, 5] passed (M3 Max) |
 | M5: double extensions at a margin of 100 instead of 50 (chapter 14.1) | #127 | 1136500 (945934 with the margin at 100) | Merged as a record, the margin back at 50: −7.3 ± 8.0, 3,368 games, [0, 5] failed (M3 Max) |
 | M5: capture history, second version: the victim's value plus history, the attacker only breaking ties (chapter 10.2) | #129 | 1136500 (998700 with capture history on) | Merged, off by default: −6.8 ± 7.8, 3,512 games, [0, 5] failed (M3 Max) |
+| M5: capture history, third version: the second in the main search only, the quiescence search keeping MVV-LVA (chapter 10.2) | #134, `claude/capture-history-main-search` | 1003431 | Draft, its SPRT running on the M3 Max: [0, 5] at 8+0.08 |
 
-**Nothing is running on the M3.** The gauntlet on `main` (#131, `main` at `a422e69`) finished on
-2026-10-21 at 01:16 MDT, about 4 hours after it started: **2782 ± 11**, 68 ± 15 above the
-gauntlet of 2026-10-18 (2714 ± 10, #36). Correction history (+28.0) and double extensions
-(+13.0) passed in between, about +41 in self-play, so this time the gauntlet found more than
-self-play did. The M3's next job is another M5 SPRT (item 3 below).
+**Running now: #134** (capture history's third version: the second in the main search only,
+the quiescence search keeping MVV-LVA's order; chapter 10.2), started on the M3 on 2026-10-21 at
+about 05:33 MDT. A clear result should take a few hours, a small difference 7–13. A new session
+should restart the watcher, `scripts/watch-sprt.sh 134`, or just read #134's comments if the
+result is already there. Then rebase #134 onto `main` (in `docs/status.md` take `main`'s side
+and edit it), record the result in chapter 10.2, the ordering module docs, the PRD's techniques
+table, the ledger and this file, and merge. If it fails, switch `capture_history` off by default
+again (with its comment, the switch's doc, the shell's help and the PRD) and merge as a record.
+
+The gauntlet on `main` (#131, `main` at `a422e69`) finished on 2026-10-21 at 01:16 MDT, about 4
+hours after it started: **2782 ± 11**, 68 ± 15 above the gauntlet of 2026-10-18 (2714 ± 10,
+#36). Correction history (+28.0) and double extensions (+13.0) passed in between, about +41 in
+self-play, so this time the gauntlet found more than self-play did.
 
 The SPRT of capture history's second version (#129) finished on 2026-10-20 at 18:41 MDT. It
 started at about 15:55 and failed in 3,512 games, about 2 hours 45 minutes: **−6.8 ± 7.8**,
@@ -365,6 +375,8 @@ Run the full test suite on every commit you replay, not only at the tip: each be
      (#119, −20.7) and added to it (#121, −0.4 over 11,433 games), `singular_tt_depth_margin`
      4 (#123, −7.4) and double extensions at 100 (#127, −7.3). Every failure but #121 made the
      bench smaller. Chapters 10.2, 12.1 and 14.2 list untested settings for another try.
+     Capture history's third version, in the main search only, is running now (#134, see
+     "Running now").
    - **Tuning singular extensions, continued**: depth 6 passed (#78) and depth 4 too (#80),
      which is about where Stockfish starts; `singular_margin` 3 passed too (#82), and 4
      failed (#84); `singular_tt_depth_margin` 4 failed against 3 (#123, −7.4 ± 8.0). That
