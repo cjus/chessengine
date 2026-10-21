@@ -4,6 +4,8 @@
 (target 2400–2700 CCRL) and easy to learn from. It speaks UCI and XBoard, so it works in Cute
 Chess, Banksia, En Croissant, HIARCS Chess Explorer, ChessBase, Shredder and other GUIs, and it
 comes with an interactive shell for playing games, watching the engine think and looking inside it.
+It also speaks the [Chess Node Protocol](https://github.com/cjus/chess-node-protocol) (CNP), the
+JSON protocol Solrac, a 3D chess board that teaches, uses to reach it.
 
 Status: in development, stage by stage (see the stages in [`docs/PRD.md`](docs/PRD.md)).
 The book in `book/` explains each technique as it's added.
@@ -14,6 +16,7 @@ The book in `book/` explains each technique as it's added.
 cb2026            # interactive shell in a terminal
 cb2026 --uci      # UCI mode (GUIs switch to it automatically by sending "uci")
 cb2026 --xboard   # XBoard/CECP mode
+cb2026 --cnp      # Chess Node Protocol (Solrac switches to it automatically by sending JSON)
 cb2026 bench      # fixed benchmark; prints nodes and speed
 ```
 

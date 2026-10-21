@@ -10,7 +10,8 @@ changes the picture.
 ## Architecture rules
 
 1. **Chess logic lives in library crates with no I/O** (`crates/chess`, `crates/engine`).
-   `crates/protocol`, `crates/shell` and `crates/cli` are thin adapters over the Engine API.
+   `crates/protocol`, `crates/cnp` (the Chess Node Protocol), `crates/shell` and `crates/cli`
+   are thin adapters over the Engine API.
 2. **Chess code is written from scratch.** No chess crates for the board, move generation,
    search, evaluation or book reader. Tooling crates are fine if their licence is permissive
    (`cargo deny check licenses`): cb2026 is `MIT OR Apache-2.0`. The one exception is

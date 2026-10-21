@@ -39,15 +39,27 @@ checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 name = "cb2026"
 version = "0.1.0"
 dependencies = [
+ "cb2026-cnp",
  "cb2026-engine",
  "cb2026-protocol",
  "cb2026-shell",
  "cb2026-syzygy",
+ "cnp-conformance",
 ]
 
 [[package]]
 name = "cb2026-chess"
 version = "0.1.0"
+
+[[package]]
+name = "cb2026-cnp"
+version = "0.1.0"
+dependencies = [
+ "cb2026-chess",
+ "cb2026-engine",
+ "cb2026-shell",
+ "cnp",
+]
 
 [[package]]
 name = "cb2026-engine"
@@ -93,10 +105,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "cnp"
+version = "0.1.0"
+source = "git+https://github.com/cjus/chess-node-protocol?rev=f935b76053bb4c292404c0eda2c6fc74f8fc1f5b#f935b76053bb4c292404c0eda2c6fc74f8fc1f5b"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "cnp-conformance"
+version = "0.1.0"
+source = "git+https://github.com/cjus/chess-node-protocol?rev=f935b76053bb4c292404c0eda2c6fc74f8fc1f5b#f935b76053bb4c292404c0eda2c6fc74f8fc1f5b"
+dependencies = [
+ "cnp",
+ "serde_json",
+]
+
+[[package]]
+name = "itoa"
+version = "1.0.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
+
+[[package]]
 name = "libc"
 version = "0.2.190"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce5d3ddc6d3fa000eb1536d85e147bfe31aacaba692ed6a876f95cb7c855be78"
+
+[[package]]
+name = "memchr"
+version = "2.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
 name = "nohash-hasher"
@@ -156,6 +198,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4148590afebada386688f18773da617792bf2ef03ffc1e4cbd2b1d45b023e0ba"
 dependencies = [
  "serde_core",
+ "serde_derive",
 ]
 
 [[package]]
@@ -176,6 +219,19 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.7",
+]
+
+[[package]]
+name = "serde_json"
+version = "1.0.154"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e7e9cc8b1b85264074fbcc02a88680c4096b1e47df8f739dceb03bf482f04bd6"
+dependencies = [
+ "itoa",
+ "memchr",
+ "serde",
+ "serde_core",
+ "zmij",
 ]
 
 [[package]]
@@ -265,3 +321,9 @@ name = "unicode-ident"
 version = "1.0.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d245f478577f809a851594d02313b640fb437e0bb33866753cff937863096954"
+
+[[package]]
+name = "zmij"
+version = "1.0.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"

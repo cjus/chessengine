@@ -1,0 +1,5 @@
+# The Chess Node Protocol's crates live in a private repository (cjus/chess-node-protocol), so
+# Cargo fetches them with the git command line, which uses your normal git credentials (for
+# example `gh auth setup-git`). Cargo's built-in git client doesn't use credential helpers.
+[net]
+git-fetch-with-cli = true

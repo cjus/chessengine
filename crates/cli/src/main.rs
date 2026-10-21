@@ -1,8 +1,9 @@
 //! The `cb2026` binary.
 //!
 //! One executable serves every front end. A GUI starts it with no arguments and sends `uci` or
-//! `xboard` as its first line; a person in a terminal gets the shell. Flags force a mode when
-//! guessing isn't wanted. See `docs/PRD.md`, "One binary, three modes".
+//! `xboard` as its first line, Solrac sends a Chess Node Protocol message (JSON), and a person
+//! in a terminal gets the shell. Flags force a mode when guessing isn't wanted. See
+//! `docs/PRD.md`, "One binary, three modes".
 
 #![forbid(unsafe_code)]
 
@@ -61,6 +62,7 @@ fn run(mode: Mode) -> ExitCode {
     match mode {
         Mode::Uci => run_uci(first_line),
         Mode::Xboard => run_xboard(first_line),
+        Mode::Cnp => run_cnp(first_line),
         Mode::Shell | Mode::Auto => run_shell(first_line),
     }
 }
@@ -81,6 +83,11 @@ fn detect_mode() -> (Mode, Option<String>) {
     let mut first_line = String::new();
     if stdin.lock().read_line(&mut first_line).is_err() {
         return (Mode::Shell, None);
+    }
+    // A Chess Node Protocol message is a JSON object; no UCI, XBoard or shell command starts
+    // with `{`.
+    if first_line.trim_start().starts_with('{') {
+        return (Mode::Cnp, Some(first_line));
     }
     let mode = match cb2026_protocol::detect(&first_line) {
         Some(Protocol::Uci) => Mode::Uci,
@@ -117,6 +124,33 @@ fn run_xboard(first_line: Option<String>) -> ExitCode {
         new_engine(),
     ) {
         Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("cb2026: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// Speaks the Chess Node Protocol on standard input and output until `exit`: exit code 0 if
+/// `shutdown` came first, 1 otherwise (the protocol's rule).
+fn run_cnp(first_line: Option<String>) -> ExitCode {
+    // With Syzygy probing the binary links GPL code, so it is GPL as a whole (README,
+    // "License"), and it says so to the client.
+    let license = if cfg!(feature = "syzygy") {
+        "GPL-3.0-or-later"
+    } else {
+        "MIT OR Apache-2.0"
+    };
+    let stdin = io::stdin();
+    match cb2026_cnp::run(
+        stdin.lock(),
+        Box::new(io::stdout()),
+        first_line,
+        new_engine(),
+        cb2026_cnp::Config { license },
+    ) {
+        Ok(true) => ExitCode::SUCCESS,
+        Ok(false) => ExitCode::FAILURE,
         Err(e) => {
             eprintln!("cb2026: {e}");
             ExitCode::FAILURE

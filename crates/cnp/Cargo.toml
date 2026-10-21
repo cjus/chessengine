@@ -1,0 +1,18 @@
+[package]
+name = "cb2026-cnp"
+description = "cb2026 as a Chess Node Protocol node: the protocol Solrac speaks."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+cb2026-chess.workspace = true
+cb2026-engine.workspace = true
+cb2026-shell.workspace = true
+cnp.workspace = true
+
+[lints]
+workspace = true
