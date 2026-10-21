@@ -201,7 +201,8 @@
 //! extensions at a margin of 20 had no verdict: +3.6 ± 4.9 Elo after 8,670 games, stopped
 //! there (cjus/chessengine#96). At a margin of 50, which makes the bench 7% bigger, they
 //! passed: +13.0 ± 8.3 after 3,167 games (cjus/chessengine#125). A margin of 100 instead of 50
-//! failed: −7.3 ± 8.0 after 3,368 games (cjus/chessengine#127).
+//! failed: −7.3 ± 8.0 after 3,368 games (cjus/chessengine#127), and so did 70: −20.5 ± 12.2
+//! after 1,407 (cjus/chessengine#138).
 //!
 //! ## Correction history
 //!
@@ -443,7 +444,8 @@ impl Default for SearchParams {
             singular_margin: 3,
             // 20 at first, as in Stockfish (GPL-3.0), had no verdict (cjus/chessengine#96); 50
             // gained +13.0 ± 8.3 (cjus/chessengine#125); 100 failed, −7.3 ± 8.0 against 50
-            // (cjus/chessengine#127).
+            // (cjus/chessengine#127); 70 failed too, −20.5 ± 12.2 against 50
+            // (cjus/chessengine#138).
             double_extension_margin: 50,
             double_extension_limit: 6,
             negative_extension_plies: 1,

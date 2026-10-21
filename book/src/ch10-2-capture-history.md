@@ -87,8 +87,8 @@ teaches it.
 {{#include ../../crates/engine/src/search.rs:quiescence_order}}
 ```
 
-The quiescence search is more than half of the nodes, 55% to 58% over the first six bench
-positions at depths 9 to 11. Stockfish (GPL-3.0) orders its quiescence search's captures by
+The quiescence search is more than half of the nodes, 55% to 58% over the six positions of
+chapters 10 to 14 (bench positions 2 to 7) at depths 9 to 11. Stockfish (GPL-3.0) orders its quiescence search's captures by
 capture history too, so this third version departs from it.
 
 ## Learning
@@ -129,7 +129,8 @@ switched off. The speed is unchanged: over four alternating pairs of bench runs,
 version's speed was 0.996 to 1.004 times `main`'s. The table is small enough to stay in the
 cache.
 
-The bench is one depth. Over the first six bench positions, the second version's trees:
+The bench is one depth. Over the six positions of chapters 10 to 14 (bench positions 2 to 7),
+the second version's trees:
 
 | Depth | `set capthist off` | Second version | Cutoffs by the first move (off, on) |
 | --- | ---: | ---: | --- |

@@ -204,8 +204,34 @@ At depth 11 both margins make the tree smaller than without double extensions. O
 reason: a hash move searched two plies deeper comes back with a more reliable score, and fewer
 of the moves around it need searching again. The bench, at depth 10, is 17% smaller at 100 than at 50 (945,934 nodes against
 1,136,500), which says more about depth 10 than about the margin. In the games, 100 was worse
-than 50, about **−7 Elo**, so the margin stays at 50 (see "What it's worth"). Whether a value
-in between, like 35 or 70, would do better than 50 is still open.
+than 50, about **−7 Elo**, so the margin stays at 50 (see "What it's worth").
+
+A limit of 3 double extensions a line instead of 6 hardly binds at a margin of 50. Over the
+six positions it takes the share of singular hash moves extended twice down by about 3 points
+at depths 9 and 10 (52% to 49%, 54% to 51%) and by 0.4 to 1.1 points at depths 11 to 13: a
+line rarely has more than three. It wasn't tested.
+
+A margin of 70, between 50 and 100, was the next try (cjus/chessengine#138). The three results
+before it, 20 with no verdict, 50 passing against none and 100 failing against 50, put the best
+margin somewhere between 20 and 100. A curve through them peaks at about 60, but each point
+is give or take 8 Elo, and the first was measured before correction history (chapter 14.2). At 70, 45% to 53% of the singular hash moves are extended twice at
+depths 9 to 12, against 52% to 57% at 50 and 60% to 63% at 35. Total nodes over the six
+positions:
+
+| Depth | Margin 35 | Margin 50 | Margin 70 |
+| --- | ---: | ---: | ---: |
+| 9 | 412,163 (−8%) | 447,273 | 352,048 (−21%) |
+| 10 | 661,909 (−6%) | 703,714 | 639,141 (−9%) |
+| 11 | 915,464 (+3%) | 885,651 | 841,482 (−5%) |
+| 12 | 1,352,793 (−13%) | 1,554,248 | 1,216,722 (−22%) |
+
+The bench is 7.2% smaller at 70 (1,054,909 nodes against 1,136,500) and 3.4% smaller at 35
+(1,098,095). Smaller trees haven't meant stronger play here before (100 made the bench 17%
+smaller and lost), so the games decided. In them, 70 was worse than 50 too, about **−20 Elo**
+over 1,407 games, so the margin stays at 50 (see "What it's worth"). That is more than 100
+lost, but the error bars overlap (±12 and ±8), and an SPRT that stops early tends to overstate
+the difference. Together they suggest that a margin wider than 50 does worse; a narrower one,
+like 35, is untested.
 
 The search without the hash move asks a different question from the node's own search, so it
 must not mix with it. It neither reads nor writes the transposition table (an entry about the
@@ -360,7 +386,7 @@ with it on.
 
 ## What it saves
 
-The six positions of chapters 10 to 14 (the first six bench positions) at depth 8, measured
+The six positions of chapters 10 to 14 (bench positions 2 to 7) at depth 8, measured
 while singular extensions started at depth 8, so that none applied:
 
 | Setting | Nodes | vs defaults |
@@ -464,6 +490,7 @@ that it is small, about **+5 Elo**, and it took over 14,000 of them to say so.
 | Double extensions (margin 20, at most 6 a line) vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | +3.6 ± 4.9 Elo over 8,670 games (+1988 −1897 =4785): no verdict (LLR 0.92), stopped; off by default |
 | Double extensions (margin 50, at most 6 a line) vs `main` without them (with correction history), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+13.0 ± 8.3 Elo** over 3,167 games (+798 −680 =1689): passed (LLR 2.94); on by default |
 | Double extensions at a margin of 100 vs `main` (50), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−7.3 ± 8.0 Elo** over 3,368 games (+747 −818 =1803): failed (LLR −2.95); the margin stays at 50 |
+| Double extensions at a margin of 70 vs `main` (50), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−20.5 ± 12.2 Elo** over 1,407 games (+278 −361 =768): failed (LLR −2.97); the margin stays at 50 |
 
 ## Further reading
 
