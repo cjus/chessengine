@@ -309,6 +309,9 @@ impl Position {
     }
 }
 
+/// The dark squares: a1, c1, …, b2, d2, … (a1 is dark).
+const DARK_SQUARES: Bitboard = Bitboard(0xaa55_aa55_aa55_aa55);
+
 impl Position {
     // ANCHOR: insufficient_material
     /// Whether neither side has enough material to checkmate, so the game is a draw: king
@@ -328,11 +331,79 @@ impl Position {
             return true;
         }
         // Only bishops, all on light squares or all on dark squares.
-        const DARK_SQUARES: Bitboard = Bitboard(0xaa55_aa55_aa55_aa55);
         knights.is_empty()
             && ((bishops & DARK_SQUARES).is_empty() || (bishops & !DARK_SQUARES).is_empty())
     }
     // ANCHOR_END: insufficient_material
+
+    // ANCHOR: mating_material
+    /// Whether `color` has the material to checkmate by some series of legal moves, however
+    /// the other side plays. A player whose flag falls loses only if the opponent has
+    /// (FIDE Laws 6.9); otherwise the game is a draw.
+    ///
+    /// It answers `false` only when the material makes a mate impossible:
+    ///
+    /// - **A lone king.**
+    /// - **A king and one knight, against a king and nothing but queens.** A knight's check
+    ///   can't be blocked, so for mate no queen may be able to take the knight. Put the mated
+    ///   king at (0, 0) and the knight at (1, 2) (every other knight's check is a reflection
+    ///   of this one). The king's neighbours (0, 1) and (1, 1) touch the knight, which
+    ///   attacks neither, and a queen on either would take it, so the attacking king must
+    ///   cover both, and the only square beside both that is neither beside the mated king
+    ///   nor the knight's own is (0, 2). Nothing then covers (1, 0), so a queen must stand
+    ///   there, and it takes the knight through (1, 1).
+    /// - **A king and bishops all on one colour, against a king with no pawns, no knights and
+    ///   no bishops of the other colour.** The mated king stands on the bishops' colour,
+    ///   checked along a diagonal through its neighbour D (where the bishop may stand). The
+    ///   two neighbours beside both the king and D are of the other colour, so no bishop
+    ///   covers them, and the attacking king can't cover both: the only squares beside both
+    ///   are the mated king's and D. So one holds a piece of the defender's, and the only
+    ///   ones allowed there, a rook or a queen, step onto D, blocking the check or taking the
+    ///   bishop. Two bishops of one colour never give double check, which nothing could
+    ///   answer that way: a bishop leaving another's line to the king moves along a diagonal
+    ///   parallel to the king's other one, so it can't check as well.
+    ///
+    /// Neither side can ever get material of a kind it lacks without a pawn, so the answer
+    /// holds for the rest of the game. It is `true` in every other case, even when the
+    /// position is dead for another reason, such as locked pawns: those are rare, and seeing
+    /// them takes a search. When neither side has the material, the position is
+    /// [insufficient material](Position::is_insufficient_material).
+    pub fn has_mating_material(&self, color: Color) -> bool {
+        let own = self.pieces_of_color(color);
+        let theirs = self.pieces_of_color(!color);
+        let pawns = self.pieces_of_type(PieceType::Pawn);
+        let knights = self.pieces_of_type(PieceType::Knight);
+        let bishops = self.pieces_of_type(PieceType::Bishop);
+        let heavy =
+            pawns | self.pieces_of_type(PieceType::Rook) | self.pieces_of_type(PieceType::Queen);
+        if !(own & heavy).is_empty() {
+            return true;
+        }
+        let own_knights = own & knights;
+        let own_bishops = own & bishops;
+        if own_bishops.is_empty() {
+            // A lone king, or knights.
+            let theirs_besides_queens = theirs
+                & !self.pieces_of_type(PieceType::King)
+                & !self.pieces_of_type(PieceType::Queen);
+            return !own_knights.is_empty()
+                && (own_knights.count() > 1 || !theirs_besides_queens.is_empty());
+        }
+        if !own_knights.is_empty() {
+            return true;
+        }
+        let dark = own_bishops & DARK_SQUARES;
+        if !dark.is_empty() && dark != own_bishops {
+            return true;
+        }
+        let other_colour = if dark.is_empty() {
+            DARK_SQUARES
+        } else {
+            !DARK_SQUARES
+        };
+        !(theirs & (pawns | knights | (bishops & other_colour))).is_empty()
+    }
+    // ANCHOR_END: mating_material
 }
 
 impl Default for Position {
@@ -471,6 +542,110 @@ mod tests {
         );
         assert!(!draw("4k3/8/8/8/8/8/4P3/4K3 w - - 0 1"), "a pawn");
         assert!(!Position::startpos().is_insufficient_material());
+    }
+
+    #[test]
+    fn mating_material() {
+        let can =
+            |fen: &str, color: Color| Position::from_fen(fen).unwrap().has_mating_material(color);
+        let (white, black) = (Color::White, Color::Black);
+        assert!(!can("4k3/8/8/8/8/8/8/4K3 w - - 0 1", white), "a lone king");
+        assert!(!can("3qk3/8/8/8/8/8/8/4K3 w - - 0 1", white), "a lone king");
+        assert!(can("3qk3/8/8/8/8/8/8/4K3 w - - 0 1", black), "a queen");
+        assert!(!can("4k3/8/8/8/8/8/8/4KN2 w - - 0 1", white), "a knight");
+        assert!(
+            !can("3qk3/8/8/8/8/8/8/4KN2 w - - 0 1", white),
+            "a knight and a queen"
+        );
+        assert!(
+            can("3rk3/8/8/8/8/8/8/4KN2 w - - 0 1", white),
+            "a knight and a rook"
+        );
+        assert!(
+            can("4k3/4p3/8/8/8/8/8/4KN2 w - - 0 1", white),
+            "a knight and a pawn"
+        );
+        assert!(can("4k3/8/8/8/8/8/8/3NKN2 w - - 0 1", white), "two knights");
+        assert!(!can("4k3/8/8/8/8/8/8/4KB2 w - - 0 1", white), "a bishop");
+        assert!(
+            !can("3rk3/8/8/8/8/8/8/4KB2 w - - 0 1", white),
+            "a bishop and a rook"
+        );
+        assert!(
+            !can("3qk3/8/8/8/8/8/8/3BKB2 w - - 0 1", white),
+            "light bishops, a queen"
+        );
+        assert!(
+            !can("2b1k3/8/8/8/8/8/8/4KB2 w - - 0 1", white),
+            "light bishops"
+        );
+        assert!(
+            can("1b2k3/8/8/8/8/8/8/4KB2 w - - 0 1", white),
+            "opposite bishops"
+        );
+        assert!(
+            can("3nk3/8/8/8/8/8/8/4KB2 w - - 0 1", white),
+            "a bishop and a knight"
+        );
+        assert!(
+            can("4k3/4p3/8/8/8/8/8/4KB2 w - - 0 1", white),
+            "a bishop and a pawn"
+        );
+        assert!(
+            can("4k3/8/8/8/8/8/8/2B1KB2 w - - 0 1", white),
+            "bishops on both colours"
+        );
+        assert!(
+            can("4k3/8/8/8/8/8/8/2N1KB2 w - - 0 1", white),
+            "a bishop and a knight"
+        );
+        assert!(can("4k3/8/8/8/8/8/8/R3K3 w - - 0 1", white), "a rook");
+        assert!(can("4k3/8/8/8/8/8/4P3/4K3 w - - 0 1", white), "a pawn");
+    }
+
+    #[test]
+    fn the_mates_that_make_material_enough() {
+        // A mate for each kind of "can" above with a single minor piece.
+        let mate = |fen: &str| {
+            let pos = Position::from_fen(fen).unwrap();
+            pos.in_check() && pos.legal_moves().is_empty()
+        };
+        assert!(
+            mate("6rk/5N2/7K/8/8/8/8/8 b - - 0 1"),
+            "a knight against a rook"
+        );
+        assert!(
+            mate("k1K5/p1N5/8/8/8/8/8/8 b - - 0 1"),
+            "a knight against a pawn"
+        );
+        assert!(
+            mate("7k/5KBn/8/8/8/8/8/8 b - - 0 1"),
+            "a bishop against a knight"
+        );
+        assert!(
+            mate("8/8/8/3B4/8/8/5K1p/7k b - - 0 1"),
+            "a bishop against a pawn"
+        );
+    }
+
+    #[test]
+    fn insufficient_material_is_neither_side_having_mating_material() {
+        for fen in [
+            "4k3/8/8/8/8/8/8/4K3 w - - 0 1",
+            "4k3/8/8/8/8/8/8/4KN2 w - - 0 1",
+            "4k3/8/8/8/8/8/8/4KB2 w - - 0 1",
+            "2b1k3/8/8/8/8/8/8/4KB2 w - - 0 1",
+            "1b2k3/8/8/8/8/8/8/4KB2 w - - 0 1",
+            "3nk3/8/8/8/8/8/8/4KN2 w - - 0 1",
+            "3qk3/8/8/8/8/8/8/4KN2 w - - 0 1",
+            "3rk3/8/8/8/8/8/8/4KB2 w - - 0 1",
+            "4k3/8/8/8/8/8/8/3NKN2 w - - 0 1",
+        ] {
+            let pos = Position::from_fen(fen).unwrap();
+            let neither =
+                !pos.has_mating_material(Color::White) && !pos.has_mating_material(Color::Black);
+            assert_eq!(pos.is_insufficient_material(), neither, "{fen}");
+        }
     }
 
     #[test]

@@ -89,6 +89,7 @@ M3, #134.*
 | `cb2026_chess::game::Game`: one record of a game and one set of end-of-game rules, moved from chessgui and used by the shell, the match tool and self-play | #94 | 1098926 | Merged, no functional change; chessgui uses it from cjus/chessgui#31 |
 | M5: double extensions (chapter 14.1) | #96 | 1098926 (1248666 with double extensions on) | Merged, off by default: +3.6 ± 4.9, 8,670 games, [0, 5] no verdict (LLR 0.92), stopped (M3 Max) |
 | `Position::parse_move`: a move typed in SAN or coordinates, and `SanError::MissingPromotion` when a pawn promotes without its piece; the shell uses it, and Solrac's chat will (cjus/chessgui#38) | #113 | 1098926 | Merged, no functional change |
+| A flag falling against material that can't mate is a draw (FIDE Laws 6.9): `Position::has_mating_material`, `Outcome::TimeoutDraw`, and `Game::lose_on_time` renamed `Game::time_out`; for Solrac's clocks (cjus/chessgui M1) and the shell's | #137 | 1136500 | Draft, no functional change |
 | M5: correction history (chapter 14.2) | #112 | 1065754 | Merged: +28.0 ± 13.0, 1,308 games, [0, 5] passed (M3 Max) |
 | M5: capture history (chapter 10.2) | #115 | 1065754 (943210 with capture history on) | Merged, off by default: −19.2 ± 11.9, 1,561 games, [0, 5] failed (M3 Max) |
 | M5: ProbCut (chapter 12.1) | #117 | 1065754 (963637 with ProbCut on) | Merged, off by default: −10.2 ± 9.1, 2,593 games, [0, 5] failed (M3 Max) |
