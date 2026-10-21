@@ -26,6 +26,7 @@
 - [Null-move pruning](ch12-nullmove.md)
     - [ProbCut](ch12-1-probcut.md)
 - [Late move reductions and pruning](ch13-lmr.md)
+    - [History pruning](ch13-1-history-pruning.md)
 - [Futility, razoring and SEE pruning](ch14-pruning.md)
     - [Extensions and reductions](ch14-1-extensions.md)
     - [Correction history](ch14-2-correction.md)

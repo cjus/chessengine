@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-21, 12:53 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-21, 16:31 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -40,8 +40,9 @@ stays at 50, #127; capture history's second version, in Stockfish's form, failed
 above 2026-10-18, #131; a flag falling against material that can't mate is a draw (FIDE 6.9),
 #137; capture history's third version, in the main search only, failed too, −2.9 ± 5.9 after
 6,301 games, so it stays off by default, #134; double extensions at a margin of 70 failed,
-−20.5 ± 12.2, so the margin stays at 50, #138; history pruning running on the M3, #140; cb2026 relicensed `MIT OR Apache-2.0`, with GPL
-only in a binary built with Syzygy, the first step of Solrac's M1b (cjus/chessgui#71, #98);
+−20.5 ± 12.2, so the margin stays at 50, #138; history pruning failed, −5.3 ± 7.1, so it is off
+by default, #140; cb2026 relicensed `MIT OR Apache-2.0`, with GPL only in a binary built with
+Syzygy, the first step of Solrac's M1b (cjus/chessgui#71, #98);
 cb2026 speaks the Chess Node Protocol (`--cnp`, `crates/cnp`), passing every conformance
 session that applies (38; the window's is skipped), M1b's step 4 (cjus/chessgui#98; CI needs
 the deploy key of #143).*
@@ -107,16 +108,13 @@ the deploy key of #143).*
 | M5: capture history, second version: the victim's value plus history, the attacker only breaking ties (chapter 10.2) | #129 | 1136500 (998700 with capture history on) | Merged, off by default: −6.8 ± 7.8, 3,512 games, [0, 5] failed (M3 Max) |
 | M5: capture history, third version: the second in the main search only, the quiescence search keeping MVV-LVA (chapter 10.2) | #134 | 1136500 (1003431 with capture history on) | Merged, off by default: −2.9 ± 5.9, 6,301 games, [0, 5] failed (M3 Max) |
 | M5: double extensions at a margin of 70 instead of 50 (chapter 14.1) | #138 | 1136500 (1054909 with the margin at 70) | Merged as a record, the margin back at 50: −20.5 ± 12.2, 1,407 games, [0, 5] failed (M3 Max) |
-| M5: history pruning: quiet moves with a bad history skipped near the leaves (chapter 13.1) | #140, `claude/history-pruning` | 1022919 | Draft, its SPRT running on the M3 Max: [0, 5] at 8+0.08 |
+| M5: history pruning: quiet moves with a bad history skipped near the leaves (chapter 13.1) | #140 | 1136500 (1022919 with history pruning on) | Merged, off by default: −5.3 ± 7.1, 4,548 games, [0, 5] failed (M3 Max) |
 
-**Running now: #140** (history pruning; chapter 13.1), started on the M3 on 2026-10-21 at about
-12:50 MDT. A clear result should take 1–3 hours, a small difference 5–8. A new session should
-restart the watcher, `scripts/watch-sprt.sh 140`, or just read #140's comments if the result is
-already there. Then rebase #140 onto `main` (in `docs/status.md` take `main`'s side and edit
-it), record the result in chapter 13.1, the search module docs, the switch's comment, the PRD's
-techniques table, the ledger and this file, and merge. If it fails, switch `history_pruning` off
-by default (with its comment, the switch's doc, the shell's help and the PRD) and merge as a
-record.
+**Nothing is running on the M3 now.**
+
+The SPRT of history pruning (#140) finished on 2026-10-21 at 16:29 MDT. It started at about
+12:50 and failed in 4,548 games, about 3 hours 40 minutes: **−5.3 ± 7.1**, though it took 10%
+off the bench. It is off by default; chapter 13.1 lists three settings for another try.
 
 The SPRT of double extensions at a margin of 70 instead of 50 (#138) finished on 2026-10-21 at
 12:08 MDT. It started at about 11:00 and failed in 1,407 games, about 1 hour 10 minutes:
@@ -380,7 +378,8 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    about 2 hours 45 minutes) and capture history's second version (#129, −6.8 ± 7.8, 3,512
    games, about 2 hours 45 minutes; off by default) and, on 2026-10-21, its third version
    (#134, −2.9 ± 5.9, 6,301 games, about 5 hours; off by default) and double extensions at a
-   margin of 70 (#138, −20.5 ± 12.2 against 50, 1,407 games, about 1 hour 10 minutes). No
+   margin of 70 (#138, −20.5 ± 12.2 against 50, 1,407 games, about 1 hour 10 minutes) and
+   history pruning (#140, −5.3 ± 7.1, 4,548 games, about 3 hours 40 minutes; off by default). No
    verdict, off: history in
    LMR's first version (#70) and, on 2026-10-17 at 40+0.4, transposition table buckets (#92,
    +1.6 ± 6.3 over 4,630 games, about 18 hours, stopped) and, at 8+0.08, double extensions
@@ -391,19 +390,18 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    games; about 255 games an hour on the M3, 10 hours).
 
    Next, in a rough order of value:
-   - **Mostly failures since correction history** (#112, 2026-10-19): of the ten tries
+   - **Mostly failures since correction history** (#112, 2026-10-19): of the eleven tries
      after it, only double extensions at 50 passed (#125). Failed: capture history three times
      (#115, −19.2; #129 in Stockfish's form, −6.8; #134 in the main search only, −2.9),
      ProbCut (#117, −10.2), correction history's piece tables averaged with the pawn table
      (#119, −20.7) and added to it (#121, −0.4 over 11,433 games), `singular_tt_depth_margin`
-     4 (#123, −7.4) and double extensions at 100 (#127, −7.3) and 70 (#138, −20.5). Every
-     failure but #121 made the bench smaller. Chapters 10.2, 12.1 and 14.2 list untested
+     4 (#123, −7.4), double extensions at 100 (#127, −7.3) and 70 (#138, −20.5) and history
+     pruning (#140, −5.3). Every failure but #121 made the bench smaller. Chapters 10.2, 12.1 and 14.2 list untested
      settings for another try. Capture history has lost three times, so it waits behind the
      candidates below.
-   - **New techniques**: history pruning (quiet moves with a bad history skipped near the
-     leaves) is running now (#140, see "Running now"); larger reductions at expected cut nodes,
-     which cb2026 doesn't have either, could be next. Stockfish's own estimates for its
-     versions of both are small, about 2 and 3 Elo.
+   - **New techniques**: history pruning failed (#140, −5.3 ± 7.1; chapter 13.1 lists other
+     settings). Larger reductions at expected cut nodes, which cb2026 doesn't have either, could
+     be next; Stockfish's own estimate for its version is small, about 3 Elo.
    - **Tuning singular extensions, continued**: depth 6 passed (#78) and depth 4 too (#80),
      which is about where Stockfish starts; `singular_margin` 3 passed too (#82), and 4
      failed (#84); `singular_tt_depth_margin` 4 failed against 3 (#123, −7.4 ± 8.0). That
