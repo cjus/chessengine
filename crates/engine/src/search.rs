@@ -173,8 +173,11 @@
 //! more often than one with no score at all, at every depth up to 6. With the quiet-move score,
 //! a move below the margin at depth 3 or 4 raised alpha about as rarely as a move with no
 //! score (0.5% and 0.3%), against 3% to 5% for a move with a positive one. The margin and the
-//! depth were set from those measurements, not tuned. It is on for its test
-//! (cjus/chessengine#140); see chapter 13.1.
+//! depth were set from those measurements, not tuned.
+//!
+//! **Off by default.** It took 10% off the bench and measured weaker: −5.3 ± 7.1 Elo after
+//! 4,548 games at 8+0.08 (cjus/chessengine#140). The switch and both parameters stay, for
+//! another try; see chapter 13.1.
 //!
 //! ## Singular extensions and multi-cut
 //!
@@ -550,7 +553,7 @@ pub struct Techniques {
     pub history_lmr: bool,
     /// Late move pruning: skip late quiet moves near the leaves.
     pub late_move_pruning: bool,
-    /// History pruning: skip quiet moves with a bad history near the leaves.
+    /// History pruning: skip quiet moves with a bad history near the leaves (off by default).
     pub history_pruning: bool,
     /// Reverse futility pruning (static null move).
     pub reverse_futility: bool,
@@ -623,8 +626,9 @@ impl Default for Techniques {
             // The second version passed its SPRT (cjus/chessengine#74); the first had no verdict.
             history_lmr: true,
             late_move_pruning: true,
-            // On for its test (cjus/chessengine#140); see chapter 13.1.
-            history_pruning: true,
+            // Off by default: it measured weaker, −5.3 ± 7.1 Elo after 4,548 games at 8+0.08
+            // (cjus/chessengine#140); see chapter 13.1.
+            history_pruning: false,
             reverse_futility: true,
             razoring: true,
             futility: true,
@@ -2514,7 +2518,11 @@ mod tests {
             history_pruning_margin: 1,
             ..SearchParams::default()
         };
-        assert!(counts(Techniques::default(), eager) > 0);
+        let on = Techniques {
+            history_pruning: true,
+            ..Techniques::default()
+        };
+        assert!(counts(on, eager) > 0);
         let off = Techniques {
             history_pruning: false,
             ..Techniques::default()
@@ -2525,12 +2533,12 @@ mod tests {
             history_pruning_margin: 1_000_000,
             ..SearchParams::default()
         };
-        assert_eq!(counts(Techniques::default(), out_of_reach), 0);
+        assert_eq!(counts(on, out_of_reach), 0);
         // Without the history tables every quiet move scores 0, and none is pruned.
         let no_history = Techniques {
             history: false,
             continuation_history: false,
-            ..Techniques::default()
+            ..on
         };
         assert_eq!(counts(no_history, eager), 0);
     }

@@ -11,8 +11,8 @@ prune.
 The history tables (chapters 10 and 10.1) already order the quiet moves, and history in late
 move reductions (chapter 14.1) reduces a move with a bad history more. History pruning takes
 the last step and doesn't search such a move at all. Like chapter 14.1's techniques, it came
-after stage 20, so no stage tag contains it. It is on for its test (cjus/chessengine#140);
-`set histprune off` switches it off.
+after stage 20, so no stage tag contains it. It measured weaker, so it is **off by default**;
+`set histprune on` switches it on.
 
 ## The test
 
@@ -69,8 +69,8 @@ of those and adds the history table. The code is cb2026's own.
 
 ## What it changes
 
-The bench is 10.0% smaller with it: 1,022,919 nodes instead of 1,136,500. With
-`set histprune off` it is `main`'s exactly. Three alternating pairs of bench runs gave speed
+With it on, the bench is 10.0% smaller: 1,022,919 nodes instead of 1,136,500. Off, it is
+`main`'s exactly. Three alternating pairs of bench runs gave speed
 ratios of 0.98 to 1.00: the score is a few table reads, and the history tables are in the cache.
 
 The six positions of chapters 10 to 14, each searched from empty tables:
@@ -106,8 +106,21 @@ reshuffles the tree as much as it shrinks it, and tree sizes have not predicted 
 
 ## What it's worth
 
-The SPRT against `main` without it is cjus/chessengine#140. Stockfish's own estimate for its
-version is about 2 Elo, in an engine where many techniques already overlap.
+| Test | Result |
+| --- | --- |
+| History pruning vs `main` without it, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−5.3 ± 7.1 Elo** over 4,548 games (+1087 −1156 =2305): failed (LLR −2.97), cjus/chessengine#140, so it is off by default |
+
+Stockfish's own estimate for its version is about 2 Elo, in an engine where many techniques
+already overlap, so a small result was expected; this one leans the other way. Like capture
+history, ProbCut and others (chapters 10.2, 12.1 and 14.1), it made the bench smaller and the
+engine no stronger. The switch and both parameters stay. Untested candidates for another try:
+
+- **From depth 3 only.** At depth 1 the moves it skips raised alpha as often as quiet moves in
+  general, and at depth 2 more than half as often ("Which score"), so pruning them there may
+  cost the most. A
+  `history_pruning_min_depth` would be a new parameter.
+- **A larger margin**, 32 a ply: a quarter as many moves skipped over the game's positions.
+- **The long time control**, 40+0.4, where the history tables are fuller and the searches deeper.
 
 ## Further reading
 

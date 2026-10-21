@@ -48,7 +48,7 @@
 //! | `set nullmove on\|off` | Null-move pruning |
 //! | `set probcut on\|off` | ProbCut: cut off a node where a capture beats beta by a margin in a shallower search (off by default) |
 //! | `set lmr on\|off`, `set histlmr on\|off`, `set lmp on\|off` | Late move reductions; adjusted by history; late move pruning |
-//! | `set histprune on\|off` | History pruning: skip quiet moves with a bad history near the leaves |
+//! | `set histprune on\|off` | History pruning: skip quiet moves with a bad history near the leaves (off by default) |
 //! | `set rfp\|razoring\|futility\|seeprune\|delta\|seeorder on\|off` | Stage 14's pruning and SEE ordering |
 //! | `eval` | The static evaluation, term by term |
 //! | `eval diff <move>`, `see <move>` | Which evaluation terms a move changes; its static exchange evaluation |
@@ -165,7 +165,7 @@ Commands:
   set histlmr on|off   Reduce quiet moves with a good history less, a bad one more
   set lmp on|off       Late move pruning: skip late quiet moves near the leaves
   set histprune on|off History pruning: skip quiet moves with a bad history near the
-                       leaves
+                       leaves (default off)
   set rfp|razoring|futility|seeprune|delta on|off
                        Reverse futility pruning, razoring, futility pruning, SEE pruning,
                        delta pruning

@@ -131,7 +131,7 @@ pub const SWITCHES: &[Switch] = &[
     },
     Switch {
         name: "histprune",
-        description: "History pruning: quiet moves with a bad history skipped near the leaves",
+        description: "History pruning: quiet moves with a bad history skipped near the leaves (off by default)",
         flag: |e| &mut e.techniques.history_pruning,
     },
     Switch {
