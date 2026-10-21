@@ -93,7 +93,7 @@ impl Shell {
         let left = &mut clock.remaining[mover.index()];
         if used > *left {
             *left = Duration::ZERO;
-            self.game.lose_on_time(mover);
+            self.game.time_out(mover);
         } else {
             *left = *left - used + clock.increment;
         }

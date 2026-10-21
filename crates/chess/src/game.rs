@@ -20,7 +20,7 @@
 //! Checkmate is checked first, so a mate on the hundredth half-move is still a mate.
 //!
 //! A game can also end off the board, when a player resigns ([`Game::resign`]), the players
-//! agree a draw ([`Game::agree_draw`]), a flag falls ([`Game::lose_on_time`]), or the result
+//! agree a draw ([`Game::agree_draw`]), a flag falls ([`Game::time_out`]), or the result
 //! comes from somewhere else, like an arbiter or a PGN record ([`Game::declare`]). The clocks
 //! themselves are the program's: a `Game` doesn't know about time. Taking a move back withdraws
 //! an ending like this, as it reopens a game ended on the board.
@@ -40,8 +40,11 @@
 //!   material alone (king against king, king and one minor piece against king, bishops all on
 //!   one colour). Positions dead for other reasons, such as locked pawn chains, play on.
 //! - **Time against a lone king.** Under the FIDE Laws (6.9), a player whose flag falls only
-//!   draws if the opponent couldn't mate by any series of legal moves. [`Game::lose_on_time`]
-//!   always gives the opponent the win.
+//!   draws if the opponent couldn't mate by any series of legal moves. [`Game::time_out`]
+//!   asks [`Position::has_mating_material`], which sees the material that can't mate (a lone
+//!   king, a lone knight against queens, bishops of one colour against no pawns, knights or
+//!   bishops of the other), but not a position dead for another reason, such as locked pawns:
+//!   there the opponent still wins.
 //!
 //! ## Further reading
 //!
@@ -109,6 +112,12 @@ pub enum Outcome {
         /// The player whose flag didn't fall.
         winner: Color,
     },
+    /// A player ran out of time, but the opponent couldn't have mated, so the game is a draw
+    /// (FIDE Laws 6.9).
+    TimeoutDraw {
+        /// The player whose flag fell.
+        flagged: Color,
+    },
     /// The result was decided off the board for a reason the game doesn't know: by an arbiter,
     /// or in a PGN record whose moves don't end the game.
     Declared {
@@ -129,7 +138,8 @@ impl Outcome {
             | Outcome::Repetition
             | Outcome::FiftyMoves
             | Outcome::InsufficientMaterial
-            | Outcome::DrawAgreed => None,
+            | Outcome::DrawAgreed
+            | Outcome::TimeoutDraw { .. } => None,
         }
     }
 
@@ -157,6 +167,11 @@ impl fmt::Display for Outcome {
             Outcome::Resignation { winner } => write!(f, "{} resigned. {winner} wins.", !*winner),
             Outcome::DrawAgreed => write!(f, "Draw agreed."),
             Outcome::Timeout { winner } => write!(f, "{} lost on time. {winner} wins.", !*winner),
+            Outcome::TimeoutDraw { flagged } => write!(
+                f,
+                "{flagged} ran out of time, but {} couldn't mate. The game is a draw.",
+                !*flagged
+            ),
             Outcome::Declared { .. } => write!(f, "The game ended {}.", self.result()),
         }
     }
@@ -338,10 +353,16 @@ impl Game {
         self.end(Outcome::DrawAgreed);
     }
 
-    /// `loser`'s flag fell. Does nothing if the game is already over. The opponent wins, even
-    /// with a lone king (see the module docs' pitfalls).
-    pub fn lose_on_time(&mut self, loser: Color) {
-        self.end(Outcome::Timeout { winner: !loser });
+    /// `side`'s flag fell. The opponent wins if it has the material to mate
+    /// ([`Position::has_mating_material`]); otherwise the game is a draw (FIDE Laws 6.9, and
+    /// the module docs' pitfalls). Does nothing if the game is already over.
+    pub fn time_out(&mut self, side: Color) {
+        let opponent = !side;
+        self.end(if self.position.has_mating_material(opponent) {
+            Outcome::Timeout { winner: opponent }
+        } else {
+            Outcome::TimeoutDraw { flagged: side }
+        });
     }
 
     /// Ends the game with a result decided off the board: `winner`, or `None` for a draw.
@@ -557,7 +578,7 @@ mod tests {
         // Taking the move back withdraws the agreement, and the move.
         game.undo();
         assert!(game.moves().is_empty());
-        game.lose_on_time(Color::White);
+        game.time_out(Color::White);
         assert_eq!(game.outcome().unwrap().result(), "0-1");
         assert_eq!(
             game.outcome().unwrap().to_string(),
@@ -570,6 +591,33 @@ mod tests {
             game.outcome(),
             Some(Outcome::Timeout {
                 winner: Color::Black
+            })
+        );
+    }
+
+    #[test]
+    fn a_flag_falling_is_a_draw_when_the_opponent_cannot_mate() {
+        // White has a queen, Black only a knight: White can mate, Black can't.
+        let start = "k7/8/8/8/8/8/8/2nQK3 w - - 0 1";
+        let mut game = Game::from_fen(start).unwrap();
+        game.time_out(Color::White);
+        assert_eq!(
+            game.outcome(),
+            Some(Outcome::TimeoutDraw {
+                flagged: Color::White
+            })
+        );
+        assert_eq!(game.outcome().unwrap().result(), "1/2-1/2");
+        assert_eq!(
+            game.outcome().unwrap().to_string(),
+            "White ran out of time, but Black couldn't mate. The game is a draw."
+        );
+        let mut game = Game::from_fen(start).unwrap();
+        game.time_out(Color::Black);
+        assert_eq!(
+            game.outcome(),
+            Some(Outcome::Timeout {
+                winner: Color::White
             })
         );
     }
