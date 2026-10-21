@@ -13,8 +13,10 @@ Chapter 10 had the same problem with quiet moves and solved it with the history 
 learns from the search which moves cause cutoffs. **Capture history** does the same for
 captures. Its table is indexed by the piece that captures, the square it captures on and the
 piece it takes, and it learns the way history does. Like chapter 14.1's techniques, it came
-after stage 20, so no stage tag contains it. Both its versions measured weaker, the second in
-Stockfish's form, so it is **off by default**; `set capthist on` switches it on.
+after stage 20, so no stage tag contains it. Its three versions all measured weaker, the
+second in Stockfish's form and the third the second in the main search only, so it is off by
+default. `set capthist on` switches the third version on; `set capthistq on` with it gives the
+second.
 
 ## The table
 
@@ -73,8 +75,21 @@ with MVV-LVA by more than the attackers' difference (3,072 between a pawn and a 
 across victims it moved a capture two ranks at most. It took 11.5% off the bench and lost
 about 19 Elo (see "What it's worth").
 
-The quiescence search orders its captures with the same table. It doesn't update it: its
-nodes have no depth left, and the bonus is `depth²`.
+### The main search only
+
+The quiescence search doesn't teach the table: its nodes have no depth left, and the bonus is
+`depth²`. The first two versions let it order its captures by the table all the same. The
+third doesn't, unless `capture_history_quiescence` is on (`set capthistq on`): the quiescence
+search keeps MVV-LVA's order, and the table orders only the captures of the search that
+teaches it.
+
+```rust,ignore
+{{#include ../../crates/engine/src/search.rs:quiescence_order}}
+```
+
+The quiescence search is more than half of the nodes, 55% to 58% over the first six bench
+positions at depths 9 to 11. Stockfish (GPL-3.0) orders its quiescence search's captures by
+capture history too, so this third version departs from it.
 
 ## Learning
 
@@ -125,6 +140,11 @@ The bench is one depth. Over the first six bench positions, the second version's
 So the trees shrink at one depth and grow at the next, and the share of cutoffs made by the
 first move searched hardly moves. Nothing here says whether the order is better.
 
+The third version, in the main search only, makes the bench 11.7% smaller (1,003,431 nodes),
+and its trees are close to the second version's: 363,572 nodes at depth 9 (−19% against
+`set capthist off`), 581,326 at depth 10 (−17%) and 1,015,664 at depth 11 (+15%), with
+89.5% to 90.0% of cutoffs by the first move. The speed is the same as `main`'s.
+
 Chapter 10.1 warned that with late move reductions and pruning, a smaller tree doesn't prove
 better ordering: a worse order can push good moves into the reductions and shrink the tree by
 missing them. The warning seemed to apply less here. Captures are never reduced or pruned for
@@ -155,21 +175,23 @@ null-move pruning and the rest are allowed and a good capture can be missed.
 | --- | --- |
 | Capture history vs `main` without it, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−19.2 ± 11.9 Elo** over 1,561 games (+328 −414 =819): failed (LLR −2.96), cjus/chessengine#115, so it is off by default |
 | Capture history's second version (the victim's value plus history, the attacker only breaking ties) vs `main` without it (with double extensions), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−6.8 ± 7.8 Elo** over 3,512 games (+771 −840 =1901): failed (LLR −2.96), cjus/chessengine#129, so it stays off by default |
+| Capture history's third version (the second in the main search only, the quiescence search keeping MVV-LVA's order) vs `main` without it, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−2.9 ± 5.9 Elo** over 6,301 games (+1460 −1512 =3329): failed (LLR −2.97), cjus/chessengine#134, so it stays off by default |
 
 Like switching history off in chapter 10.1, the first version made the tree smaller and the
 engine weaker. The switch and the table stayed for a second version, in Stockfish's form: the
 victim's value plus capture history, with the attacker only breaking ties. It lost too, by
-less: about **−7 Elo** (cjus/chessengine#129), again with a smaller bench. Both versions
-made the bench about 12% smaller and the engine weaker; why isn't measured. Still
+less: about **−7 Elo** (cjus/chessengine#129), again with a smaller bench. The third version
+left the quiescence search on MVV-LVA's order and lost by less again: about **−3 Elo** over
+6,301 games (cjus/chessengine#134). That is close to zero, but the SPRT settled on no gain
+rather than the 5 Elo it tested for. The second and third versions differ by 4 ± 10 Elo, so
+the games don't show that the quiescence search's order was what cost the second. All three
+made the bench about 12% smaller and the engine no stronger; why isn't measured. Still
 untested:
 
 - **History only among captures of the same piece**: a scale large enough that a victim rank
   outweighs any history score, so history only reorders the attackers.
 - **No penalty for the captures tried before a quiet move's cutoff**, so that a capture is
   marked down only when another capture did better.
-- **The main search only.** The quiescence search, about half of the nodes, orders its
-  captures by the table but never teaches it, since its nodes have no depth for a bonus. It
-  could keep MVV-LVA's order.
 
 ## Further reading
 

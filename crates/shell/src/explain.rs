@@ -91,6 +91,11 @@ pub(crate) const SWITCHES: &[Switch] = &[
         flag: |e| &mut e.techniques.capture_history,
     },
     Switch {
+        name: "capthistq",
+        description: "Capture history in the quiescence search too (needs capthist; off by default)",
+        flag: |e| &mut e.techniques.capture_history_quiescence,
+    },
+    Switch {
         name: "pvs",
         description: "Principal variation search",
         flag: |e| &mut e.techniques.pvs,
