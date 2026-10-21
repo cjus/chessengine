@@ -177,7 +177,7 @@
 //! **negative extension**.
 //!
 //! And a fourth. The search's score is the best any other move managed, so it says by how much
-//! the hash move is singular. If no other move comes within `double_extension_margin` (50)
+//! the hash move is singular. If no other move comes within `double_extension_margin` (70)
 //! centipawns of `singular_beta` either, the hash move is close to the only move, and at a node
 //! off the principal variation it is searched two plies deeper instead of one: a **double
 //! extension**. A line can have at most `double_extension_limit` (6) of them, on top of the
@@ -443,8 +443,8 @@ impl Default for SearchParams {
             singular_margin: 3,
             // 20 at first, as in Stockfish (GPL-3.0), had no verdict (cjus/chessengine#96); 50
             // gained +13.0 ± 8.3 (cjus/chessengine#125); 100 failed, −7.3 ± 8.0 against 50
-            // (cjus/chessengine#127).
-            double_extension_margin: 50,
+            // (cjus/chessengine#127); 70 is being tested (cjus/chessengine#138).
+            double_extension_margin: 70,
             double_extension_limit: 6,
             negative_extension_plies: 1,
             correction_max_weight: 16,
