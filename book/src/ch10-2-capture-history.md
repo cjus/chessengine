@@ -13,9 +13,10 @@ Chapter 10 had the same problem with quiet moves and solved it with the history 
 learns from the search which moves cause cutoffs. **Capture history** does the same for
 captures. Its table is indexed by the piece that captures, the square it captures on and the
 piece it takes, and it learns the way history does. Like chapter 14.1's techniques, it came
-after stage 20, so no stage tag contains it. Its first two versions measured weaker, the
-second in Stockfish's form. The third is the second in the main search only, and is on for its
-test (cjus/chessengine#134); `set capthist off` switches it off.
+after stage 20, so no stage tag contains it. Its three versions all measured weaker, the
+second in Stockfish's form and the third the second in the main search only, so it is off by
+default. `set capthist on` switches the third version on; `set capthistq on` with it gives the
+second.
 
 ## The table
 
@@ -174,13 +175,17 @@ null-move pruning and the rest are allowed and a good capture can be missed.
 | --- | --- |
 | Capture history vs `main` without it, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−19.2 ± 11.9 Elo** over 1,561 games (+328 −414 =819): failed (LLR −2.96), cjus/chessengine#115, so it is off by default |
 | Capture history's second version (the victim's value plus history, the attacker only breaking ties) vs `main` without it (with double extensions), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−6.8 ± 7.8 Elo** over 3,512 games (+771 −840 =1901): failed (LLR −2.96), cjus/chessengine#129, so it stays off by default |
+| Capture history's third version (the second in the main search only, the quiescence search keeping MVV-LVA's order) vs `main` without it, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−2.9 ± 5.9 Elo** over 6,301 games (+1460 −1512 =3329): failed (LLR −2.97), cjus/chessengine#134, so it stays off by default |
 
 Like switching history off in chapter 10.1, the first version made the tree smaller and the
 engine weaker. The switch and the table stayed for a second version, in Stockfish's form: the
 victim's value plus capture history, with the attacker only breaking ties. It lost too, by
-less: about **−7 Elo** (cjus/chessengine#129), again with a smaller bench. Both versions
-made the bench about 12% smaller and the engine weaker; why isn't measured. The third
-version leaves the quiescence search on MVV-LVA's order (cjus/chessengine#134). Still
+less: about **−7 Elo** (cjus/chessengine#129), again with a smaller bench. The third version
+left the quiescence search on MVV-LVA's order and lost by less again: about **−3 Elo** over
+6,301 games (cjus/chessengine#134). That is close to zero, but the SPRT settled on no gain
+rather than the 5 Elo it tested for. The second and third versions differ by 4 ± 10 Elo, so
+the games don't show that the quiescence search's order was what cost the second. All three
+made the bench about 12% smaller and the engine no stronger; why isn't measured. Still
 untested:
 
 - **History only among captures of the same piece**: a scale large enough that a victim rank

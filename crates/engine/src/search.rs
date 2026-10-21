@@ -502,7 +502,7 @@ pub struct Techniques {
     pub continuation_history: bool,
     /// Capture history: captures and queen promotions are ordered by what they win and how
     /// often they caused cutoffs, instead of by MVV-LVA (needs MVV-LVA ordering, the switch
-    /// that orders captures first).
+    /// that orders captures first; off by default).
     pub capture_history: bool,
     /// Capture history in the quiescence search's order too (needs capture history). Off, the
     /// quiescence search, which never teaches the table, keeps MVV-LVA's order.
@@ -576,12 +576,12 @@ impl Default for Techniques {
             countermoves: true,
             history: true,
             continuation_history: true,
-            // The first version, with MVV-LVA's attacker term, measured weaker: −19.2 ± 11.9 Elo
-            // after 1,561 games at 8+0.08 (cjus/chessengine#115). So did the second, in
-            // Stockfish's form: −6.8 ± 7.8 after 3,512 (cjus/chessengine#129). The third, the
-            // second in the main search only, is on for its test (cjus/chessengine#134). See
-            // chapter 10.2.
-            capture_history: true,
+            // Off by default. The first version, with MVV-LVA's attacker term, measured weaker:
+            // −19.2 ± 11.9 Elo after 1,561 games at 8+0.08 (cjus/chessengine#115). So did the
+            // second, in Stockfish's form: −6.8 ± 7.8 after 3,512 (cjus/chessengine#129), and
+            // the third, the second in the main search only: −2.9 ± 5.9 after 6,301
+            // (cjus/chessengine#134). See chapter 10.2.
+            capture_history: false,
             // Off: the second version ordered the quiescence search too (cjus/chessengine#129).
             capture_history_quiescence: false,
             pvs: true,
