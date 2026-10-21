@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-20, 18:53 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-20, 21:20 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -36,7 +36,7 @@ table instead of averaged with it, failed too, −0.4 ± 4.3 after 11,433 games,
 `singular_tt_depth_margin` 4 instead of 3 failed, −7.4 ± 8.0, so it stays at 3, #123; double
 extensions at a margin of 50 merged on, +13.0 ± 8.3, #125; a margin of 100 failed, −7.3 ± 8.0, so it
 stays at 50, #127; capture history's second version, in Stockfish's form, failed too, −6.8
-± 7.8, so it stays off by default, #129.*
+± 7.8, so it stays off by default, #129; a gauntlet on `main` running on the M3, #131.*
 
 ## Stages
 
@@ -97,11 +97,17 @@ stays at 50, #127; capture history's second version, in Stockfish's form, failed
 | M5: double extensions at a margin of 100 instead of 50 (chapter 14.1) | #127 | 1136500 (945934 with the margin at 100) | Merged as a record, the margin back at 50: −7.3 ± 8.0, 3,368 games, [0, 5] failed (M3 Max) |
 | M5: capture history, second version: the victim's value plus history, the attacker only breaking ties (chapter 10.2) | #129 | 1136500 (998700 with capture history on) | Merged, off by default: −6.8 ± 7.8, 3,512 games, [0, 5] failed (M3 Max) |
 
-**Nothing is running on the M3.** The SPRT of capture history's second version (#129) finished
-on 2026-10-20 at 18:41 MDT. It started at about 15:55 and failed in 3,512 games, about 2 hours
-45 minutes: **−6.8 ± 7.8**, though it took 12.1% off the bench. Capture history is merged off
-by default, with the second version's scoring kept for another try. The M3's next job is
-another M5 run (item 3 below).
+**Running now: a gauntlet on `main`** (#131, `main` at `a422e69`), started on the M3 on 2026-10-20
+at about 21:18 MDT: 800 games against each of the seven reference engines at 8+0.08, about 4
+hours. The last one rated `main` 2714 ± 10 (#36); correction history and double extensions
+have passed since. The result posts to #131 as a comment marked `<!-- gauntlet -->`. A new
+session should read #131's comments, then record the rating in `docs/elo-ledger.md`, the PRD's
+"Milestones" and this file, and close #131.
+
+The SPRT of capture history's second version (#129) finished on 2026-10-20 at 18:41 MDT. It
+started at about 15:55 and failed in 3,512 games, about 2 hours 45 minutes: **−6.8 ± 7.8**,
+though it took 12.1% off the bench. Capture history is merged off by default, with the second
+version's scoring kept for another try.
 
 The SPRT of double extensions at a margin of 100 instead of 50 (#127) finished on 2026-10-20 at
 14:48 MDT. It started at about 12:05 and failed in 3,368 games, about 2 hours 45 minutes:
@@ -350,8 +356,8 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    games; about 255 games an hour on the M3, 10 hours).
 
    Next, in a rough order of value:
-   - **A gauntlet on `main`** (about 4 hours on the M3, `scripts/mac-gauntlet.sh`): the last
-     one rated `main` 2714 ± 10 (#36, 2026-10-18). Since then correction history (#112, +28.0)
+   - **A gauntlet on `main`** (about 4 hours on the M3, `scripts/mac-gauntlet.sh`), running now
+     (#131, see "Running now"): the last one rated `main` 2714 ± 10 (#36, 2026-10-18). Since then correction history (#112, +28.0)
      and double extensions (#125, +13.0) have passed in self-play, which overstated gains about
      threefold last time. A gauntlet says how much of the +41 holds against other engines.
    - **Mostly failures since correction history** (#112, 2026-10-19): of the eight tries
