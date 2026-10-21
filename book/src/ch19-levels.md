@@ -65,7 +65,7 @@ plays at:
 > level 5
 Strength: level 5, about 957 Elo: 3037 nodes per move, choosing among the best 4 moves
 > level 20
-Strength: full, about 2714 Elo
+Strength: full, about 2782 Elo
 > elo 1300
 Strength: level 9.1, about 1300 Elo: 15705 nodes per move, choosing among the best 4 moves
 ```
@@ -116,9 +116,9 @@ odd levels' measured ratings, less than each level's own margin.
 
 The ratings in italics are halfway between their neighbours, not measured.
 
-Full strength rated 2714 ± 10 in the gauntlet of 2026-10-18, at 8+0.08. It uses the clock, so
-unlike the levels it gains from more time much as its opponents do. Level 19 plays about 230
-below it. The 40+0.4 column goes into the code:
+Full strength rated 2782 ± 11 in the gauntlet of 2026-10-21, at 8+0.08 (2714 ± 10 on 2026-10-18,
+before correction history and double extensions). It uses the clock, so unlike the levels it
+gains from more time much as its opponents do. Level 19 plays about 300 below it. The 40+0.4 column goes into the code:
 
 ```rust,ignore
 {{#include ../../crates/engine/src/levels.rs:ratings}}

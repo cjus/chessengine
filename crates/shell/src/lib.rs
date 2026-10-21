@@ -1674,7 +1674,7 @@ mod tests {
         assert!(shell.execute("new960 960").output.starts_with("Usage"));
         assert_eq!(
             shell.execute("level 20").output,
-            "Strength: full, about 2714 Elo"
+            "Strength: full, about 2782 Elo"
         );
         assert!(
             shell

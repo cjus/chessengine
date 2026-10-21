@@ -616,6 +616,14 @@ measures it again with the robustness run. That is only 45 ± 14 above stage 16.
 that passed their SPRTs add up to about +136 Elo in self-play, so against other engines they
 gained about a third of that: self-play SPRTs find gains reliably but overstate their size.
 
+`main` (at `a422e69`) rated **2782 ± 11** in the same gauntlet on 2026-10-21 (+3432 −1215 =953;
+cjus/chessengine#131), 68 ± 15 above `main` three days before. Two changes passed their SPRTs
+in between, correction history (+28.0) and double extensions (+13.0), about +41 in self-play:
+this time the gauntlet found more than self-play, not a third of it. Over M5 so far, from stage
+16's 2669, the gauntlets found +113 where the SPRTs add up to about +177. Its performances
+ranged from 2689 (against Blunder 5.0.0, beaten 97.9% of the time) to 2818 (Zahak 3.0). cb2026
+had no time losses, illegal moves or failures; Stash 15.3 had one failure.
+
 M4's levels are calibrated (2026-10-19, cjus/chessengine#106): Skill Levels 0–19 rate **629 to
 2483** at 40+0.4 (± 23 to 55), and `UCI_Elo` maps onto those ratings
 (`crates/engine/src/levels.rs`, chapter 19). Every other level played 800 games against the
