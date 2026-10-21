@@ -20,8 +20,9 @@ git push origin v1.0.0
 ```
 
 The workflow builds `cb2026` for Linux (x86-64), macOS (Apple Silicon and Intel) and Windows
-(x86-64), packages each with the README and licence, adds `SHA256SUMS.txt`, and creates a
-**draft** release with notes generated from the merged PRs. Check the draft on GitHub
+(x86-64), packages each with the README and the licences (`LICENSE-MIT`, `LICENSE-APACHE`,
+and `LICENSE-GPL-3.0`, since the release binaries include Syzygy probing), adds
+`SHA256SUMS.txt`, and creates a **draft** release with notes generated from the merged PRs. Check the draft on GitHub
 (Releases), edit the notes if needed, and publish it. The `Cross-platform` workflow also runs
 the tests on macOS and Windows for the tag.
 

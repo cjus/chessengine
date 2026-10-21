@@ -20,7 +20,9 @@ cb2026-syzygy = { workspace = true, optional = true }
 
 [features]
 default = ["syzygy"]
-# Syzygy endgame tablebases (the `SyzygyPath` option), through the cb2026-syzygy crate.
+# Syzygy endgame tablebases (the `SyzygyPath` option), through the cb2026-syzygy crate. It links
+# shakmaty-syzygy (GPL-3.0-or-later), so a binary built with it is GPL-3.0-or-later as a whole;
+# `--no-default-features` builds a cb2026 that is `MIT OR Apache-2.0` throughout.
 syzygy = ["dep:cb2026-syzygy"]
 
 [lints]

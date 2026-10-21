@@ -36,7 +36,9 @@ The Syzygy format is an intricate compressed encoding, and a prober is thousands
 careful code with no strength to gain from writing it again. So this is the one place where
 cb2026 uses someone else's chess code: the `shakmaty-syzygy` library (GPL-3.0, the prober
 behind Lichess's tablebase server). The `docs/PRD.md` section "Tablebase probing" records
-that decision.
+that decision. cb2026 itself is `MIT OR Apache-2.0`, so the prober also sits behind a cargo
+feature, `syzygy`: a binary built with it is GPL-3.0 as a whole, and one built without it has
+no GPL code (README, "License").
 
 The search never sees it. The engine crate defines a small trait, and the separate
 `cb2026-syzygy` crate implements it:

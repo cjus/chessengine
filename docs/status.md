@@ -40,7 +40,8 @@ stays at 50, #127; capture history's second version, in Stockfish's form, failed
 above 2026-10-18, #131; a flag falling against material that can't mate is a draw (FIDE 6.9),
 #137; capture history's third version, in the main search only, failed too, −2.9 ± 5.9 after
 6,301 games, so it stays off by default, #134; double extensions at a margin of 70 failed,
-−20.5 ± 12.2, so the margin stays at 50, #138; history pruning running on the M3, #140.*
+−20.5 ± 12.2, so the margin stays at 50, #138; history pruning running on the M3, #140; cb2026 relicensed `MIT OR Apache-2.0`, with GPL
+only in a binary built with Syzygy, the first step of Solrac's M1b (cjus/chessgui#71, #98).*
 
 ## Stages
 

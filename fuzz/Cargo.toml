@@ -3,7 +3,7 @@ name = "cb2026-fuzz"
 description = "Fuzz tests for cb2026's parsers (cargo fuzz; nightly Rust)."
 version = "0.0.0"
 edition = "2024"
-license = "GPL-3.0-or-later"
+license = "MIT OR Apache-2.0"
 publish = false
 
 [package.metadata]
