@@ -43,7 +43,7 @@
 //! | `set syzygy <path>`, `tb` | Load Syzygy tablebases; show the tablebase result for the position |
 //! | `set book <path>`, `set ownbook on\|off`, `book` | Load a Polyglot opening book; play from it; show its moves here |
 //! | `set killers\|countermoves\|history\|conthist on\|off` | Switch a quiet-move ordering heuristic off |
-//! | `set capthist on\|off` | Capture history: order captures by their cutoffs as well as by MVV-LVA (off by default) |
+//! | `set capthist on\|off` | Capture history: order captures by what they win and their cutoffs, instead of by MVV-LVA (off by default) |
 //! | `set pvs on\|off`, `set aspiration on\|off` | Principal variation search; aspiration windows |
 //! | `set nullmove on\|off` | Null-move pruning |
 //! | `set probcut on\|off` | ProbCut: cut off a node where a capture beats beta by a margin in a shallower search (off by default) |
@@ -152,8 +152,8 @@ Commands:
   book                 The book's moves for this position, with their weights
   set killers|countermoves|history|conthist on|off
                        Quiet-move ordering heuristics (conthist: continuation history)
-  set capthist on|off  Capture history: order captures by their cutoffs as well as by MVV-LVA
-                       (default off)
+  set capthist on|off  Capture history: order captures by what they win and their cutoffs,
+                       instead of by MVV-LVA (default off)
   set pvs on|off       Principal variation search (null windows after the first move)
   set aspiration on|off
                        Start each depth with a narrow window around the last score
