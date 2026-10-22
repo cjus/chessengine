@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-22, 06:28 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-22, 06:37 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -53,7 +53,7 @@ so each level blunders as often as people rated 600 to 2500 on Lichess rapid do,
 Lichess's own games by the new `mistakes` tool; `UCI_Elo` 600–2500 is on that scale and the CCRL
 ratings no longer hold; full strength unchanged (Carlos, cjus/chessgui#113; #151).
 2026-10-22: the v1.0 robustness run clean, 10,000 games with no time losses, illegal moves or
-failures, #146.*
+failures, #146; cut-node reductions of 2 plies running on the M3, #155.*
 
 ## Stages
 
@@ -118,8 +118,16 @@ failures, #146.*
 | M5: double extensions at a margin of 70 instead of 50 (chapter 14.1) | #138 | 1136500 (1054909 with the margin at 70) | Merged as a record, the margin back at 50: −20.5 ± 12.2, 1,407 games, [0, 5] failed (M3 Max) |
 | M5: history pruning: quiet moves with a bad history skipped near the leaves (chapter 13.1) | #140 | 1136500 (1022919 with history pruning on) | Merged, off by default: −5.3 ± 7.1, 4,548 games, [0, 5] failed (M3 Max) |
 | M5: larger reductions at expected cut nodes (chapter 14.1) | #145 | 1078861 | Merged: +11.6 ± 7.7, 3,687 games, [0, 5] passed (M3 Max) |
+| M5: cut-node reductions of 2 plies instead of 1, as in Stockfish (chapter 14.1) | #155, `claude/cut-node-2` | 1072184 | Draft, its SPRT running on the M3 Max: [0, 5] at 8+0.08 |
 
-**Nothing is running on the M3 now.** v1.0's last gate is the GUI matrix (#37), on Carlos's Mac.
+**Running now: #155** (cut-node reductions of 2 plies instead of 1; chapter 14.1), started on the
+M3 on 2026-10-22 at about 06:35 MDT. A clear result should take 1–3 hours, a small difference
+5–8. A new session should restart the watcher, `scripts/watch-sprt.sh 155`, or just read #155's
+comments if the result is already there. Then rebase #155 onto `main` (in `docs/status.md` take
+`main`'s side and edit it), record the result in chapter 14.1, the search module docs, the
+parameter's comment, the ledger and this file, and merge. If it fails, set `lmr_cut_node` back
+to 1 and merge as a record. v1.0's last gate is still the GUI matrix (#37), on Carlos's Mac;
+if #155 passes, it merges before the tag.
 
 The v1.0 robustness run (#146) finished on 2026-10-22 at 06:17 MDT, about 10 hours after it
 started: **clean**. `main` at `9cff7fc` played itself 6,000 games at 1+0.01, 3,000 at 10+0.1 and
