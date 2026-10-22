@@ -405,7 +405,7 @@ Every other null-window search flips its parent's guess, and a late move's reduc
 as a cut node whatever its parent, as in Stockfish (GPL-3.0). The null move's search flips the
 guess too, and the singular extension's search, of the same node, keeps it. At an expected cut
 node the late moves seldom matter, because one of the first should already refute the node, so
-late move reductions take `lmr_cut_node` (1) plies more off them:
+late move reductions take `lmr_cut_node` (2; 1 at first) plies more off them:
 
 ```rust,ignore
 {{#include ../../crates/engine/src/search.rs:cut_node_reduction}}
@@ -431,8 +431,12 @@ is searched again at full depth, so reducing more doesn't always mean searching 
 
 **It passed**, by about **+12 Elo** (see "What it's worth"), so it is on by default. Stockfish's
 own estimate for its version is about 3 Elo, in an engine where many other reductions overlap
-with it; in cb2026 it had more to add. Untested so far: 2 plies, as in Stockfish, and a
-smaller reduction at an expected all-node, the other half of the same guess.
+with it; in cb2026 it had more to add. Untested so far: a smaller reduction at an expected
+all-node, the other half of the same guess.
+
+The second test is 2 plies, as in Stockfish (cjus/chessengine#155). The six positions above
+show what it does to the trees: about as much as 1 ply did, and no more consistently. The
+bench is 1,072,184 nodes, against 1,078,861 at 1 ply. The games decide.
 
 ## What it saves
 
