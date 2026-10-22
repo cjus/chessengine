@@ -431,8 +431,8 @@ is searched again at full depth, so reducing more doesn't always mean searching 
 
 **It passed**, by about **+12 Elo** (see "What it's worth"), so it is on by default. Stockfish's
 own estimate for its version is about 3 Elo, in an engine where many other reductions overlap
-with it; in cb2026 it had more to add. Untested so far: a smaller reduction at an expected
-all-node, the other half of the same guess.
+with it; in cb2026 it had more to add. The other half of the same guess, a smaller reduction
+at an expected all-node, came third (below).
 
 The second test was 2 plies, as in Stockfish (cjus/chessengine#155). The six positions above
 show what it does to the trees: about as much as 1 ply did, and no more consistently. The
@@ -440,6 +440,33 @@ bench is 1,072,184 nodes, against 1,078,861 at 1 ply. **It passed too**, by abou
 against 1 ply (see "What it's worth"), so `lmr_cut_node` is 2. Together the two steps are
 worth about 20 Elo in self-play, more than Stockfish's estimate for the whole technique. Nothing larger
 than 2 has been tried.
+
+### Smaller reductions at expected all-nodes
+
+At an expected all-node every move has to fail low, and the node's score holds only if they all
+do. A late move reduced into failing low, when a full-depth search would have found it good
+enough, makes the node fail low wrongly, and the move that led to it then looks like a refutation
+it isn't. So the third test (cjus/chessengine#158) takes `lmr_all_node` (1) ply less off the
+late moves there:
+
+```rust,ignore
+{{#include ../../crates/engine/src/search.rs:all_node_reduction}}
+```
+
+Stockfish doesn't do this; Stockfish 17 (GPL-3.0) even reduces more at an all-node when the next
+ply has had many fail highs. The idea is cb2026's own, and the ply was set by hand. `set allnode
+on|off` switches it, and off gives the search without it exactly.
+
+It costs a lot. A cut node usually stops after its first move or two, but an all-node searches
+all of its moves, so it has many more late moves to reduce. The bench grows by a fifth, from 1,072,184 to 1,284,421 nodes. The six positions grow
+by 30%, 25% and 42% at depths 9 to 11 (568,646, 819,202 and 1,333,493 nodes against 437,022,
+657,366 and 939,364), and the game's 58 positions by 22.6% at depth 10, smaller in only 19 of
+them. At a fixed time that is most of a ply, so the better searches at all-nodes have to be
+worth more than a ply of depth.
+
+**It failed**, by about **−9 Elo** (see "What it's worth"), so it is off by default. Untested: the
+smaller reduction only at greater depths, or only for moves with a good history, either of
+which would cost fewer nodes.
 
 ## What it saves
 
@@ -550,6 +577,7 @@ that it is small, about **+5 Elo**, and it took over 14,000 of them to say so.
 | Double extensions at a margin of 70 vs `main` (50), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−20.5 ± 12.2 Elo** over 1,407 games (+278 −361 =768): failed (LLR −2.97); the margin stays at 50 |
 | Larger reductions at expected cut nodes (1 ply more) vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+11.6 ± 7.7 Elo** over 3,687 games (+925 −802 =1960): passed (LLR 2.97); on by default |
 | Cut-node reductions of 2 plies vs `main` (1), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+8.7 ± 6.4 Elo** over 5,803 games (+1551 −1405 =2847): passed (LLR 2.95); `lmr_cut_node` is 2 |
+| Smaller reductions at expected all-nodes (1 ply less) vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−8.5 ± 8.4 Elo** over 2,993 games (+649 −722 =1622): failed (LLR −2.97); off by default |
 
 ## Further reading
 
