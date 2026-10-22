@@ -171,8 +171,8 @@
 //! all-nodes. Stockfish (GPL-3.0) passes the same flag down and adds 2 plies at cut nodes,
 //! alongside reductions cb2026 doesn't have; the code here is cb2026's own, and 1 was set by
 //! hand, not tuned. It passed: +11.6 ± 7.7 Elo after 3,687 games at 8+0.08
-//! (cjus/chessengine#145), so it is on by default. 2 plies, as in Stockfish, are being tested
-//! (cjus/chessengine#155); see chapter 14.1.
+//! (cjus/chessengine#145), so it is on by default. 2 plies, as in Stockfish, then gained
+//! +8.7 ± 6.4 against 1 after 5,803 games (cjus/chessengine#155); see chapter 14.1.
 //!
 //! ## History pruning
 //!
@@ -464,8 +464,8 @@ impl Default for SearchParams {
             lmr_history_divisor: 128,
             lmr_history_max: 2,
             // 1 gained +11.6 ± 7.7 against none (cjus/chessengine#145); 2, as in Stockfish
-            // (GPL-3.0), is being tested (cjus/chessengine#155). Stockfish adds them alongside
-            // reductions that cb2026 doesn't have.
+            // (GPL-3.0), gained +8.7 ± 6.4 against 1 (cjus/chessengine#155). Stockfish adds
+            // them alongside reductions that cb2026 doesn't have. Not tuned further.
             lmr_cut_node: 2,
             lmp_max_depth: 3,
             lmp_base: 3,
@@ -652,7 +652,8 @@ impl Default for Techniques {
             // The second version passed its SPRT (cjus/chessengine#74); the first had no verdict.
             history_lmr: true,
             // Passed its SPRT: +11.6 ± 7.7 Elo after 3,687 games at 8+0.08
-            // (cjus/chessengine#145); see chapter 14.1.
+            // (cjus/chessengine#145), and 2 plies instead of 1 another +8.7 ± 6.4
+            // (cjus/chessengine#155); see chapter 14.1.
             cut_node_reductions: true,
             late_move_pruning: true,
             // Off by default: it measured weaker, −5.3 ± 7.1 Elo after 4,548 games at 8+0.08

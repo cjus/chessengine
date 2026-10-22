@@ -434,9 +434,12 @@ own estimate for its version is about 3 Elo, in an engine where many other reduc
 with it; in cb2026 it had more to add. Untested so far: a smaller reduction at an expected
 all-node, the other half of the same guess.
 
-The second test is 2 plies, as in Stockfish (cjus/chessengine#155). The six positions above
+The second test was 2 plies, as in Stockfish (cjus/chessengine#155). The six positions above
 show what it does to the trees: about as much as 1 ply did, and no more consistently. The
-bench is 1,072,184 nodes, against 1,078,861 at 1 ply. The games decide.
+bench is 1,072,184 nodes, against 1,078,861 at 1 ply. **It passed too**, by about **+9 Elo**
+against 1 ply (see "What it's worth"), so `lmr_cut_node` is 2. Together the two steps are
+worth about 20 Elo in self-play, more than Stockfish's estimate for the whole technique. Nothing larger
+than 2 has been tried.
 
 ## What it saves
 
@@ -546,6 +549,7 @@ that it is small, about **+5 Elo**, and it took over 14,000 of them to say so.
 | Double extensions at a margin of 100 vs `main` (50), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−7.3 ± 8.0 Elo** over 3,368 games (+747 −818 =1803): failed (LLR −2.95); the margin stays at 50 |
 | Double extensions at a margin of 70 vs `main` (50), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−20.5 ± 12.2 Elo** over 1,407 games (+278 −361 =768): failed (LLR −2.97); the margin stays at 50 |
 | Larger reductions at expected cut nodes (1 ply more) vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+11.6 ± 7.7 Elo** over 3,687 games (+925 −802 =1960): passed (LLR 2.97); on by default |
+| Cut-node reductions of 2 plies vs `main` (1), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+8.7 ± 6.4 Elo** over 5,803 games (+1551 −1405 =2847): passed (LLR 2.95); `lmr_cut_node` is 2 |
 
 ## Further reading
 

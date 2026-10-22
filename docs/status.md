@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-22, 06:37 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-22, 11:25 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -53,7 +53,7 @@ so each level blunders as often as people rated 600 to 2500 on Lichess rapid do,
 Lichess's own games by the new `mistakes` tool; `UCI_Elo` 600–2500 is on that scale and the CCRL
 ratings no longer hold; full strength unchanged (Carlos, cjus/chessgui#113; #151).
 2026-10-22: the v1.0 robustness run clean, 10,000 games with no time losses, illegal moves or
-failures, #146; cut-node reductions of 2 plies running on the M3, #155.*
+failures, #146; cut-node reductions of 2 plies instead of 1 merged, +8.7 ± 6.4, #155.*
 
 ## Stages
 
@@ -118,16 +118,16 @@ failures, #146; cut-node reductions of 2 plies running on the M3, #155.*
 | M5: double extensions at a margin of 70 instead of 50 (chapter 14.1) | #138 | 1136500 (1054909 with the margin at 70) | Merged as a record, the margin back at 50: −20.5 ± 12.2, 1,407 games, [0, 5] failed (M3 Max) |
 | M5: history pruning: quiet moves with a bad history skipped near the leaves (chapter 13.1) | #140 | 1136500 (1022919 with history pruning on) | Merged, off by default: −5.3 ± 7.1, 4,548 games, [0, 5] failed (M3 Max) |
 | M5: larger reductions at expected cut nodes (chapter 14.1) | #145 | 1078861 | Merged: +11.6 ± 7.7, 3,687 games, [0, 5] passed (M3 Max) |
-| M5: cut-node reductions of 2 plies instead of 1, as in Stockfish (chapter 14.1) | #155, `claude/cut-node-2` | 1072184 | Draft, its SPRT running on the M3 Max: [0, 5] at 8+0.08 |
+| M5: cut-node reductions of 2 plies instead of 1, as in Stockfish (chapter 14.1) | #155 | 1072184 | Merged: +8.7 ± 6.4, 5,803 games, [0, 5] passed (M3 Max) |
 
-**Running now: #155** (cut-node reductions of 2 plies instead of 1; chapter 14.1), started on the
-M3 on 2026-10-22 at about 06:35 MDT. A clear result should take 1–3 hours, a small difference
-5–8. A new session should restart the watcher, `scripts/watch-sprt.sh 155`, or just read #155's
-comments if the result is already there. Then rebase #155 onto `main` (in `docs/status.md` take
-`main`'s side and edit it), record the result in chapter 14.1, the search module docs, the
-parameter's comment, the ledger and this file, and merge. If it fails, set `lmr_cut_node` back
-to 1 and merge as a record. v1.0's last gate is still the GUI matrix (#37), on Carlos's Mac;
-if #155 passes, it merges before the tag.
+**Nothing is running on the M3.** v1.0's last gate is the GUI matrix (#37), on Carlos's Mac.
+Once it is recorded, the version PR (#154) merges and Carlos tags `v1.0.0`.
+
+The SPRT of cut-node reductions of 2 plies instead of 1 (#155) finished on 2026-10-22 at 11:16
+MDT. It started at about 06:35 and passed in 5,803 games, about 4 hours 40 minutes: **+8.7 ±
+6.4** against 1 ply, with no time losses, illegal moves or failures. `lmr_cut_node` is 2, and
+the bench is 1,072,184. The robustness run (#146) played `main` before this change, at 1 ply;
+it changes one search parameter and nothing in time handling.
 
 The v1.0 robustness run (#146) finished on 2026-10-22 at 06:17 MDT, about 10 hours after it
 started: **clean**. `main` at `9cff7fc` played itself 6,000 games at 1+0.01, 3,000 at 10+0.1 and
@@ -394,7 +394,8 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    11,400 games, about 9 hours); on 2026-10-19, correction history (#112, +28.0 ± 13.0, 1,308
    games, about 70 minutes); on 2026-10-20, double extensions at a margin of 50 (#125, +13.0 ±
    8.3, 3,167 games, about 2 hours 30 minutes); on 2026-10-21, larger reductions at expected cut
-   nodes (#145, +11.6 ± 7.7, 3,687 games, about 3 hours). Failed, so not adopted: `singular_margin` 4 (#84, −1.8 ± 5.3
+   nodes (#145, +11.6 ± 7.7, 3,687 games, about 3 hours); on 2026-10-22, 2 plies of them
+   instead of 1 (#155, +8.7 ± 6.4, 5,803 games, about 4 hours 40 minutes). Failed, so not adopted: `singular_margin` 4 (#84, −1.8 ± 5.3
    against 3, 7,476 games, about 6 hours) and transposition table buckets (#86, −8.8 ± 8.6,
    2,685 games, about 2 hours; off by default) and, on 2026-10-19, capture history (#115,
    −19.2 ± 11.9, 1,561 games, about 75 minutes; off by default) and ProbCut (#117, −10.2 ±
@@ -418,9 +419,9 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    games; about 255 games an hour on the M3, 10 hours).
 
    Next, in a rough order of value:
-   - **Mostly failures since correction history** (#112, 2026-10-19): of the twelve tries
+   - **Mostly failures since correction history** (#112, 2026-10-19): of the thirteen tries
      after it, only double extensions at 50 (#125) and larger reductions at expected cut nodes
-     (#145) passed. Failed: capture history three times
+     (#145, then 2 plies of them, #155) passed. Failed: capture history three times
      (#115, −19.2; #129 in Stockfish's form, −6.8; #134 in the main search only, −2.9),
      ProbCut (#117, −10.2), correction history's piece tables averaged with the pawn table
      (#119, −20.7) and added to it (#121, −0.4 over 11,433 games), `singular_tt_depth_margin`
@@ -430,8 +431,9 @@ Run the full test suite on every commit you replay, not only at the tip: each be
      candidates below.
    - **New techniques**: history pruning failed (#140, −5.3 ± 7.1; chapter 13.1 lists other
      settings). Larger reductions at expected cut nodes passed (#145, +11.6 ± 7.7, against
-     Stockfish's own estimate of about 3 Elo for its version). Next for them: 2 plies, as in
-     Stockfish, or a smaller reduction at expected all-nodes (chapter 14.1).
+     Stockfish's own estimate of about 3 Elo for its version), and 2 plies, as in Stockfish,
+     added +8.7 ± 6.4 (#155). Next for them: a smaller reduction at expected all-nodes
+     (chapter 14.1).
    - **Tuning singular extensions, continued**: depth 6 passed (#78) and depth 4 too (#80),
      which is about where Stockfish starts; `singular_margin` 3 passed too (#82), and 4
      failed (#84); `singular_tt_depth_margin` 4 failed against 3 (#123, −7.4 ± 8.0). That
