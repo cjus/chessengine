@@ -251,7 +251,8 @@ whole position and every option, so cb2026 can one day be one node of a distribu
 `crates/cnp` (`cb2026-cnp`) answers it. A search has the limits UCI's `go` has, plus a level,
 MultiPV, root moves, technique switches (the shell's, by the same names), a deterministic mode
 and progress reports. `engine/techniques` and `engine/levels` list the switches and the measured
-levels. Every capability is offered except a root score window. Every conformance session in the
+levels, and `engine/evaluate` gives a position's evaluation term by term, as the shell's `eval`
+does, so Solrac's chat can say why cb2026 likes a position (cjus/chessgui#145). Every capability is offered except a root score window. Every conformance session in the
 protocol's repository runs against the real binary in `cargo test` (`crates/cli/tests/cnp.rs`).
 
 ### Lichess bot (must)
