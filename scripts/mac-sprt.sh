@@ -37,12 +37,16 @@ cd "$ROOT"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/cb2026-sprt.XXXXXX")"
 PROGRESS_PID=""
 cleanup() {
+  farm_resume
   [[ -n "$PROGRESS_PID" ]] && kill "$PROGRESS_PID" 2>/dev/null || true
   git worktree remove --force "$WORK/new" 2>/dev/null || true
   git worktree remove --force "$WORK/base" 2>/dev/null || true
   rm -rf "$WORK"
 }
 trap cleanup EXIT
+# No pnxfarm build shares the Mac during the run (scripts/pnxfarm-pause.sh).
+source "$(dirname "${BASH_SOURCE[0]}")/pnxfarm-pause.sh"
+farm_pause "SPRT of PR #$PR"
 
 echo "Fetching main and PR #$PR..."
 git fetch -q origin main "pull/$PR/head:refs/remotes/origin/sprt-pr-$PR"

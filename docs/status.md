@@ -270,6 +270,11 @@ The open [`needs-carlos` issues](https://github.com/cjus/chessengine/issues?q=is
 
 - #37: GUI compatibility matrix; Lichess bot account. The last v1.0 gate.
 - #24 (M1 GUI games).
+- PNXStudios/pnxfarm#15: setting up the build farm, with the coordinator on the M1 and the M3
+  as its only worker for now (Carlos will buy a second Mac later). This repository's PR that
+  uses the farm (#157, branch `claude/pnxfarm`: `pnxfarm.toml`, the farm's lines in
+  `CLAUDE.md`, and the long-run scripts pausing the M3's worker) stays a draft until then,
+  since its `CLAUDE.md` lines send sessions to the farm.
 
 On hold: #61, running long tests on AWS Batch (closed 2026-10-12; reopen it if the M3 can't keep
 up with the test queue).

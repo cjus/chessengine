@@ -62,6 +62,35 @@ writes the scripts (`scripts/mac-sprt.sh <PR>`, `scripts/mac-gauntlet.sh`), whic
 the PR as a comment; for GUI checks, hand Carlos the exact steps, the expected result and what to
 paste back.
 
+## Building on the farm (pnxfarm)
+
+Release builds of pushed commits run on the farm's Macs, not this one, through pnxfarm
+(PNXStudios/pnxfarm; its guide for repositories is `docs/using-pnxfarm.md` there). For now the
+farm has one worker, the M3. Use it to get a branch's binaries instead of
+`cargo build --release` here. The recipe is `pnxfarm.toml`.
+
+- Push the commit, then run `pnxfarm build --wait` as a background command. The last line it
+  prints is the job, as JSON; when it prints none, the reason is the last line of its error
+  output.
+- The binaries (`cb2026` and the tools) land in `target/pnxfarm/release/`, never
+  `target/release/`, each with a `<binary>.json` saying which commit and Mac built it.
+- Its exit code says what to do next: 0, built and installed; 1, the build failed, so fix the
+  errors it printed; 2, the farm couldn't run it (unreachable, or no worker will take it soon:
+  every Mac is paused, say), so say so and build here only if asked; 3, timed out, and
+  `pnxfarm wait <job>` carries on; 4, refused, so do what the message says.
+- `pnxfarm status`, `pnxfarm log <job>` and `pnxfarm workers` show what the farm is doing.
+- **The `Bench:` line of a commit not yet made** still needs a build here, until pnxfarm builds
+  uncommitted changes (its v2). For a pushed commit, `target/pnxfarm/release/cb2026 bench`
+  gives the same number.
+- The long-run scripts (`scripts/mac-*.sh`) pause the M3's worker for their run, after the build
+  it has in hand, and resume it when they end (`scripts/pnxfarm-pause.sh`). While the M3 is the
+  only worker, a build asked for during such a run waits for it: `pnxfarm build --wait` exits 2
+  after two minutes, saying the M3 is paused, and the job stays queued. Say so;
+  `pnxfarm wait <job>` installs it once the run ends.
+- **After the M3 restarts,** its worker is offline until Carlos logs in to it (FileVault rules
+  out automatic login), and `pnxfarm build --wait` exits 2 saying no workers are online. Tell
+  him.
+
 ## Items for Carlos go in GitHub issues
 
 Anything Carlos needs to do, decide or answer (a setting, a check on the Mac, a scope question)
