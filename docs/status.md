@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-21, 20:26 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-22, 06:28 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -51,7 +51,9 @@ robustness run running on the M3, #146; the strength levels on a human scale: ma
 level's moves now come from a person's horizon (one or two plies, no quiescence search), fitted
 so each level blunders as often as people rated 600 to 2500 on Lichess rapid do, counted in
 Lichess's own games by the new `mistakes` tool; `UCI_Elo` 600–2500 is on that scale and the CCRL
-ratings no longer hold; full strength unchanged (Carlos, cjus/chessgui#113; #151).*
+ratings no longer hold; full strength unchanged (Carlos, cjus/chessgui#113; #151).
+2026-10-22: the v1.0 robustness run clean, 10,000 games with no time losses, illegal moves or
+failures, #146.*
 
 ## Stages
 
@@ -117,14 +119,12 @@ ratings no longer hold; full strength unchanged (Carlos, cjus/chessgui#113; #151
 | M5: history pruning: quiet moves with a bad history skipped near the leaves (chapter 13.1) | #140 | 1136500 (1022919 with history pruning on) | Merged, off by default: −5.3 ± 7.1, 4,548 games, [0, 5] failed (M3 Max) |
 | M5: larger reductions at expected cut nodes (chapter 14.1) | #145 | 1078861 | Merged: +11.6 ± 7.7, 3,687 games, [0, 5] passed (M3 Max) |
 
-**Running now: the v1.0 robustness run (#146)**, started on the M3 on 2026-10-21 at about 20:25
-MDT, on `main` at `9cff7fc`: cb2026 against itself, 6,000 games at 1+0.01, 3,000 at 10+0.1 and
-1,000 at 40/60, about 10–11 hours. A progress comment on #146 (`<!-- robustness-progress -->`)
-gains a row after each time control; the result is its own comment, `<!-- robustness -->`. A new
-session should look there. Then record the result in `docs/PRD.md` "Milestones",
-`docs/elo-ledger.md` and this file. If it is clean and the GUI matrix (#37) is done, open the
-version PR (1.0.0, `docs/releasing.md`). If it isn't, the comment lists the first problems, and
-the games are in `target/robustness/` on the M3.
+**Nothing is running on the M3 now.** v1.0's last gate is the GUI matrix (#37), on Carlos's Mac.
+
+The v1.0 robustness run (#146) finished on 2026-10-22 at 06:17 MDT, about 10 hours after it
+started: **clean**. `main` at `9cff7fc` played itself 6,000 games at 1+0.01, 3,000 at 10+0.1 and
+1,000 at 40/60, with no time losses, illegal moves, failures or aborted games. `main` has changed
+since only in the weaker levels (#151); the bench is the same, 1,078,861.
 
 The SPRT of larger reductions at expected cut nodes (#145) finished on 2026-10-21 at 20:11 MDT.
 It started at about 17:15 and passed in 3,687 games, about 3 hours: **+11.6 ± 7.7**. They are on
@@ -253,16 +253,14 @@ passed; the rest wait on GUI checks, level calibration or the v1.0 work.
 | M2 Classical search | stages 8–14 | **Passed** 2026-10-18: stage 14 rated 2442 ± 11 by gauntlet at 8+0.08 (gate ~2200 CCRL), #36 |
 | M3 Evaluation | stages 15–16 | **Passed** 2026-10-18: stage 16 rated 2669 ± 10 by gauntlet at 8+0.08 (gate ≥2400 CCRL), #36 |
 | M4 Complete engine | stages 17–20 | Merged (#46–#55); levels calibrated at 40+0.4 on 2026-10-19, 629–2483 (#106); GUI matrix (#37) open |
-| M5 v1.0 | strength work, release | Started (the M5 branches above); release workflow merged (#40); `main` rated 2782 ± 11 by gauntlet on 2026-10-21 (#131; 2714 ± 10 on 2026-10-18, #36), above the gate (≥2400, goal 2600+); the robustness run is #146 (after #145), the GUI matrix #37 |
+| M5 v1.0 | strength work, release | Started (the M5 branches above); release workflow merged (#40); `main` rated 2782 ± 11 by gauntlet on 2026-10-21 (#131; 2714 ± 10 on 2026-10-18, #36), above the gate (≥2400, goal 2600+); the robustness run clean on 2026-10-22 (#146); the GUI matrix (#37) is the last gate |
 | M6 NNUE | stage 21 | Not started |
 
 ## Waiting on Carlos
 
 The open [`needs-carlos` issues](https://github.com/cjus/chessengine/issues?q=is%3Aopen+label%3Aneeds-carlos):
 
-- #146: the v1.0 robustness run on the M3 (`scripts/mac-robustness.sh`, about 10–11 hours),
-  running since 2026-10-21 at about 20:25 MDT.
-- #37: GUI compatibility matrix; Lichess bot account. Also a v1.0 gate.
+- #37: GUI compatibility matrix; Lichess bot account. The last v1.0 gate.
 - #24 (M1 GUI games).
 
 On hold: #61, running long tests on AWS Batch (closed 2026-10-12; reopen it if the M3 can't keep
@@ -450,11 +448,9 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    2) and a wider `rfp_margin`.
 4. The v1.0 release (`docs/releasing.md`), then stage 21 (NNUE). Carlos asked to move to v1.0
    on 2026-10-21, after the run of failed M5 tries. The steps:
-   - The gates: the gauntlet passed (2782 ± 11, #131). The robustness run (#146) comes once
-     #145 (cut-node reductions, the last M5 SPRT for now, passed) is recorded, so that it tests
-     the code that will be released: `main` from #145's merge on. `scripts/mac-robustness.sh <issue>` plays cb2026 against itself:
-     6,000 games at 1+0.01, 3,000 at 10+0.1 and 1,000 at 40/60, about 10–11 hours. The GUI
-     matrix is #37, Carlos's, in the GUIs on his Mac.
+   - The gates: the gauntlet passed (2782 ± 11, #131), and the robustness run was clean
+     (2026-10-22, #146: 10,000 games, `scripts/mac-robustness.sh`). The GUI matrix is #37,
+     Carlos's, in the GUIs on his Mac.
    - Then a version PR: `[workspace.package] version` 1.0.0 in `Cargo.toml`, with the ledger,
      the PRD's milestones and the book up to date. The book has a chapter for every stage from
      1 to 20; NNUE (stage 21) is still to come.

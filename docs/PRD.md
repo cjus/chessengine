@@ -670,6 +670,13 @@ this time the gauntlet found more than self-play, not a third of it. Over M5 so 
 ranged from 2689 (against Blunder 5.0.0, beaten 97.9% of the time) to 2818 (Zahak 3.0). cb2026
 had no time losses, illegal moves or failures; Stash 15.3 had one failure.
 
+The v1.0 robustness run was **clean** (2026-10-22, cjus/chessengine#146). `main` at `9cff7fc`
+played itself 10,000 times on the M3 Max, 9 games at a time with the default `Move Overhead`:
+6,000 games at 1+0.01, 3,000 at 10+0.1 and 1,000 at 40/60. None had a time loss, an illegal
+move, a failure or an aborted game. `main` has changed since only in the weaker levels
+(cjus/chessengine#151); full strength searches the same tree (the bench is unchanged). With the
+gauntlet passed, the GUI compatibility matrix (cjus/chessengine#37) is v1.0's last gate.
+
 M4's levels are calibrated (2026-10-19, cjus/chessengine#106): Skill Levels 0–19 rate **629 to
 2483** at 40+0.4 (± 23 to 55), and `UCI_Elo` maps onto those ratings
 (`crates/engine/src/levels.rs`, chapter 19). Every other level played 800 games against the
