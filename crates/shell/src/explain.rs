@@ -130,6 +130,11 @@ pub const SWITCHES: &[Switch] = &[
         flag: |e| &mut e.techniques.cut_node_reductions,
     },
     Switch {
+        name: "allnode",
+        description: "All-node reductions: late moves at expected all-nodes reduced less",
+        flag: |e| &mut e.techniques.all_node_reductions,
+    },
+    Switch {
         name: "lmp",
         description: "Late move pruning",
         flag: |e| &mut e.techniques.late_move_pruning,

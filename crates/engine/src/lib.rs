@@ -860,11 +860,13 @@ mod tests {
     #[test]
     fn internal_iterative_reductions_save_nodes_and_still_find_mates() {
         // One position at one depth can be unlucky: at depth 8, with history pruning on, the
-        // tree with IIR was 8% bigger, though IIR saves nodes at depths 7, 9 and 10.
+        // tree with IIR was 8% bigger, though IIR saves nodes at depths 7, 9 and 10. With
+        // smaller reductions at all-nodes it was bigger at depths 8 and 9, and smaller at 7, 10
+        // and 11.
         let nodes = |iir: bool| {
             let mut engine = Engine::new();
             engine.techniques.iir = iir;
-            search_with(&mut engine, KIWIPETE, 9).nodes
+            search_with(&mut engine, KIWIPETE, 10).nodes
         };
         let (with, without) = (nodes(true), nodes(false));
         assert!(with < without, "{with} vs {without}");

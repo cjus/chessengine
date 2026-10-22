@@ -174,6 +174,11 @@
 //! (cjus/chessengine#145), so it is on by default. 2 plies, as in Stockfish, then gained
 //! +8.7 ± 6.4 against 1 after 5,803 games (cjus/chessengine#155); see chapter 14.1.
 //!
+//! The other half of the guess: at an expected all-node every move has to fail low for its score
+//! to hold, so late move reductions are `lmr_all_node` (1) ply smaller there. Stockfish doesn't
+//! do this; the idea is cb2026's own, set by hand. All-nodes search every move, so it grows the
+//! trees by a fifth or more; it is being tested (cjus/chessengine#158).
+//!
 //! ## History pruning
 //!
 //! Late move pruning skips quiet moves by how late they come; **history pruning** skips them by
@@ -376,6 +381,8 @@ pub struct SearchParams {
     pub lmr_history_max: i32,
     /// Late move reductions are this many plies larger at an expected cut node.
     pub lmr_cut_node: i32,
+    /// Late move reductions are this many plies smaller at an expected all-node.
+    pub lmr_all_node: i32,
     /// Late move pruning applies up to this depth...
     pub lmp_max_depth: u32,
     /// ...once `lmp_base + depth²` quiet moves have been tried...
@@ -467,6 +474,8 @@ impl Default for SearchParams {
             // (GPL-3.0), gained +8.7 ± 6.4 against 1 (cjus/chessengine#155). Stockfish adds
             // them alongside reductions that cb2026 doesn't have. Not tuned further.
             lmr_cut_node: 2,
+            // Set by hand, not tuned, for its SPRT (cjus/chessengine#158).
+            lmr_all_node: 1,
             lmp_max_depth: 3,
             lmp_base: 3,
             // Doubling it when improving was part of both failed versions (#60, #63).
@@ -577,6 +586,8 @@ pub struct Techniques {
     pub history_lmr: bool,
     /// Reduce late moves more at expected cut nodes (needs LMR).
     pub cut_node_reductions: bool,
+    /// Reduce late moves less at expected all-nodes (needs LMR).
+    pub all_node_reductions: bool,
     /// Late move pruning: skip late quiet moves near the leaves.
     pub late_move_pruning: bool,
     /// History pruning: skip quiet moves with a bad history near the leaves (off by default).
@@ -655,6 +666,8 @@ impl Default for Techniques {
             // (cjus/chessengine#145), and 2 plies instead of 1 another +8.7 ± 6.4
             // (cjus/chessengine#155); see chapter 14.1.
             cut_node_reductions: true,
+            // On for its SPRT (cjus/chessengine#158); see chapter 14.1.
+            all_node_reductions: true,
             late_move_pruning: true,
             // Off by default: it measured weaker, −5.3 ± 7.1 Elo after 4,548 games at 8+0.08
             // (cjus/chessengine#140); see chapter 13.1.
@@ -702,6 +715,7 @@ impl Techniques {
             lmr: false,
             history_lmr: false,
             cut_node_reductions: false,
+            all_node_reductions: false,
             late_move_pruning: false,
             history_pruning: false,
             reverse_futility: false,
@@ -1509,6 +1523,14 @@ impl<'a> Searcher<'a> {
                     reduction += p.lmr_cut_node;
                 }
                 // ANCHOR_END: cut_node_reduction
+                // ANCHOR: all_node_reduction
+                // Reduce less at an expected all-node: every move has to fail low for its
+                // score to hold, so a late move that is wrongly reduced into failing low
+                // makes the parent's move a refutation it isn't.
+                if self.techniques.all_node_reductions && !pv_node && !cut_node {
+                    reduction -= p.lmr_all_node;
+                }
+                // ANCHOR_END: all_node_reduction
                 // Reduce a move with a good history less: it has caused cutoffs elsewhere. And
                 // one with a bad history more.
                 if self.techniques.history_lmr {
@@ -2440,6 +2462,21 @@ mod tests {
         let nodes = |cut_node_reductions, lmr| {
             let techniques = Techniques {
                 cut_node_reductions,
+                lmr,
+                ..Techniques::default()
+            };
+            search(fen, 7, techniques).nodes
+        };
+        assert_ne!(nodes(true, true), nodes(false, true));
+        assert_eq!(nodes(true, false), nodes(false, false));
+    }
+
+    #[test]
+    fn all_node_reductions_change_the_tree_only_through_late_move_reductions() {
+        let fen = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
+        let nodes = |all_node_reductions, lmr| {
+            let techniques = Techniques {
+                all_node_reductions,
                 lmr,
                 ..Techniques::default()
             };
