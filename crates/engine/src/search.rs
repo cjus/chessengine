@@ -170,7 +170,8 @@
 //! of the expected cut nodes that reached their moves failed high, against 42% of the expected
 //! all-nodes. Stockfish (GPL-3.0) passes the same flag down and adds 2 plies at cut nodes,
 //! alongside reductions cb2026 doesn't have; the code here is cb2026's own, and 1 was set by
-//! hand, not tuned. It is on for its test (cjus/chessengine#145); see chapter 14.1.
+//! hand, not tuned. It passed: +11.6 ± 7.7 Elo after 3,687 games at 8+0.08
+//! (cjus/chessengine#145), so it is on by default; see chapter 14.1.
 //!
 //! ## History pruning
 //!
@@ -648,7 +649,8 @@ impl Default for Techniques {
             lmr: true,
             // The second version passed its SPRT (cjus/chessengine#74); the first had no verdict.
             history_lmr: true,
-            // On for its test (cjus/chessengine#145); see chapter 14.1.
+            // Passed its SPRT: +11.6 ± 7.7 Elo after 3,687 games at 8+0.08
+            // (cjus/chessengine#145); see chapter 14.1.
             cut_node_reductions: true,
             late_move_pruning: true,
             // Off by default: it measured weaker, −5.3 ± 7.1 Elo after 4,548 games at 8+0.08

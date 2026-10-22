@@ -418,8 +418,8 @@ off before their moves, by the null move or reverse futility pruning, aren't cou
 
 Stockfish passes the same flag and adds 2 plies at cut nodes, alongside reductions that cb2026
 doesn't have and that take plies off again elsewhere. cb2026 adds 1, set by hand, not tuned.
-The code is cb2026's own. It is on for its test (cjus/chessengine#145); `set cutnode off`
-switches it off, and gives `main`'s search exactly.
+The code is cb2026's own. `set cutnode off` switches it off, and gives the search without it
+exactly.
 
 The bench is 5.1% smaller with it: 1,078,861 nodes instead of 1,136,500. The trees don't
 shrink consistently, though. Over the six positions of chapters 10 to 14 they are 6% and 10%
@@ -428,7 +428,11 @@ against 447,273, 703,714 and 885,651). Over the game's 58 positions at depth 10 
 bigger in all, and smaller in 27 of them. With 2 plies, as in Stockfish, the six positions
 give 437,022, 657,366 and 939,364, and the game 0.4% more nodes. A reduction that fails high
 is searched again at full depth, so reducing more doesn't always mean searching less.
-Stockfish's own estimate for its version is about 3 Elo.
+
+**It passed**, by about **+12 Elo** (see "What it's worth"), so it is on by default. Stockfish's
+own estimate for its version is about 3 Elo, in an engine where many other reductions overlap
+with it; in cb2026 it had more to add. Untested so far: 2 plies, as in Stockfish, and a
+smaller reduction at an expected all-node, the other half of the same guess.
 
 ## What it saves
 
@@ -537,6 +541,7 @@ that it is small, about **+5 Elo**, and it took over 14,000 of them to say so.
 | Double extensions (margin 50, at most 6 a line) vs `main` without them (with correction history), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+13.0 ± 8.3 Elo** over 3,167 games (+798 −680 =1689): passed (LLR 2.94); on by default |
 | Double extensions at a margin of 100 vs `main` (50), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−7.3 ± 8.0 Elo** over 3,368 games (+747 −818 =1803): failed (LLR −2.95); the margin stays at 50 |
 | Double extensions at a margin of 70 vs `main` (50), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−20.5 ± 12.2 Elo** over 1,407 games (+278 −361 =768): failed (LLR −2.97); the margin stays at 50 |
+| Larger reductions at expected cut nodes (1 ply more) vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+11.6 ± 7.7 Elo** over 3,687 games (+925 −802 =1960): passed (LLR 2.97); on by default |
 
 ## Further reading
 
