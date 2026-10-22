@@ -127,8 +127,8 @@ Every GUI drives engines a little differently, and the differences are where eng
 GUIs send Windows line endings, change options mid-search, skip `ucinewgame`, give a few
 milliseconds on the clock, or send `stop` a microsecond after `go`. Claude, who writes most of
 this code, can't operate a GUI. So `crates/cli/tests/conformance.rs` starts the real `cb2026`
-binary, plays scripted sessions with exactly those habits, and checks every answer. It runs in
-CI on every change. The manual checklist in `docs/gui-compat.md` covers what a script can't:
+binary, plays scripted sessions with exactly those habits, and checks every answer. It runs
+with the other tests on every change. The manual checklist in `docs/gui-compat.md` covers what a script can't:
 how the engine looks and behaves inside each GUI.
 
 ## Playing on Lichess

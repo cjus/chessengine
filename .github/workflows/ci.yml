@@ -1,26 +1,23 @@
-# Checks pull requests that are ready for review, and main every night. Linux only, to keep
-# private-repo Actions minutes low; macOS and Windows run in cross-platform.yml.
+# Checks main every night, and any branch on demand (`gh workflow run ci.yml --ref <branch>`).
+# Linux only, to keep private-repo Actions minutes low; macOS and Windows run in
+# cross-platform.yml.
 #
-# Actions minutes ran out in October 2026 (cjus/chessgui#73), so the workflow spends as few as
-# it can:
+# Actions minutes ran out in October 2026 (cjus/chessgui#73), so since 2026-10-22 pull requests
+# and merges aren't checked here at all: a PR is checked before it merges by `scripts/check.sh`,
+# on the machine that made it, and `main`'s ruleset no longer requires a check. What is left
+# spends as few minutes as it can:
 #
-# - One job, `CI`, the check `main`'s ruleset requires. GitHub bills each job rounded up to a
-#   whole minute, so three jobs cost five minutes for two and a half minutes of work.
-# - Draft pull requests aren't checked. A PR is checked when it is marked ready, and again on
-#   each push after that.
-# - A pull request that changes only documentation (`docs/`, `*.md` outside the book) skips
-#   everything and passes in seconds. No Rust code includes a Markdown file. The book includes
-#   code from the crates, so a code change builds the book too.
-# - No run after a merge: the PR's run already checked the merge result. Instead, main is
-#   checked every night. That run builds only if main changed since the last good nightly;
-#   otherwise it only looks for new security advisories, which can appear without a change.
-# - Only main saves the build cache (the nightly run, or a run started by hand). Pull requests
-#   reuse it, which keeps the caches under GitHub's 10 GB limit.
+# - The nightly run checks only if main changed since the last good run; otherwise every step
+#   is skipped and the run costs one short job. Security advisories are checked with the build,
+#   so a quiet week has none checked.
+# - One job, `CI`. GitHub bills each job rounded up to a whole minute, so three jobs cost five
+#   minutes for two and a half minutes of work.
+# - Only main saves the build cache, which keeps the caches under GitHub's 10 GB limit.
+#
+# The steps are the same as `scripts/check.sh`'s: change both together.
 name: CI
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
   schedule:
     # 05:17 UTC, off the hour, when Actions is least busy.
     - cron: "17 5 * * *"
@@ -32,7 +29,7 @@ concurrency:
 
 permissions:
   contents: read
-  # The nightly run asks which commit the last good nightly run checked.
+  # The nightly run asks which commit the last good run checked.
   actions: read
 
 env:
@@ -41,62 +38,30 @@ env:
 jobs:
   check:
     name: CI
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          # A pull request's commit is the merge of the PR into main, so its first parent is
-          # main: two commits are enough to see what the PR changes.
-          fetch-depth: 2
-      - name: Decide what to check
+      - name: Decide whether to check
         id: scope
         env:
           EVENT: ${{ github.event_name }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          case "$EVENT" in
-            pull_request)
-              # Through a file, not a pipe: with `pipefail`, `grep -q` stopping early could
-              # fail `git diff` and pass for "documentation only".
-              git diff --name-only HEAD^1 HEAD > "$RUNNER_TEMP/changed"
-              cat "$RUNNER_TEMP/changed"
-              # The book's files are its own: they need mdbook, not the build.
-              grep -vE '^book/' "$RUNNER_TEMP/changed" > "$RUNNER_TEMP/outside-book" || true
-              if grep -qvE '^docs/|\.md$' "$RUNNER_TEMP/outside-book"; then
-                build=true
-              else
-                build=false
-              fi
-              if [ "$build" = true ] || grep -qE '^book/' "$RUNNER_TEMP/changed"; then
-                book=true
-              else
-                book=false
-              fi
-              deny=$build
-              ;;
-            schedule)
-              last=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --branch main \
-                --event schedule --status success --limit 1 --json headSha --jq '.[0].headSha // ""')
-              if [ "$last" = "$GITHUB_SHA" ]; then build=false; else build=true; fi
-              book=$build
-              deny=true
-              ;;
-            *)
-              build=true
-              book=true
-              deny=true
-              ;;
-          esac
-          echo "build=$build" >> "$GITHUB_OUTPUT"
-          echo "book=$book" >> "$GITHUB_OUTPUT"
-          echo "deny=$deny" >> "$GITHUB_OUTPUT"
-          echo "Build and test: $build. Book: $book. Licences and advisories: $deny."
+          check=true
+          if [ "$EVENT" = schedule ]; then
+            # Runs started by hand on main count too: they check everything.
+            last=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --branch main \
+              --status success --limit 1 --json headSha --jq '.[0].headSha // ""')
+            if [ "$last" = "$GITHUB_SHA" ]; then check=false; fi
+          fi
+          echo "check=$check" >> "$GITHUB_OUTPUT"
+          echo "Check: $check."
+      - uses: actions/checkout@v4
+        if: steps.scope.outputs.check == 'true'
       # The Chess Node Protocol's crates (`cnp`, `cnp-conformance`) live in a private repository:
       # fetch them over SSH with a read-only deploy key (cjus/chessengine#143). The key's comment is
       # the repository's address, which the agent uses to pick it for that repository.
       - name: Check the protocol's deploy key is set
-        if: steps.scope.outputs.build == 'true' || steps.scope.outputs.deny == 'true'
+        if: steps.scope.outputs.check == 'true'
         env:
           KEY: ${{ secrets.CNP_DEPLOY_KEY }}
         run: |
@@ -106,24 +71,24 @@ jobs:
           fi
         shell: bash
       - uses: webfactory/ssh-agent@v0.9.1
-        if: steps.scope.outputs.build == 'true' || steps.scope.outputs.deny == 'true'
+        if: steps.scope.outputs.check == 'true'
         with:
           ssh-private-key: ${{ secrets.CNP_DEPLOY_KEY }}
       - name: Install the toolchain from rust-toolchain.toml
-        if: steps.scope.outputs.build == 'true' || steps.scope.outputs.deny == 'true'
+        if: steps.scope.outputs.check == 'true'
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
-        if: steps.scope.outputs.build == 'true'
+        if: steps.scope.outputs.check == 'true'
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Format
-        if: steps.scope.outputs.build == 'true'
+        if: steps.scope.outputs.check == 'true'
         run: cargo fmt --all --check
       - name: Clippy
-        if: steps.scope.outputs.build == 'true'
+        if: steps.scope.outputs.check == 'true'
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Cache the test tablebases
-        if: steps.scope.outputs.build == 'true'
+        if: steps.scope.outputs.check == 'true'
         uses: actions/cache@v4
         with:
           path: syzygy-tables
@@ -131,33 +96,33 @@ jobs:
       # The tablebase tests run when this succeeds; if the download site is down they are
       # skipped (with a warning) rather than blocking every PR.
       - name: Download the test tablebases
-        if: steps.scope.outputs.build == 'true'
+        if: steps.scope.outputs.check == 'true'
         continue-on-error: true
         run: |
           scripts/download-syzygy.sh syzygy-tables test
           echo "CB2026_SYZYGY_PATH=$PWD/syzygy-tables" >> "$GITHUB_ENV"
       - name: Tests
-        if: steps.scope.outputs.build == 'true'
+        if: steps.scope.outputs.check == 'true'
         run: cargo test --workspace --locked
       - name: Perft suites (release build, every depth)
-        if: steps.scope.outputs.build == 'true'
+        if: steps.scope.outputs.check == 'true'
         run: cargo run --release --locked -p cb2026-tools --bin perft-suite
       - name: Docs
-        if: steps.scope.outputs.build == 'true'
+        if: steps.scope.outputs.check == 'true'
         run: cargo doc --workspace --no-deps --document-private-items --locked
         env:
           RUSTDOCFLAGS: -D warnings
       - uses: taiki-e/install-action@v2
-        if: steps.scope.outputs.deny == 'true'
+        if: steps.scope.outputs.check == 'true'
         with:
           tool: cargo-deny
       - name: Check licences, advisories, bans and sources
-        if: steps.scope.outputs.deny == 'true'
+        if: steps.scope.outputs.check == 'true'
         run: cargo deny check
       - uses: taiki-e/install-action@v2
-        if: steps.scope.outputs.book == 'true'
+        if: steps.scope.outputs.check == 'true'
         with:
           tool: mdbook
       - name: Build the book
-        if: steps.scope.outputs.book == 'true'
+        if: steps.scope.outputs.check == 'true'
         run: mdbook build book
