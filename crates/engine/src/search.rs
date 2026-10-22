@@ -164,14 +164,15 @@
 //! an expected cut node is an expected all-node, and the other way round. A late move's reduced
 //! search counts as a cut node whatever its parent, and a node with the full window is never
 //! one. At an expected cut node the late moves seldom matter, so late move reductions are
-//! `lmr_cut_node` (1) plies larger there.
+//! `lmr_cut_node` (2) plies larger there.
 //!
 //! The prediction is good. Over a game's positions, searched to depth 10 one after another, 88%
 //! of the expected cut nodes that reached their moves failed high, against 42% of the expected
 //! all-nodes. Stockfish (GPL-3.0) passes the same flag down and adds 2 plies at cut nodes,
 //! alongside reductions cb2026 doesn't have; the code here is cb2026's own, and 1 was set by
 //! hand, not tuned. It passed: +11.6 ± 7.7 Elo after 3,687 games at 8+0.08
-//! (cjus/chessengine#145), so it is on by default; see chapter 14.1.
+//! (cjus/chessengine#145), so it is on by default. 2 plies, as in Stockfish, then gained
+//! +8.7 ± 6.4 against 1 after 5,803 games (cjus/chessengine#155); see chapter 14.1.
 //!
 //! ## History pruning
 //!
@@ -462,9 +463,10 @@ impl Default for SearchParams {
             // version used 256 and history alone, and changed about one in ten.
             lmr_history_divisor: 128,
             lmr_history_max: 2,
-            // Stockfish (GPL-3.0) adds 2, alongside reductions that cb2026 doesn't have; set by
-            // hand, not tuned.
-            lmr_cut_node: 1,
+            // 1 gained +11.6 ± 7.7 against none (cjus/chessengine#145); 2, as in Stockfish
+            // (GPL-3.0), gained +8.7 ± 6.4 against 1 (cjus/chessengine#155). Stockfish adds
+            // them alongside reductions that cb2026 doesn't have. Not tuned further.
+            lmr_cut_node: 2,
             lmp_max_depth: 3,
             lmp_base: 3,
             // Doubling it when improving was part of both failed versions (#60, #63).
@@ -650,7 +652,8 @@ impl Default for Techniques {
             // The second version passed its SPRT (cjus/chessengine#74); the first had no verdict.
             history_lmr: true,
             // Passed its SPRT: +11.6 ± 7.7 Elo after 3,687 games at 8+0.08
-            // (cjus/chessengine#145); see chapter 14.1.
+            // (cjus/chessengine#145), and 2 plies instead of 1 another +8.7 ± 6.4
+            // (cjus/chessengine#155); see chapter 14.1.
             cut_node_reductions: true,
             late_move_pruning: true,
             // Off by default: it measured weaker, −5.3 ± 7.1 Elo after 4,548 games at 8+0.08
