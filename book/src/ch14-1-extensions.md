@@ -458,8 +458,8 @@ ply has had many fail highs. The idea is cb2026's own, and the ply was set by ha
 on|off` switches it, and off gives the search without it exactly.
 
 It costs a lot. A cut node usually stops after its first move or two, but an all-node searches
-all of its moves, so it has many more late moves to reduce. The bench grows by a fifth, from 1,072,184 to 1,284,421 nodes. The six positions grow
-by 30%, 25% and 42% at depths 9 to 11 (568,646, 819,202 and 1,333,493 nodes against 437,022,
+all of its moves, so it has many more late moves to reduce. The bench grows by a fifth, from
+1,072,184 to 1,284,421 nodes. The six positions grow by 30%, 25% and 42% at depths 9 to 11 (568,646, 819,202 and 1,333,493 nodes against 437,022,
 657,366 and 939,364), and the game's 58 positions by 22.6% at depth 10, smaller in only 19 of
 them. At a fixed time that is most of a ply, so the better searches at all-nodes have to be
 worth more than a ply of depth.
@@ -467,6 +467,52 @@ worth more than a ply of depth.
 **It failed**, by about **−9 Elo** (see "What it's worth"), so it is off by default. Untested: the
 smaller reduction only at greater depths, or only for moves with a good history, either of
 which would cost fewer nodes.
+
+## Reductions where the principal variation was
+
+The principal variation changes as the search deepens. A move that was best at depth 9 may not
+be at depth 10, and the positions along the old line are then searched with null windows like
+any others. They are still more likely than most to matter again. Stockfish (GPL-3.0) remembers
+them: each transposition table entry has a bit that says whether the position is or has been on
+the principal variation (its `ttPv`), and late move reductions are smaller there. cb2026 does
+the same, with code of its own (cjus/chessengine#160).
+
+A node has the flag if it is a PV node now, or if the table says it was one:
+
+```rust,ignore
+{{#include ../../crates/engine/src/search.rs:tt_pv}}
+```
+
+The flag goes into the table with every result stored for the position, so it lasts from one
+iteration to the next and from one move to the next. One more rule, also Stockfish's, spreads
+it. A node that fails low under a flagged parent, above depth `tt_pv_fail_low_depth` (3), takes
+the flag too: every move here failed, so the opponent's last move was probably good, and this
+position may be on the next principal variation.
+
+```rust,ignore
+{{#include ../../crates/engine/src/search.rs:tt_pv_fail_low}}
+```
+
+At a flagged node that isn't a PV node now, late moves are reduced `lmr_tt_pv` (1) ply less. A
+PV node already has a ply off.
+
+```rust,ignore
+{{#include ../../crates/engine/src/search.rs:tt_pv_reduction}}
+```
+
+Stockfish 17 takes 1 to 3 plies off, depending on the hash entry's score and depth, at PV nodes
+too, and its own comment rates it about 7 Elo. cb2026 takes 1, set by hand. `set ttpv off`
+switches it off, and gives the search without it exactly.
+
+The flag is rare. Over the game's positions at depth 10, about 2% of the non-PV nodes from depth
+3 had it. But they are near the principal variation, where the subtrees are large, so it costs
+nodes:
+- The bench grows by 11.8%, from 1,072,184 to 1,198,340 nodes.
+- The six positions of chapters 10 to 14 grow by 3%, 19% and 12% at depths 9 to 11 (450,688,
+  784,751 and 1,054,117 nodes, against 437,022, 657,366 and 939,364).
+- The game's 58 positions at depth 10 grow by 8.0% in all, and 28 of them get smaller.
+
+The games decide.
 
 ## What it saves
 

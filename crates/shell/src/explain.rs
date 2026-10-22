@@ -135,6 +135,11 @@ pub const SWITCHES: &[Switch] = &[
         flag: |e| &mut e.techniques.all_node_reductions,
     },
     Switch {
+        name: "ttpv",
+        description: "TT PV: late moves reduced less at nodes that are or have been on the principal variation",
+        flag: |e| &mut e.techniques.tt_pv,
+    },
+    Switch {
         name: "lmp",
         description: "Late move pruning",
         flag: |e| &mut e.techniques.late_move_pruning,

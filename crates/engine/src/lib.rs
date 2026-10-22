@@ -858,6 +858,20 @@ mod tests {
     }
 
     #[test]
+    fn the_tt_pv_flag_changes_the_tree_only_through_late_move_reductions() {
+        // It needs iterative deepening: most nodes it marks were on an earlier iteration's
+        // principal variation.
+        let nodes = |tt_pv: bool, lmr: bool| {
+            let mut engine = Engine::new();
+            engine.techniques.tt_pv = tt_pv;
+            engine.techniques.lmr = lmr;
+            search_with(&mut engine, KIWIPETE, 7).nodes
+        };
+        assert_ne!(nodes(true, true), nodes(false, true));
+        assert_eq!(nodes(true, false), nodes(false, false));
+    }
+
+    #[test]
     fn internal_iterative_reductions_save_nodes_and_still_find_mates() {
         // One position at one depth can be unlucky: at depth 8, with history pruning on, the
         // tree with IIR was 8% bigger, though IIR saves nodes at depths 7, 9 and 10.
