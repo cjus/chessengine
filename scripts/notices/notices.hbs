@@ -1,0 +1,33 @@
+Third-party notices for cb2026
+==============================
+
+cb2026 is Copyright (c) 2026 Carlos Justiniano, under the MIT licence or the Apache License 2.0,
+at your choice (LICENSE-MIT, LICENSE-APACHE). Built with Syzygy tablebase probing, as the
+release binaries are, it links shakmaty and shakmaty-syzygy (GPL-3.0-or-later), so that program
+as a whole is under the GNU General Public License 3.0 or later (LICENSE-GPL-3.0), and its
+source is at https://github.com/cjus/chessengine. The Chess Node Protocol's crate, cnp, is by
+the same author, under the same two licences.
+
+cb2026 is built with the open-source crates (Rust libraries) below, each under its own
+licence. Each licence's text follows, with the crates cb2026 uses under it. Where a crate
+offers a choice of licences, cb2026 takes it under the one named.
+
+Licences
+--------
+
+{{#each overview}}
+- {{{name}}} ({{count}})
+{{/each}}
+
+{{#each licenses}}
+
+--------------------------------------------------------------------------------
+{{{name}}}
+
+Used by:
+{{#each used_by}}
+- {{{crate.name}}} {{{crate.version}}}{{#if crate.repository}} ({{{crate.repository}}}){{/if}}
+{{/each}}
+
+{{{text}}}
+{{/each}}

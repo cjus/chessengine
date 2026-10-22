@@ -1,0 +1,34 @@
+# cargo-about's settings for cb2026's third-party notices: `scripts/notices.sh` runs it.
+# See https://embark-studios.github.io/cargo-about/
+
+# The licences cb2026 takes its dependencies under, in order of preference: for a crate that
+# offers a choice ("MIT OR Apache-2.0"), the first one here that it offers. The same licences
+# as `deny.toml`'s `allow`, which `cargo deny check` enforces, and last the GPL it allows for
+# the Syzygy prober's crates alone.
+accepted = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "MPL-2.0",
+    "GPL-3.0-or-later",
+]
+
+# The platforms the release builds (`.github/workflows/release.yml`). One file covers them all.
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+]
+
+# What isn't in the program: build scripts' and tests' dependencies.
+ignore-build-dependencies = true
+ignore-dev-dependencies = true
+
+# Our own crates, which are unpublished: their licences are LICENSE-MIT and LICENSE-APACHE.
+private = { ignore = true }
