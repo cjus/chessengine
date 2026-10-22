@@ -4,7 +4,8 @@
 //! Solrac, the 3D board, talks to cb2026: JSON-RPC 2.0 over stdin/stdout, one message per line.
 //! Where UCI sends a position and `go`, CNP sends one request that carries everything: the
 //! position, its limits, a level, which techniques are on, root moves, MultiPV. Every answer
-//! says whether a score is exact, and the engine's techniques and levels can be listed.
+//! says whether a score is exact, and the engine's techniques and levels can be listed, and a
+//! position's evaluation had term by term (`engine/evaluate`).
 //! `cb2026 --cnp` speaks it, and so does a plain `cb2026` whose first input line is JSON.
 //!
 //! ```text
@@ -39,6 +40,8 @@
 //! at the root. Its techniques are the shell's switches ([`cb2026_shell::SWITCHES`]), by the
 //! names the shell's `set` uses. Its levels are [`RATINGS`], whole numbers only, since a level's
 //! settings are whole steps. A rating within [`ELO_RANGE`] picks a level as `UCI_Elo` does.
+//! `engine/evaluate` answers with the shell's `eval`: [`eval::trace`]'s eight terms ([`TERMS`]),
+//! each blended for the position's phase as the evaluation blends its total.
 //!
 //! ## Pitfalls
 //!
@@ -48,6 +51,10 @@
 //! - **Deterministic searches at a level aren't deterministic.** A level chooses among its
 //!   candidate moves at random, so `deterministic` with `strength` is `Unsupported` rather than
 //!   a promise the node can't keep.
+//! - **An evaluation is answered while a search runs**, so it can't borrow the engine, which
+//!   the search thread owns. The node keeps a copy of the engine's evaluation parameters as it
+//!   came configured, which is also what every search starts from: a technique a search
+//!   switches off (`pst`, `tapered`) doesn't reach an evaluation.
 //! - **Castling notation follows the position.** cb2026 reads both notations. It writes the
 //!   king's two-square move, or king-takes-rook when the position says `chess960`.
 
@@ -61,14 +68,16 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use cb2026_chess::{Move, Position};
+use cb2026_engine::eval::{self, EvalParams, MAX_PHASE};
 use cb2026_engine::levels::{ELO_RANGE, FULL_STRENGTH, RATINGS};
 use cb2026_engine::search::MAX_PLY;
 use cb2026_engine::tablebase::TablebaseLoader;
 use cb2026_engine::{AUTHOR, Engine, Limits, NAME, Score, SearchInfo, SearchResult, VERSION};
 use cb2026_shell::SWITCHES;
 use cnp::engine::{
-    EloRange, EngineCapabilities, EngineProgress, Level, Levels, LevelsResult, Line, Progress,
-    Search, SearchParams, SearchStats, Stop, Technique, Techniques, TechniquesResult,
+    EloRange, EngineCapabilities, EngineProgress, Evaluate, EvaluateParams, EvaluateResult, Level,
+    Levels, LevelsResult, Line, Progress, Search, SearchParams, SearchStats, Stop, Technique,
+    Techniques, TechniquesResult, Term,
 };
 use cnp::lifecycle::{
     CancelRequest, Capabilities, IncompatibleVersionData, Initialize, InitializeResult,
@@ -92,6 +101,31 @@ pub const RATING_SCALE: &str = cb2026_engine::levels::RATING_SCALE;
 
 /// Where cb2026's source is.
 pub const SOURCE: &str = "https://github.com/cjus/chessengine";
+
+/// The evaluation's terms as `engine/evaluate` names them: each one's id and what it measures,
+/// in [`eval::EvalTrace::terms`]' order (whose names are the terms' names).
+pub const TERMS: [(&str, &str); 8] = [
+    ("material", "What the pieces are worth."),
+    (
+        "pieceSquares",
+        "Where the pieces stand: a bonus or a penalty for each piece on each square.",
+    ),
+    ("mobility", "Safe squares each piece can reach."),
+    ("pawnStructure", "Doubled and isolated pawns."),
+    (
+        "passedPawns",
+        "Pawns that no enemy pawn can stop, worth more the further they have gone.",
+    ),
+    (
+        "pieces",
+        "The bishop pair, and rooks on open and half-open files.",
+    ),
+    (
+        "kingSafety",
+        "The pawns sheltering the king, and attacks on the squares around it.",
+    ),
+    ("tempo", "A bonus for the side to move."),
+];
 
 /// How often an infinite search that has finished its work looks for `engine/stop`.
 const WAIT_POLL: Duration = Duration::from_millis(1);
@@ -200,6 +234,9 @@ struct Node {
     threads: usize,
     /// Each switch's default, read once from a new engine (in [`SWITCHES`]' order).
     defaults: Vec<bool>,
+    /// The evaluation's parameters as the engine came configured, for `engine/evaluate` while a
+    /// search owns the engine.
+    eval_params: EvalParams,
     /// The running search, if any.
     search: Option<Running>,
     /// The `game` hint of the last search, whose hash table the engine still holds.
@@ -231,6 +268,7 @@ impl Node {
             state: State::Starting,
             tablebase_loader: engine.tablebase_loader,
             threads: engine.threads,
+            eval_params: engine.params.clone(),
             engine: Some(engine),
             defaults,
             search: None,
@@ -273,6 +311,13 @@ impl Node {
                 Response::ok::<Techniques>(id, &self.techniques())
             }
             (State::Running, Levels::NAME) => Response::ok::<Levels>(id, &levels()),
+            (State::Running, Evaluate::NAME) => match request
+                .params::<Evaluate>()
+                .and_then(|params| evaluate(&params, &self.eval_params))
+            {
+                Ok(result) => Response::ok::<Evaluate>(id, &result),
+                Err(e) => Response::error(Some(id), e),
+            },
             (State::Running, method) => error(
                 code::METHOD_NOT_FOUND,
                 &format!("cb2026 has no method {method}"),
@@ -333,6 +378,7 @@ impl Node {
                     mate: true,
                     chess960: true,
                     progress: true,
+                    evaluate: true,
                 }),
                 voice: None,
             },
@@ -536,16 +582,7 @@ fn prepare(params: &SearchParams) -> Result<Prepared, ResponseError> {
         techniques.push((index, on));
     }
 
-    let mut position = Position::from_fen(&params.position.fen)
-        .map_err(|e| illegal(format!("invalid FEN: {e}")))?;
-    let mut history = Vec::with_capacity(params.position.moves.len());
-    for text in &params.position.moves {
-        let mv = position
-            .parse_uci_move(text)
-            .ok_or_else(|| illegal(format!("{text} isn't a legal move in its position")))?;
-        history.push(position.hash());
-        position.make_move(mv);
-    }
+    let (position, history) = read_position(&params.position)?;
 
     let wanted = &params.limits;
     let mut limits = Limits::default();
@@ -752,6 +789,56 @@ fn progress(id: &Id, info: &SearchInfo, multipv: usize, chess960: bool) -> Notif
     Notification::new::<EngineProgress>(&params)
 }
 
+/// A request's position: its FEN with its moves played, and the hash of each position before
+/// a move, for repetitions. `InvalidPosition` if the FEN or a move isn't legal.
+fn read_position(wanted: &cnp::engine::Position) -> Result<(Position, Vec<u64>), ResponseError> {
+    let illegal = |message: String| ResponseError::new(code::INVALID_POSITION, message);
+    let mut position =
+        Position::from_fen(&wanted.fen).map_err(|e| illegal(format!("invalid FEN: {e}")))?;
+    let mut history = Vec::with_capacity(wanted.moves.len());
+    for text in &wanted.moves {
+        let mv = position
+            .parse_uci_move(text)
+            .ok_or_else(|| illegal(format!("{text} isn't a legal move in its position")))?;
+        history.push(position.hash());
+        position.make_move(mv);
+    }
+    Ok((position, history))
+}
+
+/// `engine/evaluate`: the position's evaluation, term by term, each term blended for the
+/// position's phase as [`eval::trace`] blends the total (the shell's `eval` shows the same).
+fn evaluate(
+    params: &EvaluateParams,
+    eval_params: &EvalParams,
+) -> Result<EvaluateResult, ResponseError> {
+    let (position, _) = read_position(&params.position)?;
+    let trace = eval::trace(&position, eval_params);
+    let blend = |(mg, eg): (i32, i32)| {
+        if eval_params.tapered {
+            (mg * trace.phase + eg * (MAX_PHASE - trace.phase)) / MAX_PHASE
+        } else {
+            mg
+        }
+    };
+    let terms = trace
+        .terms()
+        .into_iter()
+        .zip(TERMS)
+        .map(|((name, [white, black]), (id, description))| Term {
+            id: id.to_string(),
+            name: name.to_string(),
+            description: Some(description.to_string()),
+            white: blend(white),
+            black: blend(black),
+        })
+        .collect();
+    Ok(EvaluateResult {
+        score: cnp::engine::Score::cp(eval::evaluate(&position, eval_params)),
+        terms,
+    })
+}
+
 /// The levels and their measured ratings.
 fn levels() -> LevelsResult {
     LevelsResult {
@@ -929,6 +1016,48 @@ mod tests {
         assert_eq!(levels.levels.len() as u32, FULL_STRENGTH + 1);
         assert_eq!(levels.levels[0].rating, RATINGS[0]);
         assert!(!levels.fractional);
+    }
+
+    #[test]
+    fn an_evaluation_is_the_shell_s_eval_term_by_term() {
+        // The Two Knights, as the spec's example has it: the shell's `eval` shows the same.
+        let fen = "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4";
+        let params = EvaluateParams {
+            position: CnpPosition::fen(fen),
+        };
+        let result = evaluate(&params, &EvalParams::default()).unwrap();
+        assert_eq!(result.score, cnp::engine::Score::cp(-1));
+        let ids: Vec<&str> = result.terms.iter().map(|t| t.id.as_str()).collect();
+        assert_eq!(ids, TERMS.map(|(id, _)| id));
+        let term = |id: &str| {
+            let term = result.terms.iter().find(|t| t.id == id).unwrap();
+            (term.name.as_str(), term.white, term.black)
+        };
+        assert_eq!(term("material"), ("Material", 3940, 3940));
+        assert_eq!(term("mobility"), ("Mobility", -69, -72));
+        assert_eq!(term("tempo"), ("Tempo", 10, 0));
+        // The side to move's terms less the other's are the score, give or take rounding.
+        let net: i32 = result.terms.iter().map(|t| t.white - t.black).sum();
+        assert!((net - (-1)).abs() <= TERMS.len() as i32, "{net}");
+    }
+
+    #[test]
+    fn an_evaluation_of_an_illegal_position_is_refused() {
+        let params = |position| EvaluateParams { position };
+        let illegal = params(CnpPosition::start().with_moves(["e2e5"]));
+        let bad_fen = params(CnpPosition::fen("not a fen"));
+        for wanted in [illegal, bad_fen] {
+            let error = evaluate(&wanted, &EvalParams::default()).unwrap_err();
+            assert_eq!(error.code, code::INVALID_POSITION);
+        }
+        // From Black's side, the score is Black's.
+        let after_e4 = params(CnpPosition::start().with_moves(["e2e4"]));
+        let result = evaluate(&after_e4, &EvalParams::default()).unwrap();
+        let net: i32 = result.terms.iter().map(|t| t.black - t.white).sum();
+        let cnp::engine::ScoreValue::Centipawns(cp) = result.score.value else {
+            panic!("an evaluation is in centipawns");
+        };
+        assert!((net - cp).abs() <= TERMS.len() as i32, "{net} against {cp}");
     }
 
     #[test]

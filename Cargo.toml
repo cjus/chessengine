@@ -25,8 +25,8 @@ cb2026-syzygy = { path = "crates/syzygy" }
 cb2026-tools = { path = "crates/tools" }
 # The Chess Node Protocol, how Solrac talks to cb2026 (`crates/cnp`), and its conformance
 # sessions (cjus/chessgui#98). Pinned to a commit; bump both together.
-cnp = { git = "https://github.com/cjus/chess-node-protocol", rev = "f935b76053bb4c292404c0eda2c6fc74f8fc1f5b" }
-cnp-conformance = { git = "https://github.com/cjus/chess-node-protocol", rev = "f935b76053bb4c292404c0eda2c6fc74f8fc1f5b" }
+cnp = { git = "https://github.com/cjus/chess-node-protocol", rev = "bafda928d0298267ebd86d753bda78f54138770c" }
+cnp-conformance = { git = "https://github.com/cjus/chess-node-protocol", rev = "bafda928d0298267ebd86d753bda78f54138770c" }
 
 # Lints shared by every crate (each crate opts in with `[lints] workspace = true`).
 [workspace.lints.rust]
