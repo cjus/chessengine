@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-22, 14:07 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-22, 14:22 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -54,7 +54,8 @@ Lichess's own games by the new `mistakes` tool; `UCI_Elo` 600–2500 is on that 
 ratings no longer hold; full strength unchanged (Carlos, cjus/chessgui#113; #151).
 2026-10-22: the v1.0 robustness run clean, 10,000 games with no time losses, illegal moves or
 failures, #146; cut-node reductions of 2 plies instead of 1 merged, +8.7 ± 6.4, #155; smaller
-reductions at expected all-nodes failed, −8.5 ± 8.4, so they are off by default, #158.*
+reductions at expected all-nodes failed, −8.5 ± 8.4, so they are off by default, #158; smaller
+reductions where the principal variation was (Stockfish's `ttPv`) running on the M3, #160.*
 
 ## Stages
 
@@ -121,11 +122,17 @@ reductions at expected all-nodes failed, −8.5 ± 8.4, so they are off by defau
 | M5: larger reductions at expected cut nodes (chapter 14.1) | #145 | 1078861 | Merged: +11.6 ± 7.7, 3,687 games, [0, 5] passed (M3 Max) |
 | M5: cut-node reductions of 2 plies instead of 1, as in Stockfish (chapter 14.1) | #155 | 1072184 | Merged: +8.7 ± 6.4, 5,803 games, [0, 5] passed (M3 Max) |
 | M5: smaller reductions at expected all-nodes (chapter 14.1) | #158 | 1072184 (1284421 with them on) | Merged, off by default: −8.5 ± 8.4, 2,993 games, [0, 5] failed (M3 Max) |
+| M5: smaller reductions where the principal variation was, Stockfish's `ttPv` (chapter 14.1) | #160, `claude/tt-pv` | 1198340 | Draft, its SPRT running on the M3 Max: [0, 5] at 8+0.08 |
 
-**Next on the M3: #160**, smaller reductions where the principal variation was (Stockfish's
-`ttPv`; chapter 14.1), a draft ready for its SPRT. It doesn't hold up v1.0: the last gate is the
-GUI matrix (#37), on Carlos's Mac. Once that is recorded, the version PR (#154) merges and
-Carlos tags `v1.0.0`.
+**Running now: #160** (smaller reductions where the principal variation was, Stockfish's `ttPv`;
+chapter 14.1), started on the M3 on 2026-10-22 at about 14:20 MDT. A clear result should take
+1–3 hours, a small difference 5–8. A new session should restart the watcher,
+`scripts/watch-sprt.sh 160`, or just read #160's comments if the result is already there. Then
+rebase #160 onto `main` (in `docs/status.md` take `main`'s side and edit it), and record the
+result in chapter 14.1, the search module docs, the switch's and the parameter's comments, the
+PRD, the ledger and this file. If it fails, switch it off by default and merge as a record. It
+doesn't hold up v1.0: the last gate is the GUI matrix (#37), on Carlos's Mac. Once that is
+recorded, the version PR (#154) merges and Carlos tags `v1.0.0`.
 
 The SPRT of smaller reductions at expected all-nodes (#158) finished on 2026-10-22 at 14:05 MDT.
 It started at about 11:45 and failed in 2,993 games, about 2 hours 20 minutes: **−8.5 ± 8.4**,
@@ -446,7 +453,7 @@ Run the full test suite on every commit you replay, not only at the tip: each be
      Stockfish's own estimate of about 3 Elo for its version), and 2 plies, as in Stockfish,
      added +8.7 ± 6.4 (#155). A smaller reduction at expected all-nodes
      failed (#158, −8.5 ± 8.4). Next: smaller reductions where the principal variation was, as
-     in Stockfish (`ttPv`, which it rates about 7 Elo; #160).
+     in Stockfish (`ttPv`, which it rates about 7 Elo; #160, running).
    - **Tuning singular extensions, continued**: depth 6 passed (#78) and depth 4 too (#80),
      which is about where Stockfish starts; `singular_margin` 3 passed too (#82), and 4
      failed (#84); `singular_tt_depth_margin` 4 failed against 3 (#123, −7.4 ± 8.0). That
