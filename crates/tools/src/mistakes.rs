@@ -58,6 +58,7 @@ pub const SPEEDS: [(u64, &str); 4] = [
     (1500, "rapid"),
 ];
 
+// ANCHOR: chances
 /// The mover's winning chances, −1 to 1, for an evaluation from its side.
 pub fn winning_chances(score: Score) -> f64 {
     let cp = match score {
@@ -72,6 +73,7 @@ pub fn winning_chances(score: Score) -> f64 {
 pub fn classify(drop: f64) -> usize {
     THRESHOLDS.iter().filter(|&&at| drop >= at).count()
 }
+// ANCHOR_END: chances
 
 /// A level's moves, and how many of them were each kind of mistake.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -139,6 +141,7 @@ pub fn play_game(player: &mut Engine, judge: &mut Engine, start: &Position, node
         });
         score
     };
+    // ANCHOR: judge_level
     let mut game = Game::from_position(start.clone());
     let mut tally = Tally::default();
     let mut before = evaluate(judge, &game);
@@ -169,6 +172,7 @@ pub fn play_game(player: &mut Engine, judge: &mut Engine, start: &Position, node
         tally.add(classify(drop));
         before = after;
     }
+    // ANCHOR_END: judge_level
     tally
 }
 
@@ -268,6 +272,7 @@ pub fn count_people(
         if game.get("Variant").is_some_and(|v| v != "Standard") {
             continue;
         }
+        // ANCHOR: judge_people
         let mut before = winning_chances(Score::Centipawns(START_EVALUATION));
         for (ply, text) in line.split("[%eval ").skip(1).enumerate() {
             let Some(after) = text
@@ -290,6 +295,7 @@ pub fn count_people(
                 .add(classify(drop));
             before = after;
         }
+        // ANCHOR_END: judge_people
         evaluated += 1;
         if evaluated >= max_games {
             break;

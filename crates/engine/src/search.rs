@@ -720,6 +720,7 @@ impl Techniques {
         }
     }
 
+    // ANCHOR: horizon_techniques
     /// A person's look at a position, for a weaker level's move with a person's horizon
     /// ([`crate::levels::horizon`]): exactly the plies the search is given, every move at each,
     /// and the positions at the end evaluated as they stand. [`sound`](Techniques::sound)
@@ -733,6 +734,7 @@ impl Techniques {
             ..Techniques::sound()
         }
     }
+    // ANCHOR_END: horizon_techniques
 }
 
 /// Converts an internal score to a [`Score`], turning mate scores into "mate in N moves".

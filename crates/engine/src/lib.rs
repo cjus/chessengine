@@ -460,11 +460,13 @@ impl Engine {
         let tablebase = tablebase.as_deref();
         let self_multipv = (*multipv).max(1);
         let tablebase_params = *tablebase_params;
+        // ANCHOR: horizon_search
         let techniques = match horizon {
             Some(_) => Techniques::horizon(),
             None => *techniques,
         };
         let threads = if horizon.is_some() { 1 } else { *threads };
+        // ANCHOR_END: horizon_search
         let (params, search_params, tt) = (&*params, *search_params, &*tt);
         thread::scope(|scope| {
             let mut helper_threads = Vec::new();
@@ -794,6 +796,7 @@ fn run_helper(
 }
 // ANCHOR_END: helper
 
+// ANCHOR: dice
 /// Dice for a weaker level's choices: the clock's nanoseconds mixed with the position, so two
 /// games from the same position go their own ways.
 fn dice(position: &Position) -> u64 {
@@ -802,6 +805,7 @@ fn dice(position: &Position) -> u64 {
         .map_or(0, |d| d.subsec_nanos());
     (u64::from(nanos) ^ position.hash()).wrapping_mul(0x9E37_79B9_7F4A_7C15)
 }
+// ANCHOR_END: dice
 
 #[cfg(test)]
 mod tests {

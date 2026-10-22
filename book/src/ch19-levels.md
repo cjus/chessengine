@@ -1,6 +1,8 @@
 # Strength levels
 
-*Stage 19 · tag `stage-19-levels` · code in `crates/engine/src/levels.rs` and `lib.rs`*
+*Stage 19 · tag `stage-19-levels` · code in `crates/engine/src/levels.rs` and `lib.rs`. A
+person's horizon and the human scale came later (cjus/chessengine#151, for cjus/chessgui#113),
+with the `mistakes` tool in `crates/tools/src/mistakes.rs`.*
 
 Everything so far has made cb2026 stronger. This chapter makes it *weaker*, on purpose, for
 the many players who want an opponent they can beat sometimes. Done badly, this is easy and
@@ -66,6 +68,53 @@ level (below):
 {{#include ../../crates/engine/src/levels.rs:horizon_chances}}
 ```
 
+### Into the search
+
+The dice are rolled first, beside the level's node limit. A move with a person's horizon gets a
+depth limit of its one or two plies, and never in analysis: an infinite search is someone
+asking what the position holds, not a level playing a game.
+
+```rust,ignore
+{{#include ../../crates/engine/src/lib.rs:level_limits}}
+```
+
+The dice are the clock's nanoseconds mixed with the position's hash, the same as for the choice
+among the best moves, so a level goes its own way in each game:
+
+```rust,ignore
+{{#include ../../crates/engine/src/lib.rs:dice}}
+```
+
+Then the search runs with another set of techniques, on one thread:
+
+```rust,ignore
+{{#include ../../crates/engine/src/lib.rs:horizon_search}}
+```
+
+`Techniques::horizon` starts from `Techniques::sound`, the set that only makes the search faster
+and never changes its result: alpha-beta, move ordering and PVS, with null move, reductions,
+extensions and every kind of pruning off. So no move is skipped and none is searched deeper
+for being interesting. It takes away three more, the first of which would look past the
+horizon:
+
+```rust,ignore
+{{#include ../../crates/engine/src/search.rs:horizon_techniques}}
+```
+
+- **The quiescence search** (chapter 7), which would otherwise play out the captures at the
+  horizon. Without it, the position after a queen takes a defended pawn is evaluated a pawn up,
+  whatever recaptures: that is what a hurried eye sees, and the whole point.
+- **Aspiration windows** (chapter 11), which start each iteration around the last one's score.
+  At one or two plies there is no last score worth trusting.
+- **The transposition table** (chapter 8). A horizon search's scores are unresolved and
+  shallow; written to the table, they would be read as real results by the full searches of
+  the moves after it. So it neither reads nor writes the table.
+
+One thread, because Lazy SMP's helpers (chapter 17) share their work only through the
+transposition table, which this search doesn't use: they would search for nothing. Everything
+after the search is as before: it returns its best lines, and `choose` picks one with the
+level's margin and temperature.
+
 ## MultiPV
 
 To choose among the best moves, the engine has to know the best *several* moves, not just the
@@ -128,6 +177,46 @@ People blunder two to four times a game across nearly the whole range, and the r
 slowly with rating. The levels did far less: 2.8 at level 0, 0.7 at level 6, 0.2 at level 12
 and none by level 18, judged by a full-strength search of 100,000 nodes in 32 games each.
 
+### Counting as Lichess counts
+
+Every count above, people's and the levels', comes from the same two functions. An evaluation
+becomes the mover's winning chances through Lichess's curve, with centipawns capped at ±1000
+and a mate in n counted as (21 − min(10, n)) × 100 centipawns, so a mate soon is a little
+surer than a mate later. A move is judged by how far it lowers them:
+
+```rust,ignore
+{{#include ../../crates/tools/src/mistakes.rs:chances}}
+```
+
+The curve's slope, the cap and the thresholds are Lichess's (its accuracy page and lila's
+source, AGPL-3.0: the numbers only, none of its code). The curve is steep near equality and
+flat in decided positions, so throwing away a pawn in a level game counts, and throwing away a
+rook in a game already lost barely does, as on Lichess.
+
+**People** are counted in Lichess's own games. Each game's moves are one line of the PGN file,
+with the evaluation Lichess's analysis gave after each move in a comment, `{ [%eval 0.17] }`
+in pawns from White's side, or `[%eval #-3]` for a mate. Each evaluation is White's chances
+after one move and before the next; White's fall when White errs, and Black's (the same,
+negated) when Black does. A move is counted for its player's rating band:
+
+```rust,ignore
+{{#include ../../crates/tools/src/mistakes.rs:judge_people}}
+```
+
+**A level** plays itself from the same openings and random first moves as the self-play tools,
+and a full-strength search of a fixed number of nodes judges every move. Each position is
+searched once: its score is the "after" of one move and, from the other side, the "before" of
+the next. A game's end is scored as it stands, a mate as lost, a draw as even:
+
+```rust,ignore
+{{#include ../../crates/tools/src/mistakes.rs:judge_level}}
+```
+
+The judge is weaker than Lichess's analysis: it misses a blunder now and then, and now and then
+calls a sound move one (full strength, which makes none, measured 0.3 in 40 moves). It errs
+alike for every level, which is what matters for fitting them to each other; beside people's
+counts, from Lichess's own analysis, the levels' are close rather than exact.
+
 **The levels on that scale.** Level 0 is now a Lichess rapid rating of 600 and each level 100
 more, to 2500 at level 19, and each level's chance of a person's horizon is fitted so that it
 blunders as often as people of its rating:
@@ -143,7 +232,18 @@ adds: about 5 blunders in 40 moves with one ply, 3 to 4 with two. The first roun
 a two-ply horizon move meets fewer tactics, and the upper levels fell short. Each round set
 each level's chance from how far the last missed, and the last is smoothed into one straight
 line through levels 0 to 7 and another through 8 to 19, since 40 games of one level carry about
-± 0.5 blunders of noise. The check, with openings none of the rounds used:
+± 0.5 blunders of noise.
+
+**Level 6, worked through.** With its usual search, level 6 blundered 0.7 times in 40 moves. A
+one-ply horizon move, played among its other moves, blunders about 5 times in 40. People rated
+1200 blunder 3.0 times. So level 6 needs the horizon on about (3.0 − 0.7) / (5 − 0.7) ≈ 0.53 of
+its moves. The rounds measured 3.3 blunders at a chance of 0.48 and 2.7 at 0.50, both within
+the noise of 3.0, and the straight line through levels 0 to 7 gives it 0.50. From level 8 the
+same sum uses a two-ply horizon move's blunders, about 3 in 40 instead of 5, so the chance
+jumps up there: a horizon that sees the reply errs less often, and must be used more often to
+blunder as much.
+
+The check, with openings none of the rounds used:
 
 | Level | 0 | 2 | 4 | 6 | 8 | 10 | 12 | 14 | 16 | 18 | 19 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
