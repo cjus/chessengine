@@ -719,6 +719,20 @@ impl Techniques {
             ..Techniques::default()
         }
     }
+
+    /// A person's look at a position, for a weaker level's move with a person's horizon
+    /// ([`crate::levels::horizon`]): exactly the plies the search is given, every move at each,
+    /// and the positions at the end evaluated as they stand. [`sound`](Techniques::sound)
+    /// without the quiescence search, aspiration windows or the transposition table, whose
+    /// shallow, unresolved scores would mislead the searches after it.
+    pub fn horizon() -> Techniques {
+        Techniques {
+            quiescence: false,
+            aspiration: false,
+            tt: false,
+            ..Techniques::sound()
+        }
+    }
 }
 
 /// Converts an internal score to a [`Score`], turning mate scores into "mate in N moves".

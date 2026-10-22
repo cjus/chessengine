@@ -86,8 +86,9 @@ pub const MAX_MULTIPV: u32 = 256;
 /// How long a search with no limits at all takes.
 pub const DEFAULT_SEARCH_MS: u64 = 1000;
 
-/// What the levels' ratings mean (see [`RATINGS`]).
-pub const RATING_SCALE: &str = "CCRL Blitz";
+/// What the levels' ratings mean (see [`RATINGS`]): the engine's own scale,
+/// [`cb2026_engine::levels::RATING_SCALE`].
+pub const RATING_SCALE: &str = cb2026_engine::levels::RATING_SCALE;
 
 /// Where cb2026's source is.
 pub const SOURCE: &str = "https://github.com/cjus/chessengine";

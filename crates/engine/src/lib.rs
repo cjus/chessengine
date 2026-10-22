@@ -410,6 +410,14 @@ impl Engine {
         if let Some(nodes) = level.nodes {
             level_limits.nodes = Some(limits.nodes.map_or(nodes, |n| n.min(nodes)));
         }
+        // Now and then, only as far ahead as a person would look (see `levels`), on one
+        // thread. Never when analysing.
+        let horizon = (!limits.infinite)
+            .then(|| levels::horizon(&level, dice(position)))
+            .flatten();
+        if let Some(plies) = horizon {
+            level_limits.depth = Some(plies);
+        }
         let limits = &level_limits;
         let lines = self.multipv.max(level.candidates).max(1);
         // ANCHOR_END: level_limits
@@ -452,10 +460,15 @@ impl Engine {
         let tablebase = tablebase.as_deref();
         let self_multipv = (*multipv).max(1);
         let tablebase_params = *tablebase_params;
-        let (params, techniques, search_params, tt) = (&*params, *techniques, *search_params, &*tt);
+        let techniques = match horizon {
+            Some(_) => Techniques::horizon(),
+            None => *techniques,
+        };
+        let threads = if horizon.is_some() { 1 } else { *threads };
+        let (params, search_params, tt) = (&*params, *search_params, &*tt);
         thread::scope(|scope| {
             let mut helper_threads = Vec::new();
-            for helper in 1..*threads {
+            for helper in 1..threads {
                 let root_moves = root_moves.clone();
                 let (helpers_stop, helper_nodes) = (&helpers_stop, &helper_nodes);
                 helper_threads.push(scope.spawn(move || {
@@ -535,11 +548,7 @@ impl Engine {
                 .iter()
                 .filter_map(|line| line.best_move.map(|mv| (mv, line.score)))
                 .collect();
-            let nanos = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_or(0, |d| d.subsec_nanos());
-            let random = (u64::from(nanos) ^ position.hash()).wrapping_mul(0x9E37_79B9_7F4A_7C15);
-            let chosen = levels::choose(&candidates, &level, random).or(best.best_move);
+            let chosen = levels::choose(&candidates, &level, dice(position)).or(best.best_move);
             let line = result
                 .iter()
                 .find(|line| line.best_move == chosen)
@@ -784,6 +793,15 @@ fn run_helper(
     }
 }
 // ANCHOR_END: helper
+
+/// Dice for a weaker level's choices: the clock's nanoseconds mixed with the position, so two
+/// games from the same position go their own ways.
+fn dice(position: &Position) -> u64 {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.subsec_nanos());
+    (u64::from(nanos) ^ position.hash()).wrapping_mul(0x9E37_79B9_7F4A_7C15)
+}
 
 #[cfg(test)]
 mod tests {
@@ -1116,7 +1134,7 @@ mod tests {
         // UCI_Elo maps onto a strength, and never makes the engine stronger than Skill Level.
         engine.skill_level = 20;
         engine.limit_strength = true;
-        engine.elo = 1391;
+        engine.elo = 1600;
         assert_eq!(engine.level(), 10.0);
         engine.elo = 1000;
         assert_eq!(engine.level(), levels::level_for_elo(1000));
