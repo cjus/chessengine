@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-22, 11:25 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-22, 11:45 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -53,7 +53,8 @@ so each level blunders as often as people rated 600 to 2500 on Lichess rapid do,
 Lichess's own games by the new `mistakes` tool; `UCI_Elo` 600–2500 is on that scale and the CCRL
 ratings no longer hold; full strength unchanged (Carlos, cjus/chessgui#113; #151).
 2026-10-22: the v1.0 robustness run clean, 10,000 games with no time losses, illegal moves or
-failures, #146; cut-node reductions of 2 plies instead of 1 merged, +8.7 ± 6.4, #155.*
+failures, #146; cut-node reductions of 2 plies instead of 1 merged, +8.7 ± 6.4, #155; smaller
+reductions at expected all-nodes running on the M3, #158.*
 
 ## Stages
 
@@ -119,9 +120,18 @@ failures, #146; cut-node reductions of 2 plies instead of 1 merged, +8.7 ± 6.4,
 | M5: history pruning: quiet moves with a bad history skipped near the leaves (chapter 13.1) | #140 | 1136500 (1022919 with history pruning on) | Merged, off by default: −5.3 ± 7.1, 4,548 games, [0, 5] failed (M3 Max) |
 | M5: larger reductions at expected cut nodes (chapter 14.1) | #145 | 1078861 | Merged: +11.6 ± 7.7, 3,687 games, [0, 5] passed (M3 Max) |
 | M5: cut-node reductions of 2 plies instead of 1, as in Stockfish (chapter 14.1) | #155 | 1072184 | Merged: +8.7 ± 6.4, 5,803 games, [0, 5] passed (M3 Max) |
+| M5: smaller reductions at expected all-nodes (chapter 14.1) | #158, `claude/all-node-reductions` | 1284421 | Draft, its SPRT running on the M3 Max: [0, 5] at 8+0.08 |
 
-**Nothing is running on the M3.** v1.0's last gate is the GUI matrix (#37), on Carlos's Mac.
-Once it is recorded, the version PR (#154) merges and Carlos tags `v1.0.0`.
+**Running now: #158** (smaller reductions at expected all-nodes; chapter 14.1), started on the
+M3 on 2026-10-22 at about 11:45 MDT. It grows the trees by a fifth or more, so a clear failure is
+the likeliest result, in about an hour. A new session should restart the watcher,
+`scripts/watch-sprt.sh 158`, or just read #158's comments if the result is already there. Then
+rebase #158 onto `main` (in `docs/status.md` take `main`'s side and edit it), and record the
+result in chapter 14.1, the search module docs, the switch's comment, the PRD, the ledger and
+this file. If it fails, switch it off by default, move the IIR test in `crates/engine/src/lib.rs`
+back to depth 9, and merge as a record. It doesn't hold up v1.0: the last gate is the GUI matrix
+(#37), on Carlos's Mac. Once that is recorded, the version PR (#154) merges and Carlos tags
+`v1.0.0`.
 
 The SPRT of cut-node reductions of 2 plies instead of 1 (#155) finished on 2026-10-22 at 11:16
 MDT. It started at about 06:35 and passed in 5,803 games, about 4 hours 40 minutes: **+8.7 ±
@@ -433,7 +443,7 @@ Run the full test suite on every commit you replay, not only at the tip: each be
      settings). Larger reductions at expected cut nodes passed (#145, +11.6 ± 7.7, against
      Stockfish's own estimate of about 3 Elo for its version), and 2 plies, as in Stockfish,
      added +8.7 ± 6.4 (#155). Next for them: a smaller reduction at expected all-nodes
-     (chapter 14.1).
+     (chapter 14.1; #158, running).
    - **Tuning singular extensions, continued**: depth 6 passed (#78) and depth 4 too (#80),
      which is about where Stockfish starts; `singular_margin` 3 passed too (#82), and 4
      failed (#84); `singular_tt_depth_margin` 4 failed against 3 (#123, −7.4 ± 8.0). That
