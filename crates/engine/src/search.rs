@@ -177,7 +177,8 @@
 //! The other half of the guess: at an expected all-node every move has to fail low for its score
 //! to hold, so late move reductions are `lmr_all_node` (1) ply smaller there. Stockfish doesn't
 //! do this; the idea is cb2026's own, set by hand. All-nodes search every move, so it grows the
-//! trees by a fifth or more; it is being tested (cjus/chessengine#158).
+//! trees by a fifth or more. It failed: −8.5 ± 8.4 Elo after 2,993 games at 8+0.08
+//! (cjus/chessengine#158), so it is off by default; see chapter 14.1.
 //!
 //! ## History pruning
 //!
@@ -474,7 +475,7 @@ impl Default for SearchParams {
             // (GPL-3.0), gained +8.7 ± 6.4 against 1 (cjus/chessengine#155). Stockfish adds
             // them alongside reductions that cb2026 doesn't have. Not tuned further.
             lmr_cut_node: 2,
-            // Set by hand, not tuned, for its SPRT (cjus/chessengine#158).
+            // Set by hand, not tuned; it failed at 1 (cjus/chessengine#158).
             lmr_all_node: 1,
             lmp_max_depth: 3,
             lmp_base: 3,
@@ -586,7 +587,8 @@ pub struct Techniques {
     pub history_lmr: bool,
     /// Reduce late moves more at expected cut nodes (needs LMR).
     pub cut_node_reductions: bool,
-    /// Reduce late moves less at expected all-nodes (needs LMR).
+    /// Reduce late moves less at expected all-nodes (needs LMR; off by default, measured
+    /// weaker).
     pub all_node_reductions: bool,
     /// Late move pruning: skip late quiet moves near the leaves.
     pub late_move_pruning: bool,
@@ -666,8 +668,9 @@ impl Default for Techniques {
             // (cjus/chessengine#145), and 2 plies instead of 1 another +8.7 ± 6.4
             // (cjus/chessengine#155); see chapter 14.1.
             cut_node_reductions: true,
-            // On for its SPRT (cjus/chessengine#158); see chapter 14.1.
-            all_node_reductions: true,
+            // Off by default: it failed its SPRT, −8.5 ± 8.4 Elo after 2,993 games at 8+0.08
+            // (cjus/chessengine#158); see chapter 14.1.
+            all_node_reductions: false,
             late_move_pruning: true,
             // Off by default: it measured weaker, −5.3 ± 7.1 Elo after 4,548 games at 8+0.08
             // (cjus/chessengine#140); see chapter 13.1.

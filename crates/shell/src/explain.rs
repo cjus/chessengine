@@ -131,7 +131,7 @@ pub const SWITCHES: &[Switch] = &[
     },
     Switch {
         name: "allnode",
-        description: "All-node reductions: late moves at expected all-nodes reduced less",
+        description: "All-node reductions: late moves at expected all-nodes reduced less (off by default)",
         flag: |e| &mut e.techniques.all_node_reductions,
     },
     Switch {
