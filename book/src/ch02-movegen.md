@@ -119,8 +119,9 @@ cb2026's suites live in `tests/data/`:
   and underpromotion.
 - `perft960.epd`: Chess960 start and middlegame positions.
 
-The unit tests run every depth up to a million nodes. CI runs every depth in a release build
-(`cargo run --release -p cb2026-tools --bin perft-suite`), about 666 million positions.
+The unit tests run every depth up to a million nodes. Every change is also checked at every
+depth in a release build (`cargo run --release -p cb2026-tools --bin perft-suite`), about 666
+million positions.
 
 **Bulk counting.** At depth 1 the count is just the number of legal moves, so they need not
 be played. That shortcut alone makes perft several times faster.

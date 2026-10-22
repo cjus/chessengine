@@ -1,5 +1,5 @@
-# Fuzz tests for the parsers (docs/PRD.md, "Testing and strength measurement"): every week and
-# on demand, each target runs for a few minutes. Not a required check: a crash found here
+# Fuzz tests for the parsers (docs/PRD.md, "Testing and strength measurement"): every week if
+# main changed, and on demand, each target runs for a few minutes. Not a required check: a crash found here
 # becomes an issue and a regular test. Weekly rather than nightly since Actions minutes ran out
 # in October 2026 (cjus/chessgui#73): the three targets cost about 21 minutes a run.
 name: Fuzz
@@ -12,9 +12,34 @@ on:
 
 permissions:
   contents: read
+  # The weekly run asks which commit the last good run fuzzed.
+  actions: read
 
 jobs:
+  # The weekly run goes on only if main changed since the last good run; otherwise it costs this
+  # one short Linux job. Tags and runs started by hand always go on.
+  changed:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - id: check
+        env:
+          EVENT: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run=true
+          if [ "$EVENT" = schedule ]; then
+            last=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow fuzz.yml --branch main \
+              --status success --limit 1 --json headSha --jq '.[0].headSha // ""')
+            if [ "$last" = "$GITHUB_SHA" ]; then run=false; fi
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          echo "Run: $run."
+
   fuzz:
+    needs: changed
+    if: needs.changed.outputs.run == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

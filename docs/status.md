@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-22, 14:22 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-22, 17:05 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -59,7 +59,9 @@ reductions where the principal variation was (Stockfish's `ttPv`) running on the
 CNP's `engine/evaluate` answered with the shell's `eval`, term by term, so Solrac's chat can say
 why cb2026 likes a position (cjus/chessgui#145, cjus/chess-node-protocol#6); a search sent the
 moment the last one answered is taken, no longer refused as `Busy` while the answered search's
-thread ends (found by Solrac's chat, whose review sends two searches in a row).*
+thread ends (found by Solrac's chat, whose review sends two searches in a row); GitHub no longer
+checks PRs, to save Actions minutes: `scripts/check.sh` checks a PR before it merges, `main`'s
+ruleset requires no check, and CI runs nightly only if `main` changed (Carlos).*
 
 ## Stages
 
@@ -319,8 +321,8 @@ section:
    so only its own commits replay.
 2. Open its PR. Then commit the result to the chapter's "What it's worth"
    table and a `docs/elo-ledger.md` row with the PR number, as a separate commit.
-3. Mark the PR ready (`gh pr ready`), wait for its `CI` check, then merge (CLAUDE.md: Claude may
-   merge its own green PRs).
+3. Mark the PR ready (`gh pr ready`), run `scripts/check.sh` on it, then merge (CLAUDE.md:
+   Claude may merge its own PRs once it passes).
    Push the stage's tag (`git tag -a stage-NN-<name> <merge commit> -m "..."`); from a cloud
    session, which can't push tags, add the command to a `needs-carlos` issue instead.
 4. Rebase the rest of the stack onto the new branch head, and point each branch at its rebased

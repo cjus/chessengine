@@ -8,7 +8,7 @@ machine once the Windows build is ready (cjus/chessengine#11).
 
 Claude can't operate a GUI, so a **conformance test** plays scripted sessions against the real
 binary the way GUIs do, including their awkward habits, and checks every response:
-`crates/cli/tests/conformance.rs`, run by `cargo test` in CI.
+`crates/cli/tests/conformance.rs`, run by `cargo test` (in `scripts/check.sh` and nightly CI).
 
 | Habit | Test |
 | --- | --- |

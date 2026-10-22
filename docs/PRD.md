@@ -431,11 +431,11 @@ bitboard views from stage 2–3, `eval` and `explain` from stage 9 on.
 
 | Layer | What it proves | Runs where |
 | --- | --- | --- |
-| Unit and property tests | make/unmake restores the position; incremental hash equals a full recompute; FEN round-trips; SAN parsing | CI on every PR; Claude in session |
-| Perft suites | Move generation is exactly right (standard and Chess960) | CI (quick depth); full depth before tags |
-| Fuzzing (`cargo fuzz`) | The FEN, SAN, UCI and XBoard parsers never panic on bad input | Locally and nightly |
-| Protocol conformance | Correct UCI/XBoard behaviour, including GUI quirks | CI |
-| Bench | Search didn't change by accident: same node count = same search | CI; recorded in every commit message |
+| Unit and property tests | make/unmake restores the position; incremental hash equals a full recompute; FEN round-trips; SAN parsing | `scripts/check.sh` before every PR merges; nightly CI; Claude in session |
+| Perft suites | Move generation is exactly right (standard and Chess960) | Every depth: `scripts/check.sh` and nightly CI |
+| Fuzzing (`cargo fuzz`) | The FEN, SAN, UCI and XBoard parsers never panic on bad input | Locally and weekly |
+| Protocol conformance | Correct UCI/XBoard behaviour, including GUI quirks | `scripts/check.sh`; nightly CI |
+| Bench | Search didn't change by accident: same node count = same search | Locally; recorded in every commit message |
 | Tactical suites (EPD) | Sanity check: e.g. most WAC positions solved in 1 s | Before tags |
 | SPRT self-play | Did this change gain Elo? | Claude's session (short), Carlos's Mac (long) |
 | Gauntlet vs reference engines | Where we are on the CCRL scale | Each milestone gate |
@@ -564,25 +564,25 @@ and short SPRT matches itself. What Claude can't do is look at GUIs or run long 
 | GUI compatibility checks | Protocol conformance tests | Checks real GUIs, especially commercial ones |
 | Playing and judging the shell UX | No | Yes |
 
-**Workflow:** `claude/<topic>` branches from the latest `main`, one PR each; CI (fmt, clippy,
-tests, quick perft, bench, conformance, book build) must be green; the PR states bench and SPRT
-results. Each stage ends with a tag, a book chapter and an Elo ledger entry. `main` is
-protected by the ruleset `main: PR + CI` (since 2026-10-10): every change arrives through a PR,
-its CI check must pass (`CI`, one job since 2026-10-21; three checks before), and force pushes
-and branch deletion are blocked.
+**Workflow:** `claude/<topic>` branches from the latest `main`, one PR each;
+`scripts/check.sh` (fmt, clippy, tests, every perft depth, conformance, docs, licences and
+advisories, book build) must pass before it merges; the PR states bench and SPRT results. Each
+stage ends with a tag, a book chapter and an Elo ledger entry. `main` is protected by the
+ruleset `main: PR`: every change arrives through a PR, and force pushes and branch deletion are
+blocked. From 2026-10-10 to 2026-10-22 it was `main: PR + CI` and also required a passing `CI`
+check on GitHub (one job since 2026-10-21; three checks before).
 
 **CI cost.** GitHub Actions minutes are limited on private repos, and macOS and Windows minutes
-have historically cost 10× and 2× Linux minutes. So PRs run on Linux; macOS and Windows builds run
+have historically cost 10× and 2× Linux minutes. So CI runs on Linux; macOS and Windows builds run
 weekly and on release tags. Releases build binaries for every platform in the table above. The
 account's minutes, shared with chessgui, ran out on 2026-10-21 (cjus/chessgui#73), about 1,800 of
 them having gone here in three weeks. Since then:
 - CI is one job (GitHub bills each job to the next whole minute).
-- There is no run after a merge (the PR's run checked it). `main` is checked nightly instead,
-  only if it changed.
-- A PR that changes only documentation skips the build.
+- GitHub checks neither PRs nor merges (since 2026-10-22, Carlos: the code is checked locally,
+  with `scripts/check.sh`). `main` is checked nightly, only if it changed since the last good
+  run.
 - Only `main` saves build caches.
-- Fuzzing runs weekly.
-- Draft PRs aren't checked.
+- Fuzzing and the macOS and Windows builds run weekly, only if `main` changed.
 
 The repository becoming public (planned, cjus/chessgui#71) makes its CI free.
 
@@ -699,7 +699,7 @@ GUI compatibility matrix (cjus/chessengine#37).
 | Readability vs speed | Either a slow engine or unreadable code | Clarity by default; optimise only measured hot spots, with comments explaining them |
 | Strength limiting feels unnatural | Players don't enjoy low levels | MultiPV-based move choice; calibration; Carlos playtests the levels |
 | Tablebase crate changes or is abandoned | Tablebase support breaks | Behind a `Tablebase` trait and a cargo feature; Fathom or our own port can replace it |
-| CI minutes on a private repo | CI throttled or costly | Linux on PRs; macOS/Windows nightly and on tags |
+| CI minutes on a private repo | CI throttled or costly | PRs checked locally; Linux nightly and macOS/Windows weekly, only if `main` changed; macOS/Windows also on tags |
 | Windows GUIs tested late | Windows-only GUI problems (ChessBase/Fritz, Arena) found late | Strict UCI conformance tests and Windows CI builds throughout; Carlos tests on a Windows machine once the Windows build runs well, before going public |
 
 ## Research log
@@ -804,7 +804,8 @@ about 26 s, and the M1 Max played about 970 games an hour.
       needs nothing installed on the Mac, and it is part of the teaching material. fastchess
       still works for anyone who prefers it (2026-10-10).
 - [x] `main` protected by the ruleset `main: PR + CI`: PR required, three CI checks required,
-      no force pushes or deletion (cjus/chessengine#5, 2026-10-10).
+      no force pushes or deletion (cjus/chessengine#5, 2026-10-10). Since 2026-10-22 `main: PR`:
+      no check required, PRs are checked locally to save Actions minutes (Carlos).
 - [x] Gauntlet reference engines: seven open-source versions from 2018 to 3049 CCRL Blitz,
       built from source by `scripts/fetch-gauntlet-engines.sh` (see "Testing and strength
       measurement"; cjus/chessengine#36, 2026-10-17).

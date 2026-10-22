@@ -1,6 +1,6 @@
 # Builds and tests on macOS (Apple Silicon) and Windows. Kept off pull requests because those
-# runners cost more Actions minutes on private repos; runs weekly, on stage and release tags,
-# and on demand.
+# runners cost more Actions minutes on private repos; runs weekly if main changed, on stage and
+# release tags, and on demand.
 name: Cross-platform
 
 on:
@@ -10,12 +10,40 @@ on:
     tags: ["stage-*", "v*"]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  # The weekly run asks which commit the last good run checked.
+  actions: read
+
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # The weekly run goes on only if main changed since the last good run; otherwise it costs this
+  # one short Linux job. Tags and runs started by hand always go on.
+  changed:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - id: check
+        env:
+          EVENT: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run=true
+          if [ "$EVENT" = schedule ]; then
+            last=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow cross-platform.yml --branch main \
+              --status success --limit 1 --json headSha --jq '.[0].headSha // ""')
+            if [ "$last" = "$GITHUB_SHA" ]; then run=false; fi
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          echo "Run: $run."
+
   test:
     name: test (${{ matrix.os }})
+    needs: changed
+    if: needs.changed.outputs.run == 'true'
     strategy:
       fail-fast: false
       matrix:
