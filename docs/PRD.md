@@ -359,14 +359,18 @@ stalemate), the engine offering and accepting draws and resigning in hopeless po
 - **`Skill Level` 0–20** and **`UCI_LimitStrength` + `UCI_Elo`**, both mapped to the same
   mechanism. 20 / no limit means full strength.
 - **How it weakens:** a node limit per move, plus choosing among the top MultiPV moves with
-  controlled randomness, so it makes believable mistakes instead of blundering pieces at random.
-  The book explains why "search less" alone doesn't produce human-like play.
-- **Calibrated, not guessed:** each level is measured in matches at 40+0.4 against reference
-  engines with known CCRL ratings, and the `UCI_Elo` → settings table is fitted to those
-  results. The
-  engines are in "Testing and strength measurement"; `scripts/mac-levels.sh` rates the levels.
-  Elo is on the CCRL scale; the docs say plainly that this isn't the same as a FIDE or Lichess
-  rating.
+  controlled randomness, plus **a person's horizon**: many of a weaker level's moves come from a
+  search of one ply (below level 8) or two, with no quiescence search, so it blunders the way
+  people do, by not seeing the reply or the move after it. The book explains why "search less"
+  alone doesn't produce human-like play.
+- **On a human scale, fitted, not guessed:** level 0 is a Lichess rapid rating of 600 and each
+  level 100 more, to 2500 at level 19, and each level's chance of a person's horizon is fitted
+  so that it blunders as often as people of that rating, counted as Lichess counts them in
+  Lichess's own games (the `mistakes` tool; chapter 19). `UCI_Elo` (600–2500) is on that scale,
+  and CNP's `engine/levels` names it. It is an estimate from blunders; games against people
+  would confirm it. Until 2026-10-21 the levels were rated against engines on the CCRL scale
+  instead (`scripts/mac-levels.sh`, kept in the book as the record), which suited engines but
+  not the people the levels are for (cjus/chessgui#113).
 - The shell's `level` and `elo` commands set the same options.
 
 ## Learning tool
@@ -805,6 +809,13 @@ about 26 s, and the M1 Max played about 970 games an hour.
 - [x] `UCI_Elo` range: 650–2450, level 0's and level 19's ratings at 40+0.4 rounded inward to
       50. It was 1000–2400 at first, then 800–2600 after the calibration at 8+0.08
       (cjus/chessengine#106, 2026-10-18).
+- [x] Levels on a human scale (Carlos, cjus/chessgui#113, 2026-10-21): played at "Elo 1050" in
+      Solrac, a level was "much stronger than a 1050 level player". Rated against engines on
+      CCRL, it blundered 0.7 times in 40 moves where people rated about 1000 on Lichess blunder
+      3.4 times. The levels now take a person's horizon on many moves and are fitted to blunder
+      as people do at Lichess rapid ratings 600 to 2500, 100 a level; `UCI_Elo` 600–2500 is on
+      that scale. Replaces the CCRL calibration and the 650–2450 range above for what the
+      levels mean.
 - [x] cb2026 speaks the Chess Node Protocol (`--cnp`, or a JSON first line) for Solrac, beside
       UCI and XBoard: one search at a time, every capability but the root window, the shell's
       switches as its techniques. The protocol's crates come from the private

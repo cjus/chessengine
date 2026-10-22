@@ -47,7 +47,11 @@ cb2026 speaks the Chess Node Protocol (`--cnp`, `crates/cnp`), passing every con
 session that applies (38; the window's is skipped), M1b's step 4 (cjus/chessgui#98; CI needs
 the deploy key of #143); v1.0 started: `scripts/mac-robustness.sh` for the robustness run,
 #146, which follows #145; larger reductions at expected cut nodes merged on, +11.6 ± 7.7, #145; the v1.0
-robustness run running on the M3, #146.*
+robustness run running on the M3, #146; the strength levels on a human scale: many of a weaker
+level's moves now come from a person's horizon (one or two plies, no quiescence search), fitted
+so each level blunders as often as people rated 600 to 2500 on Lichess rapid do, counted in
+Lichess's own games by the new `mistakes` tool; `UCI_Elo` 600–2500 is on that scale and the CCRL
+ratings no longer hold; full strength unchanged (Carlos, cjus/chessgui#113; #151).*
 
 ## Stages
 

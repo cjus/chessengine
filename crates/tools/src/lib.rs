@@ -17,14 +17,17 @@
 //!   reference engines, used by the `gauntlet` tool.
 //! - [`selfplay`]: self-play data generation for tuning (the `datagen` tool).
 //! - [`texel`]: the Texel tuner's error, gradient and optimiser (the `tune` tool).
-//! - The `perft-suite`, `find-magics`, `match`, `gauntlet`, `datagen` and `tune` command-line
-//!   tools (`src/bin/`).
+//! - [`mistakes`]: how often a strength level makes inaccuracies, mistakes and blunders, as
+//!   Lichess counts them, to compare the levels with people (the `mistakes` tool).
+//! - The `perft-suite`, `find-magics`, `match`, `gauntlet`, `datagen`, `tune` and `mistakes`
+//!   command-line tools (`src/bin/`).
 
 #![forbid(unsafe_code)]
 
 pub mod game;
 pub mod gauntlet;
 pub mod match_runner;
+pub mod mistakes;
 pub mod selfplay;
 pub mod sprt;
 pub mod texel;

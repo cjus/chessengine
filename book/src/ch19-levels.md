@@ -36,6 +36,36 @@ is still common at low levels. One that throws away a piece is outside the **mar
 never played. The weak levels make inaccuracies, and more of them the lower the level,
 instead of random blunders.
 
+That turned out to be too tidy. People don't only make inaccuracies: they blunder, often
+(below). Every candidate above comes from a search that sees the short tactics, so a level
+seldom left a piece where it could be taken, and seldom missed one left for it. Carlos played
+the level then rated 1050 and found it "much stronger than a 1050 level player"
+(cjus/chessgui#113). Counted the way Lichess counts, it blundered 0.7 times in 40 moves;
+people rated about 1000 on Lichess blunder 3.4 times.
+
+## A person's horizon
+
+People's worst mistakes come from how far they look. A beginner moves a piece without seeing
+the reply, and it is taken. A stronger player sees the reply but not the move after it, and
+walks into a fork or a pin. So a weaker level chooses many of its moves **with a person's
+horizon**: a search of exactly one ply below level 8, the move alone, or two from level 8, the
+move and the reply, with no quiescence search, no transposition table and nothing pruned
+(`Techniques::horizon`). The positions at the end are evaluated as they stand, in the middle of
+any exchange, as a hurried eye sees them. Then the level chooses among that search's best moves
+as usual.
+
+```rust,ignore
+{{#include ../../crates/engine/src/levels.rs:horizon}}
+```
+
+Such a move is often fine: it is a blunder only when there was a tactic to miss, which is when
+people blunder too. How often a level looks that way is fitted to people's blunders, level by
+level (below):
+
+```rust,ignore
+{{#include ../../crates/engine/src/levels.rs:horizon_chances}}
+```
+
 ## MultiPV
 
 To choose among the best moves, the engine has to know the best *several* moves, not just the
@@ -55,7 +85,7 @@ full search, so three lines take about three times as long.
 | Option | What it does |
 | --- | --- |
 | `Skill Level` 0–20 | The level; 20 is full strength |
-| `UCI_LimitStrength` + `UCI_Elo` 650–2450 | Limit to an Elo rating; mapped onto the levels' measured ratings (below) |
+| `UCI_LimitStrength` + `UCI_Elo` 600–2500 | Limit to a rating on the levels' human scale (below) |
 | `MultiPV` 1–256 | Lines searched and reported |
 
 In the shell, `level 5`, `elo 1300` and `elo off` do the same, and say what the engine now
@@ -63,20 +93,93 @@ plays at:
 
 ```text
 > level 5
-Strength: level 5, about 957 Elo: 3037 nodes per move, choosing among the best 4 moves
+Strength: level 5, about 1100 on Lichess (rapid, by blunders): 3037 nodes per move, choosing among the best 4 moves; a person's horizon (1 ply) on 55% of its moves
 > level 20
-Strength: full, about 2782 Elo
-> elo 1300
-Strength: level 9.1, about 1300 Elo: 15705 nodes per move, choosing among the best 4 moves
+Strength: full
+> elo 1350
+Strength: level 7.5, about 1350 on Lichess (rapid, by blunders): 8370 nodes per move, choosing among the best 4 moves; a person's horizon (1 ply) on 46% of its moves
 ```
 
-`Skill Level` caps `UCI_Elo`: with `level 5` set, `elo 1300` still plays at level 5.
+`Skill Level` caps `UCI_Elo`: with `level 5` set, `elo 1350` still plays at level 5.
 
-## Calibration
+## A human scale
 
-What Elo is level 5? Nobody knows until it plays. The PRD requires the levels to be
-**calibrated**: each one plays games against reference engines with known ratings on the CCRL
-list, and `UCI_Elo` is fitted to the results.
+What rating is level 5? Until cjus/chessgui#113 the answer was a rating against other engines,
+measured in games (the next section). But a rating against engines says little about what a
+person meets: engines punish every blunder at once, people often don't, so a level that
+blunders like a person rated 1000 rates far lower against engines, and a level rated 1000
+against engines plays far more cleanly than a person rated 1000. Carlos chose a human scale.
+
+**People's blunders.** Lichess publishes every rated game it hosts (<https://database.lichess.org/>),
+and about one in twelve carries the evaluation its analysis gave each move. Lichess judges a
+move by how much it lowers the mover's winning chances, from −1 to 1: a drop of 0.1 is an
+inaccuracy, 0.2 a mistake, 0.3 a blunder, with the chances from centipawns through a curve
+fitted to its games (<https://lichess.org/page/accuracy>). The `mistakes` tool counts the same
+way (`cb2026_tools::mistakes`). Its `--people` mode, on 60,000 rated rapid games of January
+2025 with evaluations, gave, per 40 moves of one player:
+
+| Lichess rating | 600 | 800 | 1000 | 1200 | 1400 | 1600 | 1800 | 2000 | 2200 | 2400 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Blunders | 4.6 | 3.9 | 3.4 | 3.0 | 2.8 | 2.4 | 2.1 | 1.9 | 1.5 | 0.9 |
+| Mistakes | 2.0 | 1.8 | 1.7 | 1.7 | 1.7 | 1.6 | 1.5 | 1.3 | 1.2 | 0.9 |
+| Inaccuracies | 4.2 | 3.9 | 3.9 | 3.8 | 3.9 | 3.6 | 3.7 | 3.4 | 3.0 | 2.5 |
+
+People blunder two to four times a game across nearly the whole range, and the rate falls
+slowly with rating. The levels did far less: 2.8 at level 0, 0.7 at level 6, 0.2 at level 12
+and none by level 18, judged by a full-strength search of 100,000 nodes in 32 games each.
+
+**The levels on that scale.** Level 0 is now a Lichess rapid rating of 600 and each level 100
+more, to 2500 at level 19, and each level's chance of a person's horizon is fitted so that it
+blunders as often as people of its rating:
+
+```rust,ignore
+{{#include ../../crates/engine/src/levels.rs:ratings}}
+```
+
+The fit took three rounds of 40 games a level with the `mistakes` tool. A level blunders about
+as often as its usual search does, plus its chance of a person's horizon times what such a move
+adds: about 5 blunders in 40 moves with one ply, 3 to 4 with two. The first round put that at
+4.1 for two plies, measured with every move a horizon move; played among a level's other moves,
+a two-ply horizon move meets fewer tactics, and the upper levels fell short. Each round set
+each level's chance from how far the last missed, and the last is smoothed into one straight
+line through levels 0 to 7 and another through 8 to 19, since 40 games of one level carry about
+± 0.5 blunders of noise. The check, with openings none of the rounds used:
+
+| Level | 0 | 2 | 4 | 6 | 8 | 10 | 12 | 14 | 16 | 18 | 19 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Rating | 600 | 800 | 1000 | 1200 | 1400 | 1600 | 1800 | 2000 | 2200 | 2400 | 2500 |
+| People's blunders | 4.5 | 4.1 | 3.4 | 3.0 | 2.7 | 2.4 | 2.1 | 1.8 | 1.5 | 1.1 | 0.9 |
+| The level's | 3.8 | 3.9 | 2.5 | 3.7 | 2.4 | 2.8 | 2.3 | 1.5 | 1.7 | 1.3 | 1.0 |
+
+Over all twenty levels the level blunders 2.5 times in 40 moves on average, people of the same
+ratings 2.6. Full strength measured 0.3, which is about the judge's own floor: a search of
+100,000 nodes now and then disagrees with a stronger one.
+
+`UCI_Elo` maps onto the table. Between two levels the strength is in between too: the node
+count, margin and temperature are smooth in the level, so `settings_at` takes a fractional one,
+and an Elo of 1350, between level 7 (1300) and level 8 (1400), plays at level 7.5. Its horizon
+is level 7's: a horizon's depth can't be a fraction, and the chance jumps where the depth
+changes.
+
+```rust,ignore
+{{#include ../../crates/engine/src/levels.rs:level_for_elo}}
+```
+
+The range runs from level 0's rating to level 19's: **600 to 2500**. CNP's `engine/levels`
+names the scale "Lichess rapid, estimated from how often people blunder", so a client can say
+what the numbers mean.
+
+It is an estimate from blunders alone. A level's other moves are an engine's, its inaccuracies
+and mistakes fewer than people's at the low end, and the counts come from Lichess's own
+analysis for people but from a search of 100,000 nodes for the levels. Only games against
+people would rate the levels for sure: as a Lichess bot, say (`docs/lichess.md`).
+
+## Calibration against engines (until cjus/chessgui#113)
+
+Before the human scale, the levels were **calibrated** against engines, as the PRD then
+required: each played games against reference engines with known ratings on the CCRL list,
+and `UCI_Elo` was fitted to the results. Those ratings were for the levels without a person's
+horizon; they no longer hold, and are kept here as the record.
 
 `scripts/mac-levels.sh` does that on the test Mac. Each level plays 200 games against each of
 the four reference engines nearest its expected strength, chosen from twelve open-source
@@ -118,35 +221,31 @@ The ratings in italics are halfway between their neighbours, not measured.
 
 Full strength rated 2782 ± 11 in the gauntlet of 2026-10-21, at 8+0.08 (2714 ± 10 on 2026-10-18,
 before correction history and double extensions). It uses the clock, so unlike the levels it
-gains from more time much as its opponents do. Level 19 plays about 300 below it. The 40+0.4 column goes into the code:
-
-```rust,ignore
-{{#include ../../crates/engine/src/levels.rs:ratings}}
-```
+gains from more time much as its opponents do. Level 19 played about 300 below it. The 40+0.4
+column was the code's table, and `UCI_Elo` ran from level 0's rating to level 19's, rounded
+inward to 50: 650 to 2450 (1000 to 2400 before any calibration, 800 to 2600 after the first).
 
 Before any calibration, the levels followed a guessed straight line from 1000 at level 0 to
-2400 at level 19. That was about 370 too high at the bottom and close at the top. A level gains
+2400 at level 19. That was about 370 too high at the bottom and close at the top. A level gained
 55 to 75 points up to level 6, where the randomness dominates, then more with each level: about
 120 from level 12 up, and 146 from 18 to 19.
 
-`UCI_Elo` maps onto the table. Between two levels, the strength is in between too: the node
-count, margin and temperature are smooth in the level, so `settings_at` takes a fractional one,
-and an Elo of 1300, between level 9 (1295) and level 10 (1391), plays at level 9.1:
-
-```rust,ignore
-{{#include ../../crates/engine/src/levels.rs:level_for_elo}}
-```
-
-The `UCI_Elo` range was 1000 to 2400 before any calibration, a guess at what the levels would
-reach, and 800 to 2600 after the first. It now runs from level 0's rating to level 19's,
-rounded inward to 50: **650 to 2450**, levels 0.3 to 18.8. `Skill Level 0` and `Skill Level
-19` still play their own strengths.
-
-The ratings are on the CCRL scale (engine against engine, at blitz). That isn't the same as a
-FIDE or Lichess rating, and a human's experience against a level depends on more than its
-rating: how it plays, as above.
+With a person's horizon the levels lose far more often to engines, so their ratings against
+engines would now be much lower, the lower levels below every reference engine (the weakest is
+rated 1058). Rating them on CCRL's scale again would need weaker engines.
 
 ## Pitfalls
+
+- **A rating against engines isn't a rating against people.** Engines punish every blunder;
+  people miss many. So a level's rating against engines and the rating of the people it plays
+  like can be hundreds of points apart, and a level can't be fitted to both (the human scale,
+  above).
+- **A horizon search must not teach the table.** Its scores are unresolved, evaluated in the
+  middle of exchanges; written to the transposition table they would mislead the next full
+  search. `Techniques::horizon` leaves the table alone, and runs on one thread.
+- **Blunders come in bunches.** One bad game can hold several, so 40 games of a level carry
+  about ± 0.5 blunders in 40 moves of noise. The chances are smoothed across levels rather
+  than set level by level from one run.
 
 - **Node limits checked too rarely.** The search used to check its limits every 1024 nodes.
   At 400 nodes a move that's far too coarse, so the node count is now checked at every node
@@ -174,11 +273,15 @@ rating: how it plays, as above.
 
 ## What it's worth
 
-At full strength nothing changes (the bench is unchanged). The levels span 629 to 2483 on the
-CCRL Blitz scale at 40+0.4, from a beginner's engine to a strong one, and `UCI_Elo` now means
-what it says, within each level's margin of about 25 points (more at the bottom).
+At full strength nothing changes (the bench is unchanged). The levels blunder as people of
+Lichess rapid ratings 600 to 2500 do, within the noise of the measurement, where before even
+level 0 blundered less than people rated 600 and level 18 not at all. `UCI_Elo` means a rating
+on that human scale, estimated from blunders; against engines the levels' old CCRL ratings no
+longer hold.
 
 ## Further reading
 
 - Chess Programming Wiki: [Strength](https://www.chessprogramming.org/Strength),
   [Multi-PV](https://www.chessprogramming.org/Principal_Variation#Multi-PV).
+- Lichess, [accuracy and win percentage](https://lichess.org/page/accuracy), and its
+  [open database](https://database.lichess.org/) of games.

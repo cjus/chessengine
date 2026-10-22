@@ -775,14 +775,11 @@ impl Shell {
         Response::text(out)
     }
 
-    /// The engine's strength setting, in words, with its measured rating.
+    /// The engine's strength setting, in words, with its rating on the levels' human scale.
     fn strength_text(&self) -> String {
         let level = self.engine.level();
         if level >= f64::from(levels::FULL_STRENGTH) {
-            return format!(
-                "Strength: full, about {} Elo",
-                levels::RATINGS[levels::FULL_STRENGTH as usize]
-            );
+            return "Strength: full".to_string();
         }
         let settings = levels::settings_at(level);
         // A whole level as it is ("level 5"); an Elo between two levels to a tenth ("level 9.7").
@@ -792,10 +789,13 @@ impl Shell {
             format!("{level:.1}")
         };
         format!(
-            "Strength: level {name}, about {} Elo: {} nodes per move, choosing among the best {} moves",
+            "Strength: level {name}, about {} on Lichess (rapid, by blunders): {} nodes per move, \
+             choosing among the best {} moves; a person's horizon ({} ply) on {:.0}% of its moves",
             levels::rating(level),
             settings.nodes.unwrap_or_default(),
-            settings.candidates
+            settings.candidates,
+            settings.horizon_depth,
+            settings.horizon_chance * 100.0
         )
     }
 
@@ -1681,26 +1681,24 @@ mod tests {
         );
         assert!(shell.execute("fen").output.starts_with("bbqnnrkr/"));
         assert!(shell.execute("new960 960").output.starts_with("Usage"));
-        assert_eq!(
-            shell.execute("level 20").output,
-            "Strength: full, about 2782 Elo"
-        );
+        assert_eq!(shell.execute("level 20").output, "Strength: full");
+        let out = shell.execute("level 5").output;
         assert!(
-            shell
-                .execute("level 5")
-                .output
-                .starts_with("Strength: level 5, about 957 Elo: 3037 nodes")
-        );
-        // Skill Level 5 still caps the strength, and the text says what the engine plays at.
-        let out = shell.execute("elo 1300").output;
-        assert!(out.starts_with("Strength: level 5, about 957 Elo"), "{out}");
-        shell.execute("level 20");
-        let out = shell.execute("elo 1300").output;
-        assert!(
-            out.starts_with("Strength: level 9.1, about 1300 Elo"),
+            out.starts_with("Strength: level 5, about 1100 on Lichess (rapid, by blunders): 3037"),
             "{out}"
         );
-        assert!(shell.execute("elo 600").output.starts_with("Usage"));
+        let horizon = format!(
+            "a person's horizon (1 ply) on {:.0}% of its moves",
+            levels::HORIZON_CHANCES[5] * 100.0
+        );
+        assert!(out.ends_with(&horizon), "{out}");
+        // Skill Level 5 still caps the strength, and the text says what the engine plays at.
+        let out = shell.execute("elo 1350").output;
+        assert!(out.starts_with("Strength: level 5, about 1100"), "{out}");
+        shell.execute("level 20");
+        let out = shell.execute("elo 1350").output;
+        assert!(out.starts_with("Strength: level 7.5, about 1350"), "{out}");
+        assert!(shell.execute("elo 500").output.starts_with("Usage"));
         assert!(shell.execute("level 21").output.starts_with("Usage"));
         shell.execute("elo off");
         shell.execute("level 20");

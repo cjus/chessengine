@@ -12,15 +12,33 @@
 //! sometimes, a blunder that loses a rook practically never. The engine then makes the kind of
 //! mistakes a player of that level makes: inaccuracies, more of them at lower levels.
 //!
-//! The levels are **calibrated**, as the PRD requires: every other level, and level 19, played
-//! 800 games at 40+0.4 against the four reference engines nearest its strength, engines with
-//! known ratings on the CCRL Blitz list (cjus/chessengine#106, `scripts/mac-levels.sh`), and
-//! [`RATINGS`] records the result. `UCI_Elo` maps onto those ratings, between two levels where
-//! it falls between them: the settings are smooth in the level, so [`settings_at`] takes a
-//! fractional one. The ratings are on the CCRL scale, which isn't the same as FIDE or Lichess
-//! ratings. The time control matters: a level's node limit doesn't grow with the clock, while
-//! its opponents play better with more time. A first calibration at 8+0.08
-//! (cjus/chessengine#103) put the levels 74 to 272 higher (see chapter 19).
+//! Those are still a strong player's mistakes. Every candidate comes from a search that sees
+//! the short tactics, so a weak level seldom hangs a piece or misses one hung, and people find
+//! it far stronger than a person of its rating (Solrac, cjus/chessgui#113). Counted as
+//! Lichess counts them (the `mistakes` tool in `cb2026-tools`), people blunder 2 to 4 times in
+//! 40 moves across almost the whole range of ratings, and the levels did far less: 0.7 at the
+//! level once rated 1025 on CCRL, where people rated about 1000 blunder 3.4 times.
+//!
+//! People's worst mistakes come from **their horizon**: they don't see the reply, so a piece
+//! is left where it can be taken, or they see the reply but not the move after it, so a fork
+//! or a pin comes as a surprise. So a weaker level chooses many of its moves **with a person's
+//! horizon** ([`LevelSettings::horizon_chance`], [`horizon`]): a search of one ply, the move
+//! alone, or from [`TWO_PLY_HORIZON_FROM`] two, the move and the reply
+//! ([`LevelSettings::horizon_depth`]), with no quiescence search and nothing pruned
+//! ([`Techniques::horizon`](crate::search::Techniques::horizon)), then the usual choice among
+//! its best moves. Such a move is often fine: it is a blunder only when there was a tactic to
+//! miss, which is when people blunder too.
+//!
+//! **The levels are on a human scale** (Carlos's choice, cjus/chessgui#113): level 0 is a
+//! Lichess rapid rating of 600, and each level 100 more, to 2500 at level 19 ([`RATINGS`],
+//! [`RATING_SCALE`]). Each level's chance of a person's horizon ([`HORIZON_CHANCES`]) is fitted
+//! so that it blunders as often as people of its rating do ([`PEOPLE_BLUNDERS`], counted in
+//! Lichess's own games). It is an estimate from blunders alone: a level's other moves are an
+//! engine's, and only games against people would rate it for sure. A level that blunders like
+//! a person loses to engines far more than a person of its rating would, since engines punish
+//! every blunder, so the levels' old ratings against engines (CCRL Blitz, measured at 40+0.4 on
+//! the test Mac, cjus/chessengine#106; chapter 19) no longer hold, and are kept only in the
+//! book and the Elo ledger.
 //!
 //! See the Chess Programming Wiki, [Strength](https://www.chessprogramming.org/Strength) and
 //! [Playing Strength](https://www.chessprogramming.org/Playing_Strength).
@@ -29,24 +47,58 @@ use cb2026_chess::Move;
 
 /// The full-strength level: no limits.
 pub const FULL_STRENGTH: u32 = 20;
-/// The lowest and highest `UCI_Elo` accepted: levels 0.3 to 18.8 of [`RATINGS`], level 0's and
-/// level 19's ratings rounded inward to 50. It was 1000 to 2400 before any calibration, then
-/// 800 to 2600 after the one at 8+0.08 (cjus/chessengine#106).
-pub const ELO_RANGE: (u32, u32) = (650, 2450);
+/// The lowest and highest `UCI_Elo` (and CNP `strength.elo`) accepted: level 0's and level 19's
+/// ratings in [`RATINGS`]. On the CCRL scale it was 650 to 2450 after the calibration at 40+0.4,
+/// 800 to 2600 after the one at 8+0.08 (cjus/chessengine#106), and 1000 to 2400 before any.
+pub const ELO_RANGE: (u32, u32) = (600, 2500);
+
+/// What [`RATINGS`] mean, as CNP's `engine/levels` names it.
+pub const RATING_SCALE: &str = "Lichess rapid, estimated from how often people blunder";
+
+/// From this level on, a person's horizon sees the reply too (two plies); below it, only the
+/// move (one ply). Level 8 is a Lichess rating of 1400.
+pub const TWO_PLY_HORIZON_FROM: f64 = 8.0;
 
 // ANCHOR: ratings
-/// The measured rating of each level, 0 to [`FULL_STRENGTH`], on the CCRL Blitz scale. Levels
-/// 0–19: the calibration at 40+0.4 on the test Mac, 2026-10-18 and 19 (cjus/chessengine#106).
-/// Levels 0, 2, 4, …, 18 and 19 played 800 games each against the four reference engines nearest
-/// them, ± 23 to 55 (level 0, weaker than every reference engine, has the widest margin). Each
-/// odd level below 19 is halfway between its neighbours. Full strength: the gauntlet of `main`
-/// on 2026-10-21, 2782 ± 11 at 8+0.08 (cjus/chessengine#131; 2714 ± 10 on 2026-10-18,
-/// cjus/chessengine#36); it uses the clock, so it gains from more time like its opponents.
+/// Each level's rating, 0 to [`FULL_STRENGTH`], on [`RATING_SCALE`]: the Lichess rapid rating
+/// of the people who blunder as often as the level does ([`PEOPLE_BLUNDERS`]), 600 at level 0
+/// and 100 more for each level, to 2500 at level 19. Full strength makes no blunders to compare,
+/// and plays far above any person: its 3000 only stands above the scale, and is never asked for
+/// ([`ELO_RANGE`] stops at level 19's).
 pub const RATINGS: [u32; FULL_STRENGTH as usize + 1] = [
-    629, 703, 777, 833, 888, 957, 1025, 1112, 1198, 1295, 1391, 1501, 1610, 1731, 1852, 1974, 2096,
-    2217, 2337, 2483, 2782,
+    600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900, 2000, 2100,
+    2200, 2300, 2400, 2500, 3000,
 ];
 // ANCHOR_END: ratings
+
+/// How often people at each level's rating (0 to 19, [`RATINGS`]) blunder, per 40 moves of one
+/// player, as Lichess's analysis counts it: 60,000 rated rapid games of January 2025 that carry
+/// Lichess's evaluations (<https://database.lichess.org/>), counted by `mistakes --people` in
+/// `cb2026-tools`. Each is the average of its 100-point band (600 to 699 for level 0) and the
+/// bands beside it. What the levels are fitted to.
+pub const PEOPLE_BLUNDERS: [f64; FULL_STRENGTH as usize] = [
+    4.54, 4.31, 4.06, 3.67, 3.43, 3.18, 2.99, 2.86, 2.71, 2.59, 2.41, 2.25, 2.11, 1.99, 1.83, 1.66,
+    1.48, 1.25, 1.05, 0.90,
+];
+
+// ANCHOR: horizon_chances
+/// The chance at each level, 0 to 19, that a move is chosen with a person's horizon: fitted with
+/// the `mistakes` tool so that each level blunders as often as [`PEOPLE_BLUNDERS`] says (see the
+/// module docs). It rises at [`TWO_PLY_HORIZON_FROM`], where a horizon that sees the reply makes
+/// fewer blunders per move. Full strength: never.
+///
+/// The fit, in three rounds of 40 self-play games a level, each move judged at 100,000 nodes:
+/// a level blunders about as often as its usual search does (2.8 times in 40 moves at level 0
+/// with the horizon off, none by level 18), plus the chance times what a horizon move adds
+/// (about 5 blunders in 40 with one ply, 3 to 4 with two). Each round set each level's chance
+/// from how far the last missed, and the last is smoothed into a straight line through levels 0
+/// to 7 and another through 8 to 19, since one level's 40 games carry about ± 0.25 blunders of
+/// noise (chapter 19 has the rounds).
+pub const HORIZON_CHANCES: [f64; FULL_STRENGTH as usize] = [
+    0.78, 0.73, 0.68, 0.64, 0.59, 0.55, 0.50, 0.46, 0.70, 0.70, 0.69, 0.65, 0.62, 0.58, 0.55, 0.51,
+    0.48, 0.44, 0.41, 0.37,
+];
+// ANCHOR_END: horizon_chances
 
 /// How a level plays.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -60,6 +112,10 @@ pub struct LevelSettings {
     /// How readily worse moves are chosen: a move `temperature` centipawns worse than the
     /// best is chosen `e` (2.7) times less often.
     pub temperature: f64,
+    /// The chance, 0 to 1, that a move is chosen with a person's horizon ([`horizon`]).
+    pub horizon_chance: f64,
+    /// How many plies a person's horizon sees: 1, the move alone, or 2, the reply too.
+    pub horizon_depth: u32,
 }
 
 /// The settings for `level` (0 to [`FULL_STRENGTH`]).
@@ -77,6 +133,8 @@ pub fn settings_at(level: f64) -> LevelSettings {
             candidates: 1,
             margin: 0,
             temperature: 0.0,
+            horizon_chance: 0.0,
+            horizon_depth: 0,
         };
     }
     let level = level.max(0.0);
@@ -88,9 +146,27 @@ pub fn settings_at(level: f64) -> LevelSettings {
         candidates: 4,
         margin: (300.0 - 15.0 * level).round() as i32,
         temperature: 120.0 - 6.0 * level,
+        // A whole level's: the depth can't be a fraction, and the chance jumps where the depth
+        // changes, so between two levels the lower one's.
+        horizon_chance: HORIZON_CHANCES[(level.floor() as usize).min(HORIZON_CHANCES.len() - 1)],
+        horizon_depth: if level.floor() < TWO_PLY_HORIZON_FROM {
+            1
+        } else {
+            2
+        },
     }
 }
 // ANCHOR_END: settings
+
+// ANCHOR: horizon
+/// Whether this move is chosen with a person's horizon, using `random` (any 64-bit number) as
+/// the dice: the plies to search if so, `None` for the level's usual search.
+pub fn horizon(settings: &LevelSettings, random: u64) -> Option<u32> {
+    // A number in [0, 1).
+    let roll = (random >> 11) as f64 / (1u64 << 53) as f64;
+    (roll < settings.horizon_chance).then_some(settings.horizon_depth)
+}
+// ANCHOR_END: horizon
 
 // ANCHOR: level_for_elo
 /// The strength for a `UCI_Elo` setting (clamped to [`ELO_RANGE`]): the level with that measured
@@ -184,26 +260,54 @@ mod tests {
     }
 
     #[test]
-    fn elo_maps_onto_the_measured_ratings() {
-        // Each level is stronger than the one below it.
+    fn weaker_levels_more_often_look_only_as_far_as_a_person() {
+        assert_eq!(settings(FULL_STRENGTH).horizon_chance, 0.0);
+        assert_eq!(settings(0).horizon_chance, HORIZON_CHANCES[0]);
+        // Within each horizon, a stronger level looks that way no more often.
+        let first_two_ply = TWO_PLY_HORIZON_FROM as u32;
+        for level in (1..FULL_STRENGTH).filter(|&level| level != first_two_ply) {
+            assert!(settings(level).horizon_chance <= settings(level - 1).horizon_chance);
+        }
+        // Between two levels, the lower one's horizon.
+        assert_eq!(settings_at(7.5).horizon_chance, settings(7).horizon_chance);
+        assert_eq!(settings_at(7.5).horizon_depth, 1);
+        // People blunder less as their rating rises.
+        assert!(PEOPLE_BLUNDERS.windows(2).all(|pair| pair[0] > pair[1]));
+        // Weak levels don't see the reply; stronger ones see it, but not the move after.
+        assert_eq!(settings(0).horizon_depth, 1);
+        assert_eq!(settings(7).horizon_depth, 1);
+        assert_eq!(settings(8).horizon_depth, 2);
+        assert_eq!(settings(19).horizon_depth, 2);
+        // The dice: as often as the chance says.
+        let level = settings(0);
+        let rolls = 10_000u64;
+        let looked = (0..rolls)
+            .filter(|i| horizon(&level, i.wrapping_mul(0x9E37_79B9_7F4A_7C15)).is_some())
+            .count();
+        let share = looked as f64 / rolls as f64;
+        assert!((share - HORIZON_CHANCES[0]).abs() < 0.02, "{share}");
+        assert_eq!(horizon(&settings(FULL_STRENGTH), 0), None);
+    }
+
+    #[test]
+    fn elo_maps_onto_the_ratings() {
+        // Each level is stronger than the one below it, 100 points a level.
         assert!(RATINGS.windows(2).all(|pair| pair[0] < pair[1]));
-        // A level's own rating maps onto it exactly, and other Elos onto in-between strengths:
-        // 1000 between levels 5 (957) and 6 (1025), 2000 just above level 15 (1974).
+        assert_eq!(RATINGS[0], 600);
+        assert_eq!(RATINGS[19], 2500);
+        // A level's own rating maps onto it exactly, and other Elos onto in-between strengths.
         assert_eq!(level_for_elo(RATINGS[10]), 10.0);
-        assert!(level_for_elo(1000) > 5.0 && level_for_elo(1000) < 6.0);
-        assert!(level_for_elo(2000) > 15.0 && level_for_elo(2000) < 15.3);
-        // The range's ends: 650 between levels 0 (629) and 1 (703), 2450 between levels 18
-        // (2337) and 19 (2483).
-        assert!(level_for_elo(650) > 0.2 && level_for_elo(650) < 0.3);
-        assert!(level_for_elo(2450) > 18.7 && level_for_elo(2450) < 18.8);
-        // Outside the range, the nearest end.
-        assert_eq!(level_for_elo(500), level_for_elo(650));
-        assert_eq!(level_for_elo(3000), level_for_elo(2450));
+        assert_eq!(level_for_elo(1050), 4.5);
+        // The range's ends are levels 0 and 19, and outside it, the nearest end.
+        assert_eq!(level_for_elo(ELO_RANGE.0), 0.0);
+        assert_eq!(level_for_elo(ELO_RANGE.1), 19.0);
+        assert_eq!(level_for_elo(400), 0.0);
+        assert_eq!(level_for_elo(2800), 19.0);
         // And back: the rating of the strength for an Elo is that Elo.
         for elo in (ELO_RANGE.0..=ELO_RANGE.1).step_by(50) {
             assert_eq!(rating(level_for_elo(elo)), elo, "{elo}");
         }
-        assert_eq!(rating(f64::from(FULL_STRENGTH)), 2782);
+        assert_eq!(rating(f64::from(FULL_STRENGTH)), 3000);
     }
 
     #[test]
