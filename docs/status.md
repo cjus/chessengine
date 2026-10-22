@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-21, 17:58 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-21, 20:13 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -46,7 +46,7 @@ Syzygy, the first step of Solrac's M1b (cjus/chessgui#71, #98);
 cb2026 speaks the Chess Node Protocol (`--cnp`, `crates/cnp`), passing every conformance
 session that applies (38; the window's is skipped), M1b's step 4 (cjus/chessgui#98; CI needs
 the deploy key of #143); v1.0 started: `scripts/mac-robustness.sh` for the robustness run,
-#146, which follows #145; larger reductions at expected cut nodes running on the M3, #145.*
+#146, which follows #145; larger reductions at expected cut nodes merged on, +11.6 ± 7.7, #145.*
 
 ## Stages
 
@@ -110,17 +110,14 @@ the deploy key of #143); v1.0 started: `scripts/mac-robustness.sh` for the robus
 | M5: capture history, third version: the second in the main search only, the quiescence search keeping MVV-LVA (chapter 10.2) | #134 | 1136500 (1003431 with capture history on) | Merged, off by default: −2.9 ± 5.9, 6,301 games, [0, 5] failed (M3 Max) |
 | M5: double extensions at a margin of 70 instead of 50 (chapter 14.1) | #138 | 1136500 (1054909 with the margin at 70) | Merged as a record, the margin back at 50: −20.5 ± 12.2, 1,407 games, [0, 5] failed (M3 Max) |
 | M5: history pruning: quiet moves with a bad history skipped near the leaves (chapter 13.1) | #140 | 1136500 (1022919 with history pruning on) | Merged, off by default: −5.3 ± 7.1, 4,548 games, [0, 5] failed (M3 Max) |
-| M5: larger reductions at expected cut nodes (chapter 14.1) | #145, `claude/cut-node-reductions` | 1078861 | Draft, its SPRT running on the M3 Max: [0, 5] at 8+0.08 |
+| M5: larger reductions at expected cut nodes (chapter 14.1) | #145 | 1078861 | Merged: +11.6 ± 7.7, 3,687 games, [0, 5] passed (M3 Max) |
 
-**Running now: #145** (larger reductions at expected cut nodes; chapter 14.1), started on the M3
-on 2026-10-21 at about 17:15 MDT. A clear result should take 1–3 hours, a small difference 5–8.
-A new session should restart the watcher, `scripts/watch-sprt.sh 145`, or just read #145's
-comments if the result is already there. Then rebase #145 onto `main` (in `docs/status.md` take
-`main`'s side and edit it), record the result in chapter 14.1, the search module docs, the
-switch's comment, the PRD's techniques table, the ledger and this file, and merge. If it fails,
-switch `cut_node_reductions` off by default (with its comment, the switch's doc, the shell's
-help and the PRD) and merge as a record. Either way, then comment on #146 that `main` is ready
-for the robustness run.
+**Nothing is running on the M3 now. Next: the v1.0 robustness run (#146).**
+
+The SPRT of larger reductions at expected cut nodes (#145) finished on 2026-10-21 at 20:11 MDT.
+It started at about 17:15 and passed in 3,687 games, about 3 hours: **+11.6 ± 7.7**. They are on
+by default, and the bench is 1,078,861. `main` with them is the v1.0 candidate, so #146 can
+start.
 
 The SPRT of history pruning (#140) finished on 2026-10-21 at 16:29 MDT. It started at about
 12:50 and failed in 4,548 games, about 3 hours 40 minutes: **−5.3 ± 7.1**, though it took 10%
@@ -378,7 +375,8 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    4.8, 9,057 games, about 7 hours); on 2026-10-16, `singular_margin` 3 (#82, +5.2 ± 4.2,
    11,400 games, about 9 hours); on 2026-10-19, correction history (#112, +28.0 ± 13.0, 1,308
    games, about 70 minutes); on 2026-10-20, double extensions at a margin of 50 (#125, +13.0 ±
-   8.3, 3,167 games, about 2 hours 30 minutes). Failed, so not adopted: `singular_margin` 4 (#84, −1.8 ± 5.3
+   8.3, 3,167 games, about 2 hours 30 minutes); on 2026-10-21, larger reductions at expected cut
+   nodes (#145, +11.6 ± 7.7, 3,687 games, about 3 hours). Failed, so not adopted: `singular_margin` 4 (#84, −1.8 ± 5.3
    against 3, 7,476 games, about 6 hours) and transposition table buckets (#86, −8.8 ± 8.6,
    2,685 games, about 2 hours; off by default) and, on 2026-10-19, capture history (#115,
    −19.2 ± 11.9, 1,561 games, about 75 minutes; off by default) and ProbCut (#117, −10.2 ±
@@ -402,8 +400,9 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    games; about 255 games an hour on the M3, 10 hours).
 
    Next, in a rough order of value:
-   - **Mostly failures since correction history** (#112, 2026-10-19): of the eleven tries
-     after it, only double extensions at 50 passed (#125). Failed: capture history three times
+   - **Mostly failures since correction history** (#112, 2026-10-19): of the twelve tries
+     after it, only double extensions at 50 (#125) and larger reductions at expected cut nodes
+     (#145) passed. Failed: capture history three times
      (#115, −19.2; #129 in Stockfish's form, −6.8; #134 in the main search only, −2.9),
      ProbCut (#117, −10.2), correction history's piece tables averaged with the pawn table
      (#119, −20.7) and added to it (#121, −0.4 over 11,433 games), `singular_tt_depth_margin`
@@ -412,8 +411,9 @@ Run the full test suite on every commit you replay, not only at the tip: each be
      settings for another try. Capture history has lost three times, so it waits behind the
      candidates below.
    - **New techniques**: history pruning failed (#140, −5.3 ± 7.1; chapter 13.1 lists other
-     settings). Larger reductions at expected cut nodes, which cb2026 doesn't have either, could
-     be next; Stockfish's own estimate for its version is small, about 3 Elo.
+     settings). Larger reductions at expected cut nodes passed (#145, +11.6 ± 7.7, against
+     Stockfish's own estimate of about 3 Elo for its version). Next for them: 2 plies, as in
+     Stockfish, or a smaller reduction at expected all-nodes (chapter 14.1).
    - **Tuning singular extensions, continued**: depth 6 passed (#78) and depth 4 too (#80),
      which is about where Stockfish starts; `singular_margin` 3 passed too (#82), and 4
      failed (#84); `singular_tt_depth_margin` 4 failed against 3 (#123, −7.4 ± 8.0). That
@@ -439,8 +439,8 @@ Run the full test suite on every commit you replay, not only at the tip: each be
 4. The v1.0 release (`docs/releasing.md`), then stage 21 (NNUE). Carlos asked to move to v1.0
    on 2026-10-21, after the run of failed M5 tries. The steps:
    - The gates: the gauntlet passed (2782 ± 11, #131). The robustness run (#146) comes once
-     #145 (cut-node reductions, the last M5 SPRT for now) is recorded, so that it tests the
-     code that will be released. `scripts/mac-robustness.sh <issue>` plays cb2026 against itself:
+     #145 (cut-node reductions, the last M5 SPRT for now, passed) is recorded, so that it tests
+     the code that will be released: `main` from #145's merge on. `scripts/mac-robustness.sh <issue>` plays cb2026 against itself:
      6,000 games at 1+0.01, 3,000 at 10+0.1 and 1,000 at 40/60, about 10–11 hours. The GUI
      matrix is #37, Carlos's, in the GUIs on his Mac.
    - Then a version PR: `[workspace.package] version` 1.0.0 in `Cargo.toml`, with the ledger,

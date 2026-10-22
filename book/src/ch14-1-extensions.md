@@ -384,6 +384,56 @@ reductions to show any effect in a reasonable number of games; changing one in s
 directions, and with the same score that orders the moves, made the difference. cb2026 ships
 with it on.
 
+## Reductions at expected cut nodes
+
+Off the principal variation, every node is searched with a null window: the question is only
+whether its score is above or below one value. Such a node is expected either to **fail high**,
+when one move should be enough to refute the opponent's last move, or to **fail low**, when
+every move has to be searched and none is good enough. Knuth and Moore described the kinds in
+their analysis of alpha-beta (1975), as types 2 and 3; Tony Marsland and Fred Popowich called
+them *cut nodes* and *all-nodes*. In a perfectly ordered tree they alternate: the children of a cut node are all-nodes, and the children of an all-node are cut
+nodes.
+
+The search can't know a node's type, but it can pass its guess down the tree:
+
+```rust,ignore
+{{#include ../../crates/engine/src/search.rs:cut_node_flags}}
+```
+
+The root and every search with the full window are principal variation nodes, never cut nodes.
+Every other null-window search flips its parent's guess, and a late move's reduced search counts
+as a cut node whatever its parent, as in Stockfish (GPL-3.0). The null move's search flips the
+guess too, and the singular extension's search, of the same node, keeps it. At an expected cut
+node the late moves seldom matter, because one of the first should already refute the node, so
+late move reductions take `lmr_cut_node` (1) plies more off them:
+
+```rust,ignore
+{{#include ../../crates/engine/src/search.rs:cut_node_reduction}}
+```
+
+The guess is a good one. Over the positions of a game, each searched to depth 10 one after
+another so that the tables fill as they do in a game, 88% of the expected cut nodes that reached
+their moves failed high, against 42% of the expected all-nodes (35% from depth 3). Nodes cut
+off before their moves, by the null move or reverse futility pruning, aren't counted.
+
+Stockfish passes the same flag and adds 2 plies at cut nodes, alongside reductions that cb2026
+doesn't have and that take plies off again elsewhere. cb2026 adds 1, set by hand, not tuned.
+The code is cb2026's own. `set cutnode off` switches it off, and gives the search without it
+exactly.
+
+The bench is 5.1% smaller with it: 1,078,861 nodes instead of 1,136,500. The trees don't
+shrink consistently, though. Over the six positions of chapters 10 to 14 they are 6% and 10%
+smaller at depths 9 and 10 and 7% bigger at depth 11 (421,160, 634,668 and 946,605 nodes
+against 447,273, 703,714 and 885,651). Over the game's 58 positions at depth 10 they are 3.5%
+bigger in all, and smaller in 27 of them. With 2 plies, as in Stockfish, the six positions
+give 437,022, 657,366 and 939,364, and the game 0.4% more nodes. A reduction that fails high
+is searched again at full depth, so reducing more doesn't always mean searching less.
+
+**It passed**, by about **+12 Elo** (see "What it's worth"), so it is on by default. Stockfish's
+own estimate for its version is about 3 Elo, in an engine where many other reductions overlap
+with it; in cb2026 it had more to add. Untested so far: 2 plies, as in Stockfish, and a
+smaller reduction at an expected all-node, the other half of the same guess.
+
 ## What it saves
 
 The six positions of chapters 10 to 14 (bench positions 2 to 7) at depth 8, measured
@@ -491,10 +541,12 @@ that it is small, about **+5 Elo**, and it took over 14,000 of them to say so.
 | Double extensions (margin 50, at most 6 a line) vs `main` without them (with correction history), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+13.0 ± 8.3 Elo** over 3,167 games (+798 −680 =1689): passed (LLR 2.94); on by default |
 | Double extensions at a margin of 100 vs `main` (50), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−7.3 ± 8.0 Elo** over 3,368 games (+747 −818 =1803): failed (LLR −2.95); the margin stays at 50 |
 | Double extensions at a margin of 70 vs `main` (50), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−20.5 ± 12.2 Elo** over 1,407 games (+278 −361 =768): failed (LLR −2.97); the margin stays at 50 |
+| Larger reductions at expected cut nodes (1 ply more) vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+11.6 ± 7.7 Elo** over 3,687 games (+925 −802 =1960): passed (LLR 2.97); on by default |
 
 ## Further reading
 
 - Chess Programming Wiki: [Extensions](https://www.chessprogramming.org/Extensions),
+  [Node Types](https://www.chessprogramming.org/Node_Types),
   [Check Extensions](https://www.chessprogramming.org/Check_Extensions),
   [Singular Extensions](https://www.chessprogramming.org/Singular_Extensions),
   [Internal Iterative Deepening](https://www.chessprogramming.org/Internal_Iterative_Deepening),

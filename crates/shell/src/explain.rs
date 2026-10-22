@@ -125,6 +125,11 @@ pub const SWITCHES: &[Switch] = &[
         flag: |e| &mut e.techniques.history_lmr,
     },
     Switch {
+        name: "cutnode",
+        description: "Cut-node reductions: late moves at expected cut nodes reduced more",
+        flag: |e| &mut e.techniques.cut_node_reductions,
+    },
+    Switch {
         name: "lmp",
         description: "Late move pruning",
         flag: |e| &mut e.techniques.late_move_pruning,

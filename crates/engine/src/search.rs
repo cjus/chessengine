@@ -156,6 +156,23 @@
 //! move with a bad score more as well as a good one less. It passed: +22.2 ± 11.4 Elo after
 //! 1,661 games at 8+0.08 (cjus/chessengine#74).
 //!
+//! ## Reductions at expected cut nodes
+//!
+//! Off the principal variation, a node searched with a null window is expected either to fail
+//! high (an expected **cut node**: one move should refute it) or to fail low (an expected
+//! **all-node**: every move has to be searched). The types alternate down the tree: the child of
+//! an expected cut node is an expected all-node, and the other way round. A late move's reduced
+//! search counts as a cut node whatever its parent, and a node with the full window is never
+//! one. At an expected cut node the late moves seldom matter, so late move reductions are
+//! `lmr_cut_node` (1) plies larger there.
+//!
+//! The prediction is good. Over a game's positions, searched to depth 10 one after another, 88%
+//! of the expected cut nodes that reached their moves failed high, against 42% of the expected
+//! all-nodes. Stockfish (GPL-3.0) passes the same flag down and adds 2 plies at cut nodes,
+//! alongside reductions cb2026 doesn't have; the code here is cb2026's own, and 1 was set by
+//! hand, not tuned. It passed: +11.6 ± 7.7 Elo after 3,687 games at 8+0.08
+//! (cjus/chessengine#145), so it is on by default; see chapter 14.1.
+//!
 //! ## History pruning
 //!
 //! Late move pruning skips quiet moves by how late they come; **history pruning** skips them by
@@ -356,6 +373,8 @@ pub struct SearchParams {
     pub lmr_history_divisor: i32,
     /// ...by at most this many plies either way.
     pub lmr_history_max: i32,
+    /// Late move reductions are this many plies larger at an expected cut node.
+    pub lmr_cut_node: i32,
     /// Late move pruning applies up to this depth...
     pub lmp_max_depth: u32,
     /// ...once `lmp_base + depth²` quiet moves have been tried...
@@ -443,6 +462,9 @@ impl Default for SearchParams {
             // version used 256 and history alone, and changed about one in ten.
             lmr_history_divisor: 128,
             lmr_history_max: 2,
+            // Stockfish (GPL-3.0) adds 2, alongside reductions that cb2026 doesn't have; set by
+            // hand, not tuned.
+            lmr_cut_node: 1,
             lmp_max_depth: 3,
             lmp_base: 3,
             // Doubling it when improving was part of both failed versions (#60, #63).
@@ -551,6 +573,8 @@ pub struct Techniques {
     pub lmr: bool,
     /// Adjust late move reductions by history: reduce quiet moves with a good history less.
     pub history_lmr: bool,
+    /// Reduce late moves more at expected cut nodes (needs LMR).
+    pub cut_node_reductions: bool,
     /// Late move pruning: skip late quiet moves near the leaves.
     pub late_move_pruning: bool,
     /// History pruning: skip quiet moves with a bad history near the leaves (off by default).
@@ -625,6 +649,9 @@ impl Default for Techniques {
             lmr: true,
             // The second version passed its SPRT (cjus/chessengine#74); the first had no verdict.
             history_lmr: true,
+            // Passed its SPRT: +11.6 ± 7.7 Elo after 3,687 games at 8+0.08
+            // (cjus/chessengine#145); see chapter 14.1.
+            cut_node_reductions: true,
             late_move_pruning: true,
             // Off by default: it measured weaker, −5.3 ± 7.1 Elo after 4,548 games at 8+0.08
             // (cjus/chessengine#140); see chapter 13.1.
@@ -671,6 +698,7 @@ impl Techniques {
             null_move: false,
             lmr: false,
             history_lmr: false,
+            cut_node_reductions: false,
             late_move_pruning: false,
             history_pruning: false,
             reverse_futility: false,
@@ -954,7 +982,11 @@ impl<'a> Searcher<'a> {
 
     // ANCHOR: negamax
     /// The negamax score of `pos` searched `depth` plies deep, `ply` plies from the root,
-    /// within the window `[alpha, beta]`. The best line found is written to `pv`.
+    /// within the window `[alpha, beta]`. The best line found is written to `pv`. `cut_node`
+    /// says whether the node is expected to fail high (an expected cut node; see
+    /// [`Searcher::search_move`]); a node with a full window never is.
+    // The search's state is in `self`; these are the node's own.
+    #[allow(clippy::too_many_arguments)]
     fn negamax(
         &mut self,
         pos: &Position,
@@ -962,6 +994,7 @@ impl<'a> Searcher<'a> {
         ply: u32,
         mut alpha: i32,
         beta: i32,
+        cut_node: bool,
         pv: &mut Vec<Move>,
     ) -> i32 {
         self.nodes += 1;
@@ -1145,6 +1178,7 @@ impl<'a> Searcher<'a> {
                 ply + 1,
                 -beta,
                 -beta + 1,
+                !cut_node,
                 &mut null_pv,
             );
             self.note(Note::Exit { score: -score });
@@ -1222,6 +1256,7 @@ impl<'a> Searcher<'a> {
                         probcut_depth,
                         probcut_beta - 1,
                         probcut_beta,
+                        !cut_node,
                         &mut probcut_pv,
                     );
                 }
@@ -1284,6 +1319,7 @@ impl<'a> Searcher<'a> {
                     ply,
                     singular_beta - 1,
                     singular_beta,
+                    cut_node,
                     &mut singular_pv,
                 );
                 self.excluded[ply as usize] = None;
@@ -1447,6 +1483,13 @@ impl<'a> Searcher<'a> {
                 if pv_node {
                     reduction -= 1;
                 }
+                // ANCHOR: cut_node_reduction
+                // Reduce more at an expected cut node: one move should refute it, and the late
+                // ones seldom matter.
+                if self.techniques.cut_node_reductions && cut_node {
+                    reduction += p.lmr_cut_node;
+                }
+                // ANCHOR_END: cut_node_reduction
                 // Reduce a move with a good history less: it has caused cutoffs elsewhere. And
                 // one with a bad history more.
                 if self.techniques.history_lmr {
@@ -1484,7 +1527,15 @@ impl<'a> Searcher<'a> {
             self.push_move(pos, Some(mv));
             let child_depth = (depth - 1 + extension).saturating_sub(shallower);
             self.double_extensions += u32::from(doubled);
-            let score = self.search_move(&child, child_depth, alpha, beta, how, &mut child_pv);
+            let score = self.search_move(
+                &child,
+                child_depth,
+                alpha,
+                beta,
+                how,
+                cut_node,
+                &mut child_pv,
+            );
             self.double_extensions -= u32::from(doubled);
             self.pop_move();
             if self.aborted {
@@ -1596,6 +1647,13 @@ impl<'a> Searcher<'a> {
     /// The first move gets the full window. With PVS on, a later move gets a null window
     /// first, at a reduced depth if LMR chose a reduction; if it beats `alpha` it is searched
     /// again at full depth, and then with the full window if it is inside it.
+    ///
+    /// `cut_node` is the parent's flag. The child of a null-window search is an expected cut
+    /// node if its parent is an expected all-node, and the other way round; a child with the
+    /// full window is a principal variation node, never a cut node. A late move's reduced
+    /// search counts as a cut node whatever the parent, as in Stockfish (GPL-3.0).
+    // ANCHOR: cut_node_flags
+    #[allow(clippy::too_many_arguments)]
     fn search_move(
         &mut self,
         child: &Position,
@@ -1603,12 +1661,14 @@ impl<'a> Searcher<'a> {
         alpha: i32,
         beta: i32,
         how: MoveSearch,
+        cut_node: bool,
         pv: &mut Vec<Move>,
     ) -> i32 {
         let pvs = self.techniques.pvs && self.techniques.alpha_beta;
+        let null_window = beta - alpha == 1;
         let reduction = match how {
             MoveSearch::Later { reduction } if pvs => reduction,
-            _ => return self.search_child(child, depth, alpha, beta, pv),
+            _ => return self.search_child(child, depth, alpha, beta, null_window && !cut_node, pv),
         };
         let mv = self.path.last().copied().flatten();
         if reduction > 0
@@ -1616,21 +1676,29 @@ impl<'a> Searcher<'a> {
         {
             self.note(Note::Reduced(mv, reduction));
         }
-        let mut score = self.search_child(child, depth - reduction, alpha, alpha + 1, pv);
+        let mut score = self.search_child(
+            child,
+            depth - reduction,
+            alpha,
+            alpha + 1,
+            reduction > 0 || !cut_node,
+            pv,
+        );
         if score > alpha && reduction > 0 && !self.aborted {
             if let Some(mv) = mv {
                 self.note(Note::ReductionResearch(mv));
             }
-            score = self.search_child(child, depth, alpha, alpha + 1, pv);
+            score = self.search_child(child, depth, alpha, alpha + 1, !cut_node, pv);
         }
         if score > alpha && score < beta && !self.aborted {
             if let Some(mv) = mv {
                 self.note(Note::PvsResearch(mv));
             }
-            score = self.search_child(child, depth, alpha, beta, pv);
+            score = self.search_child(child, depth, alpha, beta, false, pv);
         }
         score
     }
+    // ANCHOR_END: cut_node_flags
 
     /// The score of `child` for the side that moved there, searched to `depth` within the
     /// mover's window `[alpha, beta]`.
@@ -1640,10 +1708,11 @@ impl<'a> Searcher<'a> {
         depth: u32,
         alpha: i32,
         beta: i32,
+        cut_node: bool,
         pv: &mut Vec<Move>,
     ) -> i32 {
         let ply = self.path.len() as u32;
-        let score = -self.negamax(child, depth, ply, -beta, -alpha, pv);
+        let score = -self.negamax(child, depth, ply, -beta, -alpha, cut_node, pv);
         self.note(Note::Exit { score: -score });
         score
     }
@@ -1810,6 +1879,7 @@ impl<'a> Searcher<'a> {
                 } else {
                     MoveSearch::Later { reduction: 0 }
                 },
+                false,
                 &mut child_pv,
             );
             self.pop_move();
@@ -2344,6 +2414,23 @@ mod tests {
     }
 
     #[test]
+    fn cut_node_reductions_change_the_tree_only_through_late_move_reductions() {
+        // Kiwipete: with a material-only evaluation, a quiet position's tree is too small for
+        // late move reductions to matter.
+        let fen = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
+        let nodes = |cut_node_reductions, lmr| {
+            let techniques = Techniques {
+                cut_node_reductions,
+                lmr,
+                ..Techniques::default()
+            };
+            search(fen, 7, techniques).nodes
+        };
+        assert_ne!(nodes(true, true), nodes(false, true));
+        assert_eq!(nodes(true, false), nodes(false, false));
+    }
+
+    #[test]
     fn stage_14_pruning_saves_nodes_and_still_finds_mates() {
         let fen = "r2q1rk1/pp2bppp/2n1pn2/3p4/3P4/2NBPN2/PP3PPP/R2Q1RK1 w - - 0 10";
         let on = search(fen, 6, Techniques::default());
@@ -2424,7 +2511,10 @@ mod tests {
         searcher.excluded[1] = Some(only[0]);
         let mut pv = Vec::new();
         let (alpha, beta) = (1000, 1001);
-        assert_eq!(searcher.negamax(&pos, 4, 1, alpha, beta, &mut pv), alpha);
+        assert_eq!(
+            searcher.negamax(&pos, 4, 1, alpha, beta, false, &mut pv),
+            alpha
+        );
         assert!(tt.probe(pos.hash()).is_none());
     }
 
