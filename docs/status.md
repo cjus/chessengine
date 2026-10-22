@@ -57,7 +57,9 @@ failures, #146; cut-node reductions of 2 plies instead of 1 merged, +8.7 ± 6.4,
 reductions at expected all-nodes failed, −8.5 ± 8.4, so they are off by default, #158; smaller
 reductions where the principal variation was (Stockfish's `ttPv`) running on the M3, #160;
 CNP's `engine/evaluate` answered with the shell's `eval`, term by term, so Solrac's chat can say
-why cb2026 likes a position (cjus/chessgui#145, cjus/chess-node-protocol#6).*
+why cb2026 likes a position (cjus/chessgui#145, cjus/chess-node-protocol#6); a search sent the
+moment the last one answered is taken, no longer refused as `Busy` while the answered search's
+thread ends (found by Solrac's chat, whose review sends two searches in a row).*
 
 ## Stages
 
