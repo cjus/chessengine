@@ -23,8 +23,9 @@
 //!   That thread sends the search's progress and its one response. The loop answers every
 //!   other request, so each request gets exactly one answer.
 //! - **One search at a time** (`maxConcurrentSearches` 1). A search that arrives while another
-//!   runs is `Busy`, unless the running one has been stopped or cancelled. Then the node waits
-//!   for it to wind down, which takes a few milliseconds, and starts the new one. So a client
+//!   runs is `Busy`, unless the running one has answered, or has been stopped or cancelled.
+//!   Then the node waits for it to wind down, which takes a few milliseconds, and starts the
+//!   new one. So a client
 //!   can cancel and search again at once, as a takeback does.
 //! - **Requests stand alone** (spec, 1). Before each search, every technique, the level and
 //!   MultiPV go back to their defaults, and then the request's are applied. The `game` hint
@@ -55,6 +56,11 @@
 //!   the search thread owns. The node keeps a copy of the engine's evaluation parameters as it
 //!   came configured, which is also what every search starts from: a technique a search
 //!   switches off (`pst`, `tapered`) doesn't reach an evaluation.
+//! - **An answered search still holds the engine for a moment.** Its thread sends the answer,
+//!   then gives the engine back, and a client may send its next search in between (Solrac's
+//!   chat does, for a review's two searches). That search must be taken, not refused as
+//!   `Busy`: nothing runs any more. So the thread says it has answered just before it sends,
+//!   and a new search waits the moment it takes to end.
 //! - **Castling notation follows the position.** cb2026 reads both notations. It writes the
 //!   king's two-square move, or king-takes-rook when the position says `chess960`.
 
@@ -217,6 +223,9 @@ struct Running {
     stopped: Arc<AtomicBool>,
     /// Set by a cancel or `shutdown`: the answer is `Cancelled`, never a move.
     cancelled: Arc<AtomicBool>,
+    /// Set by the search thread just before it sends its answer: from then on it only has to
+    /// give the engine back, so a new search waits for it rather than being `Busy`.
+    answered: Arc<AtomicBool>,
     /// The thread, which gives the engine back when it ends.
     handle: JoinHandle<Engine>,
 }
@@ -399,8 +408,12 @@ impl Node {
         let params = request.params::<Search>()?;
         let prepared = prepare(&params)?;
         if let Some(running) = self.search.take() {
-            if running.handle.is_finished() || running.stop.load(Ordering::Relaxed) {
-                // Finished, or winding down after a stop or a cancel: a few milliseconds.
+            if running.handle.is_finished()
+                || running.answered.load(Ordering::Acquire)
+                || running.stop.load(Ordering::Relaxed)
+            {
+                // Finished, answered and ending, or winding down after a stop or a cancel: a
+                // few milliseconds at most.
                 self.reclaim(running);
             } else {
                 self.search = Some(running);
@@ -419,6 +432,7 @@ impl Node {
             stop: Arc::new(AtomicBool::new(false)),
             stopped: Arc::new(AtomicBool::new(false)),
             cancelled: Arc::new(AtomicBool::new(false)),
+            answered: Arc::new(AtomicBool::new(false)),
         };
         let id = request.id.clone();
         let running = Running {
@@ -426,6 +440,7 @@ impl Node {
             stop: Arc::clone(&flags.stop),
             stopped: Arc::clone(&flags.stopped),
             cancelled: Arc::clone(&flags.cancelled),
+            answered: Arc::clone(&flags.answered),
             handle: {
                 let output = Arc::clone(&self.output);
                 thread::spawn(move || search_thread(engine, prepared, id, flags, output))
@@ -517,6 +532,7 @@ struct Flags {
     stop: Arc<AtomicBool>,
     stopped: Arc<AtomicBool>,
     cancelled: Arc<AtomicBool>,
+    answered: Arc<AtomicBool>,
 }
 
 /// Checks a search's params and turns them into the engine's terms.
@@ -713,6 +729,8 @@ fn search_thread(
         let answer = answer(&result, &lines, &prepared, start.elapsed(), stopped);
         Response::ok::<Search>(id, &answer)
     };
+    // Before the answer goes: once the client has it, it may send the next search at once.
+    flags.answered.store(true, Ordering::Release);
     send(&output, response.into());
     engine
 }
@@ -1058,6 +1076,55 @@ mod tests {
             panic!("an evaluation is in centipawns");
         };
         assert!((net - cp).abs() <= TERMS.len() as i32, "{net} against {cp}");
+    }
+
+    #[test]
+    fn a_search_that_has_answered_doesn_t_make_the_next_busy() {
+        let mut node = Node::new(
+            Arc::new(Mutex::new(Box::new(io::sink()))),
+            Engine::new(),
+            Config {
+                license: "MIT OR Apache-2.0",
+            },
+        );
+        // A search that has sent its answer and is still giving the engine back.
+        let ending = Duration::from_millis(50);
+        node.engine = None;
+        node.search = Some(Running {
+            id: Id::Number(1),
+            stop: Arc::new(AtomicBool::new(false)),
+            stopped: Arc::new(AtomicBool::new(false)),
+            cancelled: Arc::new(AtomicBool::new(false)),
+            answered: Arc::new(AtomicBool::new(true)),
+            handle: thread::spawn(move || {
+                thread::sleep(ending);
+                Engine::new()
+            }),
+        });
+        let mut params = start();
+        params.limits = SearchLimits::depth(1);
+        let request = Request::new::<Search>(2, &params);
+        assert!(node.start_search(&request).is_ok(), "refused as busy");
+        node.finish();
+        // One that hasn't answered still is busy.
+        let (release, wait) = std::sync::mpsc::channel::<()>();
+        node.search = Some(Running {
+            id: Id::Number(3),
+            stop: Arc::new(AtomicBool::new(false)),
+            stopped: Arc::new(AtomicBool::new(false)),
+            cancelled: Arc::new(AtomicBool::new(false)),
+            answered: Arc::new(AtomicBool::new(false)),
+            handle: thread::spawn(move || {
+                let _ = wait.recv();
+                Engine::new()
+            }),
+        });
+        let engine = node.engine.take();
+        let busy = node.start_search(&Request::new::<Search>(4, &params));
+        assert_eq!(busy.unwrap_err().code, code::BUSY);
+        release.send(()).unwrap();
+        node.engine = engine;
+        node.finish();
     }
 
     #[test]
