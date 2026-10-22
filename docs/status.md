@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-21, 20:13 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-21, 20:26 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -46,7 +46,8 @@ Syzygy, the first step of Solrac's M1b (cjus/chessgui#71, #98);
 cb2026 speaks the Chess Node Protocol (`--cnp`, `crates/cnp`), passing every conformance
 session that applies (38; the window's is skipped), M1b's step 4 (cjus/chessgui#98; CI needs
 the deploy key of #143); v1.0 started: `scripts/mac-robustness.sh` for the robustness run,
-#146, which follows #145; larger reductions at expected cut nodes merged on, +11.6 ± 7.7, #145.*
+#146, which follows #145; larger reductions at expected cut nodes merged on, +11.6 ± 7.7, #145; the v1.0
+robustness run running on the M3, #146.*
 
 ## Stages
 
@@ -112,7 +113,14 @@ the deploy key of #143); v1.0 started: `scripts/mac-robustness.sh` for the robus
 | M5: history pruning: quiet moves with a bad history skipped near the leaves (chapter 13.1) | #140 | 1136500 (1022919 with history pruning on) | Merged, off by default: −5.3 ± 7.1, 4,548 games, [0, 5] failed (M3 Max) |
 | M5: larger reductions at expected cut nodes (chapter 14.1) | #145 | 1078861 | Merged: +11.6 ± 7.7, 3,687 games, [0, 5] passed (M3 Max) |
 
-**Nothing is running on the M3 now. Next: the v1.0 robustness run (#146).**
+**Running now: the v1.0 robustness run (#146)**, started on the M3 on 2026-10-21 at about 20:25
+MDT, on `main` at `9cff7fc`: cb2026 against itself, 6,000 games at 1+0.01, 3,000 at 10+0.1 and
+1,000 at 40/60, about 10–11 hours. A progress comment on #146 (`<!-- robustness-progress -->`)
+gains a row after each time control; the result is its own comment, `<!-- robustness -->`. A new
+session should look there. Then record the result in `docs/PRD.md` "Milestones",
+`docs/elo-ledger.md` and this file. If it is clean and the GUI matrix (#37) is done, open the
+version PR (1.0.0, `docs/releasing.md`). If it isn't, the comment lists the first problems, and
+the games are in `target/robustness/` on the M3.
 
 The SPRT of larger reductions at expected cut nodes (#145) finished on 2026-10-21 at 20:11 MDT.
 It started at about 17:15 and passed in 3,687 games, about 3 hours: **+11.6 ± 7.7**. They are on
@@ -249,7 +257,7 @@ passed; the rest wait on GUI checks, level calibration or the v1.0 work.
 The open [`needs-carlos` issues](https://github.com/cjus/chessengine/issues?q=is%3Aopen+label%3Aneeds-carlos):
 
 - #146: the v1.0 robustness run on the M3 (`scripts/mac-robustness.sh`, about 10–11 hours),
-  once #145's SPRT is recorded on `main`.
+  running since 2026-10-21 at about 20:25 MDT.
 - #37: GUI compatibility matrix; Lichess bot account. Also a v1.0 gate.
 - #24 (M1 GUI games).
 
