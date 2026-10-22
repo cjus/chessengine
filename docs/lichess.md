@@ -22,8 +22,9 @@ that stays on.
    below, with `-u`). The upgrade can't be undone.
 
 BOT accounts can only play other bots and humans who challenge them; they can't join pools or
-tournaments for humans. Lichess rates them like any other account, on the Lichess scale (which
-isn't the same as CCRL; see `docs/PRD.md`, "Levels and strength limiting").
+tournaments for humans. Lichess rates them like any other account, on the Lichess scale. The
+levels' ratings are estimates on that scale, from how often people blunder (`docs/PRD.md`,
+"Levels and strength limiting"), so a bot playing people at a fixed level would check them.
 
 ## 2. Build the engine
 

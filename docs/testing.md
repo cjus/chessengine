@@ -189,8 +189,24 @@ levels only, and `OPPONENTS=N` changes how many engines each plays. The default 
 games, about 1 hour 20 minutes on the M3 at 40+0.4. So the twenty levels would take about 27
 hours, and every other level (`LEVELS="0 2 4 6 8 10 12 14 16 18 19"`, the odd ones
 interpolated) about 15; at 8+0.08 all twenty took six and a half hours (#103). The games are
-saved in `target/levels/`. The ratings feed the `UCI_Elo` mapping in
-`crates/engine/src/levels.rs`.
+saved in `target/levels/`. Until cjus/chessgui#113 the ratings fed the `UCI_Elo` mapping in
+`crates/engine/src/levels.rs`. The levels are now on a human scale, fitted with the `mistakes`
+tool (below), and this script rates them against engines only for the record: the lower levels
+would now fall below every reference engine.
+
+```sh
+cargo run --release -p cb2026-tools --bin mistakes -- --levels 0,1,2 --games 40 --nodes 100000 --threads 8
+curl -s https://database.lichess.org/standard/lichess_db_standard_rated_2025-01.pgn.zst \
+    | zstdcat | cargo run --release -p cb2026-tools --bin mistakes -- --people --games 60000
+```
+
+Counts inaccuracies, mistakes and blunders per 40 moves of one player, as Lichess counts them,
+for the strength levels (each plays itself, a search of `--nodes` judges every move) or, with
+`--people`, for people in Lichess's own games, by rating. The levels' table shows beside each
+level how often people of its rating blunder, which is what `levels::HORIZON_CHANCES` is fitted
+to (chapter 19). Forty games of a level take 15 seconds to 3 minutes on the M1 Max with 8
+threads, the top levels being slowest; 60,000 of Lichess's evaluated games take about 25
+seconds to read, most of it the download.
 
 ```sh
 scripts/mac-smp.sh <PR number> [threads] [time control] [elo0 elo1]
