@@ -560,9 +560,23 @@ moves late move reductions reduced (and for 47% at expected all-nodes), so the t
 
 Smaller reductions at expected all-nodes, the opposite direction, failed (above). **This one
 passed**, by about **+13 Elo** (see "What it's worth"), so it is on by default: where the search
-has seen the moves refuted, reducing more paid. Its numbers are Stockfish's, not tuned. Untested:
-Stockfish 17's version, which reduces 2 plies more instead of 1 at an expected all-node, and
-counts a fail high once less when the move that caused it was extended twice.
+has seen the moves refuted, reducing more paid. Its numbers are Stockfish's, not tuned.
+
+The second test, Stockfish 17's version, **passed too**, by about **+14 Elo** against the first
+(cjus/chessengine#167, see "What it's worth"), so it is the default. It changes two things:
+- At an expected all-node the reduction is `lmr_cutoff_all_node_plies` (1) larger again, 2 plies
+  in all: the node expected to fail low, and seen to, is reduced the most.
+- A fail high by a move extended twice (singular by a wide margin) counts once less: it adds
+  `cutoff_count_double_extended` (0), plus 1 without a hash move. Stockfish 16, and the first
+  version here, added 1 for it like any other move.
+
+The trees change little and not one way. Against the first version, the bench is 2.4% smaller
+(749,181 nodes against 767,859), and the six positions 2%, 5% and 8% smaller at depths 9 to 11
+(319,002, 473,898 and 764,000 against 324,275, 500,421 and 828,983), but the game's 58 positions
+at depth 10 are 14.9% bigger in all, and only 20 of them smaller. Each change alone does some
+of both: the extra all-node ply alone gives a bench of 741,257 and the game +9.1%; the count
+alone, 757,332 and +3.9%. The games decided, as with cut-node reductions: a bigger tree in the
+game positions, and still a gain.
 
 ## What it saves
 
@@ -676,6 +690,7 @@ that it is small, about **+5 Elo**, and it took over 14,000 of them to say so.
 | Smaller reductions at expected all-nodes (1 ply less) vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−8.5 ± 8.4 Elo** over 2,993 games (+649 −722 =1622): failed (LLR −2.97); off by default |
 | Smaller reductions where the principal variation was (Stockfish's `ttPv`, 1 ply less) vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | +0.3 ± 5.2 Elo over 8,100 games (+1939 −1933 =4228): no verdict (LLR −1.57), stopped; off by default |
 | Larger reductions after many fail highs (1 ply more when the next ply has counted more than 3) vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+12.8 ± 8.2 Elo** over 3,144 games (+776 −660 =1708): passed (LLR 2.95); on by default |
+| Stockfish 17's version of them (2 plies at an expected all-node; a doubly extended move's fail high counted once less) vs Stockfish 16's, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+13.7 ± 8.5 Elo** over 2,953 games (+741 −625 =1587): passed (LLR 2.96); the default |
 
 ## Further reading
 

@@ -210,6 +210,11 @@
 //! passed: +12.8 ± 8.2 Elo after 3,144 games at 8+0.08 (cjus/chessengine#165), so it is on by
 //! default; see chapter 14.1.
 //!
+//! Stockfish 17's version passed too, against the first: +13.7 ± 8.5 Elo after 2,953 games
+//! (cjus/chessengine#167), so it is the default. At an expected all-node the reduction is
+//! `lmr_cutoff_all_node_plies` (1) larger again, and a fail high by a doubly extended move adds
+//! `cutoff_count_double_extended` (0) to the count instead of 1.
+//!
 //! ## History pruning
 //!
 //! Late move pruning skips quiet moves by how late they come; **history pruning** skips them by
@@ -423,8 +428,14 @@ pub struct SearchParams {
     /// Late move reductions are `lmr_cutoff_plies` larger when the next ply has counted more
     /// than this many fail highs (see [`Techniques::cutoff_reductions`])...
     pub lmr_cutoff_count: u32,
-    /// ...this many.
+    /// ...this many (and `lmr_cutoff_all_node_plies` more at an expected all-node).
     pub lmr_cutoff_plies: i32,
+    /// After many fail highs, late move reductions at an expected all-node are this many plies
+    /// larger again (see `lmr_cutoff_plies`).
+    pub lmr_cutoff_all_node_plies: i32,
+    /// What a fail high by a doubly extended move adds to its ply's count of fail highs, besides
+    /// the one more for a node without a hash move (any other move adds 1).
+    pub cutoff_count_double_extended: u32,
     /// Late move pruning applies up to this depth...
     pub lmp_max_depth: u32,
     /// ...once `lmp_base + depth²` quiet moves have been tried...
@@ -527,6 +538,10 @@ impl Default for SearchParams {
             // tuned.
             lmr_cutoff_count: 3,
             lmr_cutoff_plies: 1,
+            // Stockfish 17's version (GPL-3.0), which passed against Stockfish 16's, +13.7 ± 8.5
+            // (cjus/chessengine#167); 0 and 1 give Stockfish 16's (cjus/chessengine#165).
+            lmr_cutoff_all_node_plies: 1,
+            cutoff_count_double_extended: 0,
             lmp_max_depth: 3,
             lmp_base: 3,
             // Doubling it when improving was part of both failed versions (#60, #63).
@@ -1622,6 +1637,10 @@ impl<'a> Searcher<'a> {
                     && self.cutoffs[ply as usize + 1] > p.lmr_cutoff_count
                 {
                     reduction += p.lmr_cutoff_plies;
+                    // More at an expected all-node, as in Stockfish 17.
+                    if !pv_node && !cut_node {
+                        reduction += p.lmr_cutoff_all_node_plies;
+                    }
                 }
                 // ANCHOR_END: cutoff_reduction
                 // ANCHOR: all_node_reduction
@@ -1705,8 +1724,14 @@ impl<'a> Searcher<'a> {
             if self.techniques.alpha_beta && alpha >= beta {
                 self.note(Note::BetaCutoff(mv, searched));
                 // ANCHOR: cutoff_count
-                // Counted for the node above, twice without a hash move, as in Stockfish 16.
-                self.cutoffs[ply as usize] += 1 + u32::from(tt_move.is_none());
+                // Counted for the node above: once more without a hash move, and less for a
+                // doubly extended move, as in Stockfish 17.
+                let counts = if doubled {
+                    p.cutoff_count_double_extended
+                } else {
+                    1
+                };
+                self.cutoffs[ply as usize] += counts + u32::from(tt_move.is_none());
                 // ANCHOR_END: cutoff_count
                 if quiet {
                     self.ordering
