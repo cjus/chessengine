@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-22, 20:48 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-22, 23:33 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -56,7 +56,8 @@ ratings no longer hold; full strength unchanged (Carlos, cjus/chessgui#113; #151
 failures, #146; cut-node reductions of 2 plies instead of 1 merged, +8.7 ± 6.4, #155; smaller
 reductions at expected all-nodes failed, −8.5 ± 8.4, so they are off by default, #158; smaller
 reductions where the principal variation was (Stockfish's `ttPv`) had no verdict, +0.3 ± 5.2
-after 8,100 games, stopped, so they are off by default, #160;
+after 8,100 games, stopped, so they are off by default, #160; larger reductions after many fail
+highs running on the M3, #165;
 CNP's `engine/evaluate` answered with the shell's `eval`, term by term, so Solrac's chat can say
 why cb2026 likes a position (cjus/chessgui#145, cjus/chess-node-protocol#6); a search sent the
 moment the last one answered is taken, no longer refused as `Busy` while the answered search's
@@ -130,9 +131,18 @@ ruleset requires no check, and CI runs nightly only if `main` changed (Carlos).*
 | M5: cut-node reductions of 2 plies instead of 1, as in Stockfish (chapter 14.1) | #155 | 1072184 | Merged: +8.7 ± 6.4, 5,803 games, [0, 5] passed (M3 Max) |
 | M5: smaller reductions at expected all-nodes (chapter 14.1) | #158 | 1072184 (1284421 with them on) | Merged, off by default: −8.5 ± 8.4, 2,993 games, [0, 5] failed (M3 Max) |
 | M5: smaller reductions where the principal variation was, Stockfish's `ttPv` (chapter 14.1) | #160 | 1072184 (1198340 with them on) | Merged, off by default: +0.3 ± 5.2, 8,100 games, [0, 5] no verdict (LLR −1.57), stopped (M3 Max) |
+| M5: larger reductions after many fail highs, as in Stockfish (chapter 14.1) | #165, `claude/cutoff-reductions` | 767859 | Draft, its SPRT running on the M3 Max: [0, 5] at 8+0.08 |
 
-**Nothing is running on the M3.** v1.0's last gate is the GUI matrix (#37), on Carlos's Mac.
-Once that is recorded, the version PR (#154) merges and Carlos tags `v1.0.0`.
+**Running now: #165** (larger reductions after many fail highs; chapter 14.1), started on the M3
+on 2026-10-22 at about 23:30 MDT. A clear result should take 1–3 hours, a small difference 5–8.
+A new session should restart the watcher, `scripts/watch-sprt.sh 165`, or just read #165's
+comments if the result is already there. Then rebase #165 onto `main` (in `docs/status.md` take
+`main`'s side and edit it), record the result in chapter 14.1, the search module docs, the
+switch's and the parameters' comments, the PRD, the ledger and this file, run
+`scripts/check.sh`, and merge. If it fails, switch it off by default, and move the cut-node and
+all-node tests in `crates/engine/src/search.rs` back to depth 7; then merge as a record. It
+doesn't hold up v1.0: the last gate is the GUI matrix (#37), on Carlos's Mac. Once that is
+recorded, the version PR (#154) merges and Carlos tags `v1.0.0`.
 
 The SPRT of smaller reductions where the principal variation was (#160, Stockfish's `ttPv`)
 started on 2026-10-22 at about 14:20 MDT. Undecided after 8,100 games, about 6 hours 25 minutes,
@@ -463,7 +473,8 @@ Run the full test suite on every commit you replay, not only at the tip: each be
      Stockfish (`ttPv`, which it rates about 7 Elo), had no verdict (#160, +0.3 ± 5.2); chapter
      14.1 lists Stockfish's larger, graded version for another try. Untested from Stockfish 17
      (GPL-3.0), each rated by its own comment: a ply more of reduction when the hash move is a
-     capture (about 3 Elo), and when the next ply has had many fail highs (about 5).
+     capture (about 3 Elo), and when the next ply has had many fail highs (about 5; #165,
+     running).
    - **Tuning singular extensions, continued**: depth 6 passed (#78) and depth 4 too (#80),
      which is about where Stockfish starts; `singular_margin` 3 passed too (#82), and 4
      failed (#84); `singular_tt_depth_margin` 4 failed against 3 (#123, −7.4 ± 8.0). That
