@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-23, 16:48 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-23, 17:55 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -88,7 +88,8 @@ on it, #189; the run itself is Carlos's, #190; `ci.yml` loads again after #186 b
 command ending in a colon), #192; **the GUI matrix passed**, so M4 passed, in En Croissant,
 Cute Chess, XBoard and HIARCS Chess Explorer, #37, and M1 with it, #24; the Lichess bot's games
 follow v1.0, #191; the first Lichess book goes into the v1.0.0 release, #183; **version 1.0.0**, #154, so the
-`v1.0.0` tag is next (Carlos).*
+`v1.0.0` tag is next (Carlos); `mac-sprt.sh` can give the PR's engine an NNUE network (`NET=`), checking it loads,
+ready for the net-vs-HCE SPRT, #194.*
 
 ## Stages
 
@@ -641,9 +642,14 @@ Run the full test suite on every commit you replay, not only at the tip: each be
      Max, including an interrupted chunk redone with the same records.
    - Next: **#190 (Carlos)**, the run itself on the M3 Max, about 12 hours; it doesn't need #187
      first. Then copy the two nets to the M1 Max.
+   - Done: **SPRTs with a net** (#194): `NET=<file> scripts/mac-sprt.sh <PR>` gives the PR's
+     engine the net (UCI `EvalFile`) and leaves main's on the HCE; `BASE_NET=<file>` gives main's
+     one too, to compare two nets. It loads each net through UCI before the match and stops if
+     it doesn't load (an engine that can't load its net plays on with the HCE), and names each
+     net with the start of its SHA-256 in the comments.
    - Then (Claude): sanity checks on the nets (bench nodes near the HCE's, evaluations of known
-     positions, mirrored positions), a way for `mac-sprt.sh` to give one side a net
-     (`EvalFile`, through the match tool's `--first-option`), and the SPRT, net against HCE,
-     which stage 21 is judged by. If it passes: the net as a release asset, embedded in release
+     positions, mirrored positions), a draft PR that would make the net the default, and the
+     SPRT on it, net against HCE, which stage 21 is judged by:
+     `NET=~/nnue-data/gen1/net-256/epoch-20.nnue scripts/mac-sprt.sh <PR>` on the M3. If it passes: the net as a release asset, embedded in release
      builds, the levels recalibrated. If not: more data, the eval scale and result weight, or a
      second generation from the net's own games.
