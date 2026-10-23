@@ -18,16 +18,24 @@ if [[ $# -lt 1 || "$1" == "-h" || "$1" == "--help" ]]; then
 fi
 DIR="$1"
 SET="${2:-test}"
-BASE="https://tablebase.lichess.ovh/tables/standard/3-4-5"
+# The mirror keeps the WDL files (.rtbw) and the DTZ files (.rtbz) in separate directories.
+# They used to share one, `3-4-5`, which answers 404 now (found 2026-10-23).
+BASE="https://tablebase.lichess.ovh/tables/standard"
+WDL="$BASE/3-4-5-wdl"
+DTZ="$BASE/3-4-5-dtz"
 mkdir -p "$DIR"
 
 fetch() {
-  local file="$1"
+  local file="$1" from
   if [[ -s "$DIR/$file" ]]; then
     return
   fi
+  case "$file" in
+    *.rtbw) from="$WDL" ;;
+    *.rtbz) from="$DTZ" ;;
+  esac
   echo "Downloading $file"
-  curl -fsSL --retry 3 -o "$DIR/$file.part" "$BASE/$file"
+  curl -fsSL --retry 3 -o "$DIR/$file.part" "$from/$file"
   mv "$DIR/$file.part" "$DIR/$file"
 }
 
@@ -39,11 +47,13 @@ case "$SET" in
     done
     ;;
   3-4-5)
-    # The directory listing names every file; fetch each table it links to.
-    curl -fsSL "$BASE/" | grep -oE 'href="K[A-Za-z]*v[A-Za-z]*\.rtb[wz]"' | cut -d'"' -f2 |
-      while read -r file; do
-        fetch "$file"
-      done
+    # Each directory listing names its files; fetch each table they link to.
+    for listing in "$WDL" "$DTZ"; do
+      curl -fsSL "$listing/" | grep -oE 'href="K[A-Za-z]*v[A-Za-z]*\.rtb[wz]"' | cut -d'"' -f2 |
+        while read -r file; do
+          fetch "$file"
+        done
+    done
     ;;
   *)
     echo "download-syzygy: unknown set '$SET' (use test or 3-4-5)" >&2
