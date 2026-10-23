@@ -111,7 +111,9 @@ jobs:
         run: cargo test --workspace --locked
       - name: Tests (the trainer's GPU backend)
         if: steps.scope.outputs.check == 'true'
-        run: cargo test -p cb2026-trainer --features gpu --locked gpu::
+        # A block, since a plain YAML value can't end in a colon.
+        run: |
+          cargo test -p cb2026-trainer --features gpu --locked gpu::
       - name: Perft suites (release build, every depth)
         if: steps.scope.outputs.check == 'true'
         run: cargo run --release --locked -p cb2026-tools --bin perft-suite
