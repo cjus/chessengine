@@ -558,8 +558,11 @@ moves late move reductions reduced (and for 47% at expected all-nodes), so the t
   (324,275, 500,421 and 828,983 nodes, against 437,022, 657,366 and 939,364).
 - The game's 58 positions at depth 10 shrink by 28.4% in all, and 36 of them get smaller.
 
-Smaller reductions at expected all-nodes, the opposite direction, failed (above). The games
-decide whether this one is right.
+Smaller reductions at expected all-nodes, the opposite direction, failed (above). **This one
+passed**, by about **+13 Elo** (see "What it's worth"), so it is on by default: where the search
+has seen the moves refuted, reducing more paid. Its numbers are Stockfish's, not tuned. Untested:
+Stockfish 17's version, which reduces 2 plies more instead of 1 at an expected all-node, and
+counts a fail high once less when the move that caused it was extended twice.
 
 ## What it saves
 
@@ -672,6 +675,7 @@ that it is small, about **+5 Elo**, and it took over 14,000 of them to say so.
 | Cut-node reductions of 2 plies vs `main` (1), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+8.7 ± 6.4 Elo** over 5,803 games (+1551 −1405 =2847): passed (LLR 2.95); `lmr_cut_node` is 2 |
 | Smaller reductions at expected all-nodes (1 ply less) vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−8.5 ± 8.4 Elo** over 2,993 games (+649 −722 =1622): failed (LLR −2.97); off by default |
 | Smaller reductions where the principal variation was (Stockfish's `ttPv`, 1 ply less) vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | +0.3 ± 5.2 Elo over 8,100 games (+1939 −1933 =4228): no verdict (LLR −1.57), stopped; off by default |
+| Larger reductions after many fail highs (1 ply more when the next ply has counted more than 3) vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+12.8 ± 8.2 Elo** over 3,144 games (+776 −660 =1708): passed (LLR 2.95); on by default |
 
 ## Further reading
 

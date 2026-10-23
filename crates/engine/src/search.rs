@@ -207,7 +207,8 @@
 //! are reduced `lmr_cutoff_plies` (1) more. As in Stockfish 16 (GPL-3.0), whose comment rates
 //! it "~5 Elo"; the code here is cb2026's own. In a game's positions at depth 10 it applies to
 //! about 60% of the moves late move reductions reduce, and the trees are about 28% smaller. It
-//! is being tested (cjus/chessengine#165); see chapter 14.1.
+//! passed: +12.8 ± 8.2 Elo after 3,144 games at 8+0.08 (cjus/chessengine#165), so it is on by
+//! default; see chapter 14.1.
 //!
 //! ## History pruning
 //!
@@ -522,7 +523,8 @@ impl Default for SearchParams {
             lmr_tt_pv: 1,
             // As in Stockfish 16 (GPL-3.0): above depth 3.
             tt_pv_fail_low_depth: 3,
-            // As in Stockfish 16 (GPL-3.0), for its SPRT (cjus/chessengine#165).
+            // As in Stockfish 16 (GPL-3.0); passed at these values (cjus/chessengine#165), not
+            // tuned.
             lmr_cutoff_count: 3,
             lmr_cutoff_plies: 1,
             lmp_max_depth: 3,
@@ -729,7 +731,8 @@ impl Default for Techniques {
             // Off by default: no verdict, +0.3 ± 5.2 Elo after 8,100 games at 8+0.08, stopped
             // (cjus/chessengine#160); see chapter 14.1.
             tt_pv: false,
-            // On for its SPRT (cjus/chessengine#165); see chapter 14.1.
+            // Passed its SPRT: +12.8 ± 8.2 Elo after 3,144 games at 8+0.08
+            // (cjus/chessengine#165); see chapter 14.1.
             cutoff_reductions: true,
             late_move_pruning: true,
             // Off by default: it measured weaker, −5.3 ± 7.1 Elo after 4,548 games at 8+0.08
