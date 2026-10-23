@@ -202,6 +202,13 @@ every start, so chapter 16's runs can still be repeated.
 it. Sixty games make about 4,100 records, 132 KB; 100 million records take 3.2 GB. Records have
 no file header, so files from separate runs can simply be joined.
 
+That makes a 12-hour run safe to interrupt. `scripts/mac-nnue-data.sh` makes the data in chunks
+of 56,000 games, each its own file, and the trainer reads them all (`--data` once per file). A
+run that stops loses only the chunk it was on: started again, it keeps the finished files and
+makes the rest. Each game's random opening moves come from its number, and chunk k's numbers
+start where chunk k − 1's ended, so the chunks never repeat a game, and a chunk made twice holds
+the same games.
+
 ## The trainer
 
 The trainer (`crates/trainer`) learns the weights. It uses no machine-learning library: every

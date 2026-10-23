@@ -220,6 +220,30 @@ on its own: it needs N + 1 free performance cores. Its bounds default to [0, 25]
 the question is whether more threads clearly gain, and at one game at a time [0, 5] would take
 3–6 hours to confirm a gain of +50 to +100 Elo.
 
+```sh
+scripts/mac-trainer-speed.sh <issue>
+```
+
+Measures the NNUE trainer on the Mac it runs on, on the CPU and the GPU: runs the GPU tests,
+makes about 2.8 million records from 1,800 self-play games, trains 2 epochs at hidden layers of
+256, 512 and 1,024 on each, and posts a table of records a second. A few minutes. Speeds differ
+between Macs, so measure on the one that will train.
+
+```sh
+git fetch -q origin && git worktree add --detach ~/cb-nnue origin/main
+nohup ~/cb-nnue/scripts/mac-nnue-data.sh <issue> > ~/nnue-data.log 2>&1 &
+tail -f ~/nnue-data.log
+```
+
+Makes an NNUE network's training data and trains on it: self-play (`datagen --format records`)
+until there are 100 million positions, about 3.2 GB and 12 hours on the M3 Max, in chunks of
+56,000 games (about half an hour each), each its own file in `~/nnue-data/gen1`. Then it checks
+every record, trains networks of 256 and 512 on the GPU for 20 epochs, runs `cb2026 bench` with
+each, and posts a report; a progress comment on the issue is updated after every chunk. Started
+again after a stop, it keeps the finished chunks and redoes only the unfinished one; it won't
+mix chunks from two commits, and won't start while a match is running. `POSITIONS`,
+`CHUNK_GAMES`, `OUT`, `WIDTHS`, `BACKEND` and `EPOCHS` change its settings.
+
 ## Bench
 
 From stage 5, `cb2026 bench` searches a fixed set of positions to a fixed depth and prints
