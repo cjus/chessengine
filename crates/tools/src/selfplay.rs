@@ -1,15 +1,21 @@
-//! Self-play data generation: games of cb2026 against itself, recorded for tuning.
+//! Self-play data generation: games of cb2026 against itself, recorded for tuning and training.
 //!
 //! The Texel tuner (see [`crate::texel`]) needs many positions, each labelled with the result
-//! of the game it came from. This module produces them:
+//! of the game it came from; the NNUE trainer also needs the search's score. This module
+//! produces them:
 //!
 //! 1. Start from an opening position and play a few **random moves**, so games differ.
 //! 2. Let the engine play both sides with a small **fixed node count** per move (fast, and the
 //!    same on any machine).
 //! 3. **Record quiet positions**: not in check, best move not a capture or promotion, no mate
 //!    score in sight. The evaluation is meant for quiet positions (the quiescence search
-//!    resolves the rest), so those are the ones to tune on.
+//!    resolves the rest), so those are the ones to tune on. Each keeps the search's score and
+//!    best move.
 //! 4. Label every recorded position with the game's result from White's side: 1, ½ or 0.
+//!
+//! A [`PlayedGame`] gives its positions as the tuner's text samples ([`PlayedGame::samples`])
+//! or as the NNUE trainer's 32-byte records ([`PlayedGame::records`], see
+//! [`cb2026_nnue::record`]).
 //!
 //! Decided games are cut short (**adjudicated**) once the search sees a mate, and long quiet
 //! games are adjudicated as draws once the score stays near zero.
@@ -23,6 +29,7 @@ use std::thread;
 use cb2026_chess::game::Game;
 use cb2026_chess::{Color, Move, Position};
 use cb2026_engine::{Engine, Limits, Score};
+use cb2026_nnue::{GameResult, Record};
 
 /// A small, fast pseudo-random number generator (xorshift64*). Seeded per game, so a run can
 /// be reproduced exactly.
@@ -92,6 +99,57 @@ impl Sample {
     }
 }
 
+/// A position recorded during a game, with what the search said about it.
+#[derive(Clone, Debug)]
+pub struct Recorded {
+    /// The position.
+    pub position: Position,
+    /// The search's score in centipawns, from White's side.
+    pub score: i32,
+    /// The move the search chose.
+    pub best_move: Move,
+}
+
+/// A finished self-play game: its recorded positions and its result.
+#[derive(Clone, Debug)]
+pub struct PlayedGame {
+    /// The quiet positions, in the order they came up.
+    pub positions: Vec<Recorded>,
+    /// The result from White's side: 1.0, 0.5 or 0.0.
+    pub result: f64,
+}
+
+impl PlayedGame {
+    /// The positions as the Texel tuner's samples: FEN and result.
+    pub fn samples(&self) -> Vec<Sample> {
+        self.positions
+            .iter()
+            .map(|r| Sample {
+                fen: r.position.to_fen(),
+                result: self.result,
+            })
+            .collect()
+    }
+
+    /// The positions as NNUE training records: the whole position, score, result and best move.
+    pub fn records(&self) -> Vec<Record> {
+        let result = if self.result > 0.5 {
+            GameResult::WhiteWin
+        } else if self.result < 0.5 {
+            GameResult::BlackWin
+        } else {
+            GameResult::Draw
+        };
+        self.positions
+            .iter()
+            .map(|r| {
+                Record::new(&r.position, r.score, result, r.best_move)
+                    .expect("a position from a game has at most 32 pieces")
+            })
+            .collect()
+    }
+}
+
 /// Games longer than this are adjudicated as draws.
 const MAX_PLIES: usize = 400;
 /// Draw adjudication: after this many plies...
@@ -105,7 +163,7 @@ const RECORD_SCORE_LIMIT: i32 = 2000;
 
 // ANCHOR: play_game
 /// Plays one self-play game from `start` and returns its quiet positions with the result.
-pub fn play_game(engine: &mut Engine, start: &Position, nodes: u64) -> Vec<Sample> {
+pub fn play_game(engine: &mut Engine, start: &Position, nodes: u64) -> PlayedGame {
     engine.new_game();
     let stop = AtomicBool::new(false);
     let limits = Limits {
@@ -142,7 +200,16 @@ pub fn play_game(engine: &mut Engine, start: &Position, nodes: u64) -> Vec<Sampl
             }
             Some(Score::Centipawns(cp)) => {
                 if is_quiet(position, mv) && cp.abs() < RECORD_SCORE_LIMIT {
-                    recorded.push(position.to_fen());
+                    // The search scores for the side to move; records keep White's side.
+                    let score = match position.side_to_move() {
+                        Color::White => cp,
+                        Color::Black => -cp,
+                    };
+                    recorded.push(Recorded {
+                        position: position.clone(),
+                        score,
+                        best_move: mv,
+                    });
                 }
                 quiet_plies = if cp.abs() <= DRAW_ADJUDICATION_SCORE {
                     quiet_plies + 1
@@ -160,10 +227,10 @@ pub fn play_game(engine: &mut Engine, start: &Position, nodes: u64) -> Vec<Sampl
         game.play(mv).expect("the engine plays legal moves");
     };
 
-    recorded
-        .into_iter()
-        .map(|fen| Sample { fen, result })
-        .collect()
+    PlayedGame {
+        positions: recorded,
+        result,
+    }
 }
 // ANCHOR_END: play_game
 
@@ -204,8 +271,8 @@ pub fn starting_position(settings: &DatagenSettings, index: usize) -> Position {
 }
 
 /// Plays `settings.games` games on `settings.threads` threads, calling `on_game` with each
-/// game's samples as it finishes (from the calling thread's point of view, one at a time).
-pub fn generate(settings: &DatagenSettings, on_game: &(dyn Fn(usize, Vec<Sample>) + Sync)) {
+/// game as it finishes (from the calling thread's point of view, one at a time).
+pub fn generate(settings: &DatagenSettings, on_game: &(dyn Fn(usize, PlayedGame) + Sync)) {
     let next = AtomicUsize::new(0);
     let report = Mutex::new(());
     thread::scope(|scope| {
@@ -220,9 +287,9 @@ pub fn generate(settings: &DatagenSettings, on_game: &(dyn Fn(usize, Vec<Sample>
                         break;
                     }
                     let start = starting_position(settings, index);
-                    let samples = play_game(&mut engine, &start, settings.nodes);
+                    let game = play_game(&mut engine, &start, settings.nodes);
                     let _guard = report.lock().unwrap_or_else(|e| e.into_inner());
-                    on_game(index, samples);
+                    on_game(index, game);
                 }
             });
         }
@@ -262,11 +329,33 @@ mod tests {
     fn plays_a_short_game_and_labels_its_positions() {
         // King and queen against king: White mates quickly.
         let start = Position::from_fen("8/8/8/4k3/8/8/8/3QK3 w - - 0 1").unwrap();
-        let samples = play_game(&mut Engine::new(), &start, 3000);
-        assert!(samples.iter().all(|s| s.result == 1.0));
-        for sample in &samples {
+        let game = play_game(&mut Engine::new(), &start, 3000);
+        assert_eq!(game.result, 1.0);
+        for sample in &game.samples() {
             let pos = Position::from_fen(&sample.fen).unwrap();
             assert!(!pos.in_check());
+            assert_eq!(sample.result, 1.0);
+        }
+    }
+
+    #[test]
+    fn records_keep_the_score_from_whites_side_and_the_best_move() {
+        let start = Position::from_fen(cb2026_chess::STARTING_FEN).unwrap();
+        let game = play_game(&mut Engine::new(), &start, 2000);
+        let records = game.records();
+        assert_eq!(records.len(), game.positions.len());
+        assert!(!records.is_empty());
+        for (record, recorded) in records.iter().zip(&game.positions) {
+            assert_eq!(i32::from(record.score()), recorded.score);
+            assert_eq!(record.best_move(), recorded.best_move);
+            assert!(
+                recorded
+                    .position
+                    .legal_moves()
+                    .contains(&recorded.best_move)
+            );
+            assert_eq!(record.result().for_white(), game.result as f32);
+            assert_eq!(record.side_to_move(), recorded.position.side_to_move());
         }
     }
 

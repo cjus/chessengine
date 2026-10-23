@@ -1,12 +1,18 @@
-//! Plays cb2026 against itself and writes quiet positions with game results, for tuning.
+//! Plays cb2026 against itself and writes quiet positions with game results, for tuning and
+//! NNUE training.
 //!
 //! ```text
 //! cargo run --release -p cb2026-tools --bin datagen -- \
-//!     --out data.txt [--games 3000] [--nodes 6000] [--random-plies 8] [--threads 1] \
-//!     [--seed 1] [--openings tests/data/openings.epd]
+//!     --out data.txt [--format text|records] [--games 3000] [--nodes 6000] \
+//!     [--random-plies 8] [--threads 1] [--seed 1] [--openings tests/data/openings.epd]
 //! ```
 //!
-//! Each line of the output is `FEN;result`, the result from White's side (1.0, 0.5 or 0.0).
+//! - `--format text` (the default), for the Texel tuner: each line is `FEN;result`, the result
+//!   from White's side (1.0, 0.5 or 0.0).
+//! - `--format records`, for the NNUE trainer: 32-byte records with the whole position, the
+//!   search's score, the result and the best move (see `cb2026_nnue::record`). Files of records
+//!   can be joined with `cat`; `records` shows what one holds.
+//!
 //! See `cb2026_tools::selfplay` for how games are played and which positions are kept.
 
 use std::fs::File;
@@ -18,8 +24,17 @@ use std::time::Instant;
 use cb2026_tools::match_runner::parse_openings;
 use cb2026_tools::selfplay::{DatagenSettings, generate};
 
-const USAGE: &str = "Usage: datagen --out FILE [--games N] [--nodes N] [--random-plies N] \
-[--threads N] [--seed N] [--openings FILE]";
+const USAGE: &str = "Usage: datagen --out FILE [--format text|records] [--games N] [--nodes N] \
+[--random-plies N] [--threads N] [--seed N] [--openings FILE]";
+
+/// What `datagen` writes.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Format {
+    /// `FEN;result` lines, for the Texel tuner.
+    Text,
+    /// 32-byte records, for the NNUE trainer.
+    Records,
+}
 
 fn main() -> ExitCode {
     match run() {
@@ -33,6 +48,7 @@ fn main() -> ExitCode {
 
 fn run() -> Result<(), String> {
     let mut out = None;
+    let mut format = Format::Text;
     let mut settings = DatagenSettings {
         games: 3000,
         nodes: 6000,
@@ -48,6 +64,13 @@ fn run() -> Result<(), String> {
         let number = |text: String| text.parse::<u64>().map_err(|e| format!("{arg}: {e}"));
         match arg.as_str() {
             "--out" => out = Some(value()?),
+            "--format" => {
+                format = match value()?.as_str() {
+                    "text" => Format::Text,
+                    "records" => Format::Records,
+                    other => return Err(format!("unknown format '{other}' (text or records)")),
+                }
+            }
             "--games" => settings.games = number(value()?)? as usize,
             "--nodes" => settings.nodes = number(value()?)?,
             "--random-plies" => settings.random_plies = number(value()?)? as usize,
@@ -70,16 +93,37 @@ fn run() -> Result<(), String> {
     let start = Instant::now();
     let positions = Mutex::new(0usize);
     let games = settings.games;
-    generate(&settings, &|index, samples| {
+    // The first write error, kept for the end: a long run that fills the disk must fail, not
+    // look like it worked.
+    let failure: Mutex<Option<std::io::Error>> = Mutex::new(None);
+    let fail = |e: std::io::Error| {
+        failure
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get_or_insert(e);
+    };
+    generate(&settings, &|index, game| {
         let mut writer = writer.lock().unwrap_or_else(|e| e.into_inner());
-        for sample in &samples {
-            let _ = writeln!(writer, "{}", sample.to_line());
+        let written = match format {
+            Format::Text => game
+                .samples()
+                .iter()
+                .try_for_each(|sample| writeln!(writer, "{}", sample.to_line())),
+            Format::Records => game
+                .records()
+                .iter()
+                .try_for_each(|record| writer.write_all(&record.to_bytes())),
+        };
+        if let Err(e) = written {
+            fail(e);
         }
         let mut count = positions.lock().unwrap_or_else(|e| e.into_inner());
-        *count += samples.len();
+        *count += game.positions.len();
         let done = index + 1;
         if done % 100 == 0 || done == games {
-            let _ = writer.flush();
+            if let Err(e) = writer.flush() {
+                fail(e);
+            }
             println!(
                 "{done}/{games} games, {} positions, {:.0} s",
                 *count,
@@ -87,6 +131,9 @@ fn run() -> Result<(), String> {
             );
         }
     });
+    if let Some(e) = failure.into_inner().unwrap_or_else(|e| e.into_inner()) {
+        return Err(format!("writing {out}: {e}"));
+    }
     let mut writer = writer.into_inner().unwrap_or_else(|e| e.into_inner());
     writer.flush().map_err(|e| format!("writing {out}: {e}"))?;
     Ok(())
