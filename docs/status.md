@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-22, 17:05 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-22, 20:48 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -55,7 +55,8 @@ ratings no longer hold; full strength unchanged (Carlos, cjus/chessgui#113; #151
 2026-10-22: the v1.0 robustness run clean, 10,000 games with no time losses, illegal moves or
 failures, #146; cut-node reductions of 2 plies instead of 1 merged, +8.7 ± 6.4, #155; smaller
 reductions at expected all-nodes failed, −8.5 ± 8.4, so they are off by default, #158; smaller
-reductions where the principal variation was (Stockfish's `ttPv`) running on the M3, #160;
+reductions where the principal variation was (Stockfish's `ttPv`) had no verdict, +0.3 ± 5.2
+after 8,100 games, stopped, so they are off by default, #160;
 CNP's `engine/evaluate` answered with the shell's `eval`, term by term, so Solrac's chat can say
 why cb2026 likes a position (cjus/chessgui#145, cjus/chess-node-protocol#6); a search sent the
 moment the last one answered is taken, no longer refused as `Busy` while the answered search's
@@ -128,17 +129,15 @@ ruleset requires no check, and CI runs nightly only if `main` changed (Carlos).*
 | M5: larger reductions at expected cut nodes (chapter 14.1) | #145 | 1078861 | Merged: +11.6 ± 7.7, 3,687 games, [0, 5] passed (M3 Max) |
 | M5: cut-node reductions of 2 plies instead of 1, as in Stockfish (chapter 14.1) | #155 | 1072184 | Merged: +8.7 ± 6.4, 5,803 games, [0, 5] passed (M3 Max) |
 | M5: smaller reductions at expected all-nodes (chapter 14.1) | #158 | 1072184 (1284421 with them on) | Merged, off by default: −8.5 ± 8.4, 2,993 games, [0, 5] failed (M3 Max) |
-| M5: smaller reductions where the principal variation was, Stockfish's `ttPv` (chapter 14.1) | #160, `claude/tt-pv` | 1198340 | Draft, its SPRT running on the M3 Max: [0, 5] at 8+0.08 |
+| M5: smaller reductions where the principal variation was, Stockfish's `ttPv` (chapter 14.1) | #160 | 1072184 (1198340 with them on) | Merged, off by default: +0.3 ± 5.2, 8,100 games, [0, 5] no verdict (LLR −1.57), stopped (M3 Max) |
 
-**Running now: #160** (smaller reductions where the principal variation was, Stockfish's `ttPv`;
-chapter 14.1), started on the M3 on 2026-10-22 at about 14:20 MDT. A clear result should take
-1–3 hours, a small difference 5–8. A new session should restart the watcher,
-`scripts/watch-sprt.sh 160`, or just read #160's comments if the result is already there. Then
-rebase #160 onto `main` (in `docs/status.md` take `main`'s side and edit it), and record the
-result in chapter 14.1, the search module docs, the switch's and the parameter's comments, the
-PRD, the ledger and this file. If it fails, switch it off by default and merge as a record. It
-doesn't hold up v1.0: the last gate is the GUI matrix (#37), on Carlos's Mac. Once that is
-recorded, the version PR (#154) merges and Carlos tags `v1.0.0`.
+**Nothing is running on the M3.** v1.0's last gate is the GUI matrix (#37), on Carlos's Mac.
+Once that is recorded, the version PR (#154) merges and Carlos tags `v1.0.0`.
+
+The SPRT of smaller reductions where the principal variation was (#160, Stockfish's `ttPv`)
+started on 2026-10-22 at about 14:20 MDT. Undecided after 8,100 games, about 6 hours 25 minutes,
+at **+0.3 ± 5.2** (LLR −1.57), it was stopped at about 20:45 (Carlos). The reductions are off
+by default, and the bench is 1,072,184; the flag is still kept in the table, for another try.
 
 The SPRT of smaller reductions at expected all-nodes (#158) finished on 2026-10-22 at 14:05 MDT.
 It started at about 11:45 and failed in 2,993 games, about 2 hours 20 minutes: **−8.5 ± 8.4**,
@@ -437,15 +436,17 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    LMR's first version (#70) and, on 2026-10-17 at 40+0.4, transposition table buckets (#92,
    +1.6 ± 6.3 over 4,630 games, about 18 hours, stopped) and, at 8+0.08, double extensions
    at a margin of 20 (#96, +3.6 ± 4.9 over 8,670 games, about 7 hours, stopped; on at 50 since
-   #125). Failed as a simplification, so kept:
+   #125) and, on 2026-10-22, smaller reductions where the principal variation was (#160, +0.3
+   ± 5.2 over 8,100 games, about 6 hours 25 minutes, stopped). Failed as a simplification, so kept:
    history off (#73, −17.7) and, on
    2026-10-14 at the long time control 40+0.4, adaptive time off (#76, −13.8 ± 8.6 over 2,599
    games; about 255 games an hour on the M3, 10 hours).
 
    Next, in a rough order of value:
-   - **Mostly failures since correction history** (#112, 2026-10-19): of the fourteen tries
+   - **Mostly failures since correction history** (#112, 2026-10-19): of the fifteen tries
      after it, only double extensions at 50 (#125) and larger reductions at expected cut nodes
-     (#145, then 2 plies of them, #155) passed. Failed: capture history three times
+     (#145, then 2 plies of them, #155) passed, and smaller reductions where the principal
+     variation was (#160) had no verdict. Failed: capture history three times
      (#115, −19.2; #129 in Stockfish's form, −6.8; #134 in the main search only, −2.9),
      ProbCut (#117, −10.2), correction history's piece tables averaged with the pawn table
      (#119, −20.7) and added to it (#121, −0.4 over 11,433 games), `singular_tt_depth_margin`
@@ -458,8 +459,11 @@ Run the full test suite on every commit you replay, not only at the tip: each be
      settings). Larger reductions at expected cut nodes passed (#145, +11.6 ± 7.7, against
      Stockfish's own estimate of about 3 Elo for its version), and 2 plies, as in Stockfish,
      added +8.7 ± 6.4 (#155). A smaller reduction at expected all-nodes
-     failed (#158, −8.5 ± 8.4). Next: smaller reductions where the principal variation was, as
-     in Stockfish (`ttPv`, which it rates about 7 Elo; #160, running).
+     failed (#158, −8.5 ± 8.4). Smaller reductions where the principal variation was, as in
+     Stockfish (`ttPv`, which it rates about 7 Elo), had no verdict (#160, +0.3 ± 5.2); chapter
+     14.1 lists Stockfish's larger, graded version for another try. Untested from Stockfish 17
+     (GPL-3.0), each rated by its own comment: a ply more of reduction when the hash move is a
+     capture (about 3 Elo), and when the next ply has had many fail highs (about 5).
    - **Tuning singular extensions, continued**: depth 6 passed (#78) and depth 4 too (#80),
      which is about where Stockfish starts; `singular_margin` 3 passed too (#82), and 4
      failed (#84); `singular_tt_depth_margin` 4 failed against 3 (#123, −7.4 ± 8.0). That

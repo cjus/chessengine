@@ -136,7 +136,7 @@ pub const SWITCHES: &[Switch] = &[
     },
     Switch {
         name: "ttpv",
-        description: "TT PV: late moves reduced less at nodes that are or have been on the principal variation",
+        description: "TT PV: late moves reduced less at nodes that are or have been on the principal variation (off by default)",
         flag: |e| &mut e.techniques.tt_pv,
     },
     Switch {

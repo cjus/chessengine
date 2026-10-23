@@ -501,8 +501,8 @@ PV node already has a ply off.
 ```
 
 Stockfish 17 takes 1 to 3 plies off, depending on the hash entry's score and depth, at PV nodes
-too, and its own comment rates it about 7 Elo. cb2026 takes 1, set by hand. `set ttpv off`
-switches it off, and gives the search without it exactly.
+too, and its own comment rates it about 7 Elo. cb2026 takes 1, set by hand. `set ttpv on|off`
+switches it, and off gives the search without it exactly.
 
 The flag is rare. Over the game's positions at depth 10, about 2% of the non-PV nodes from depth
 3 had it. But they are near the principal variation, where the subtrees are large, so it costs
@@ -512,7 +512,11 @@ nodes:
   784,751 and 1,054,117 nodes, against 437,022, 657,366 and 939,364).
 - The game's 58 positions at depth 10 grow by 8.0% in all, and 28 of them get smaller.
 
-The games decide.
+**No verdict**: about +0 Elo, give or take 5, after 8,100 games, when the run was stopped (see
+"What it's worth"), so it is off by default. Whatever it adds is too small to measure at this
+time control. The flag is still kept in the table, for another try. Untested: Stockfish's larger,
+graded reductions (2 or 3 plies, by the hash entry's score and depth), and the other uses
+Stockfish makes of the flag, such as skipping reverse futility pruning at flagged nodes.
 
 ## What it saves
 
@@ -624,6 +628,7 @@ that it is small, about **+5 Elo**, and it took over 14,000 of them to say so.
 | Larger reductions at expected cut nodes (1 ply more) vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+11.6 ± 7.7 Elo** over 3,687 games (+925 −802 =1960): passed (LLR 2.97); on by default |
 | Cut-node reductions of 2 plies vs `main` (1), 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+8.7 ± 6.4 Elo** over 5,803 games (+1551 −1405 =2847): passed (LLR 2.95); `lmr_cut_node` is 2 |
 | Smaller reductions at expected all-nodes (1 ply less) vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−8.5 ± 8.4 Elo** over 2,993 games (+649 −722 =1622): failed (LLR −2.97); off by default |
+| Smaller reductions where the principal variation was (Stockfish's `ttPv`, 1 ply less) vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | +0.3 ± 5.2 Elo over 8,100 games (+1939 −1933 =4228): no verdict (LLR −1.57), stopped; off by default |
 
 ## Further reading
 

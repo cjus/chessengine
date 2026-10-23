@@ -194,8 +194,9 @@
 //! The flag and both rules are Stockfish's (GPL-3.0), whose own comment rates the reduction
 //! "~7 Elo"; it takes off 1 to 3 plies, depending on the hash entry. The code here is cb2026's
 //! own, and 1 was set by hand. Over a game's positions at depth 10, about 2% of the non-PV
-//! nodes from depth 3 had the flag. It is being tested (cjus/chessengine#160); see chapter
-//! 14.1.
+//! nodes from depth 3 had the flag. It had no verdict: +0.3 ± 5.2 Elo after 8,100 games at
+//! 8+0.08, stopped (cjus/chessengine#160), so it is off by default; see chapter 14.1. The flag
+//! is still kept in the table.
 //!
 //! ## History pruning
 //!
@@ -500,7 +501,7 @@ impl Default for SearchParams {
             lmr_cut_node: 2,
             // Set by hand, not tuned; it failed at 1 (cjus/chessengine#158).
             lmr_all_node: 1,
-            // Set by hand, not tuned, for its SPRT (cjus/chessengine#160). Stockfish
+            // Set by hand, not tuned; no verdict at 1 (cjus/chessengine#160). Stockfish
             // (GPL-3.0) takes off 1 to 3 plies, depending on the hash entry.
             lmr_tt_pv: 1,
             // As in Stockfish 16 (GPL-3.0): above depth 3.
@@ -619,7 +620,8 @@ pub struct Techniques {
     /// weaker).
     pub all_node_reductions: bool,
     /// Reduce late moves less at nodes that are or have been on the principal variation, as
-    /// the transposition table remembers them (needs LMR and the table).
+    /// the transposition table remembers them (needs LMR and the table; off by default, no
+    /// measured gain).
     pub tt_pv: bool,
     /// Late move pruning: skip late quiet moves near the leaves.
     pub late_move_pruning: bool,
@@ -702,8 +704,9 @@ impl Default for Techniques {
             // Off by default: it failed its SPRT, −8.5 ± 8.4 Elo after 2,993 games at 8+0.08
             // (cjus/chessengine#158); see chapter 14.1.
             all_node_reductions: false,
-            // On for its SPRT (cjus/chessengine#160); see chapter 14.1.
-            tt_pv: true,
+            // Off by default: no verdict, +0.3 ± 5.2 Elo after 8,100 games at 8+0.08, stopped
+            // (cjus/chessengine#160); see chapter 14.1.
+            tt_pv: false,
             late_move_pruning: true,
             // Off by default: it measured weaker, −5.3 ± 7.1 Elo after 4,548 games at 8+0.08
             // (cjus/chessengine#140); see chapter 13.1.

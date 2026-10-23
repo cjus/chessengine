@@ -50,7 +50,7 @@
 //! | `set lmr on\|off`, `set histlmr on\|off`, `set lmp on\|off` | Late move reductions; adjusted by history; late move pruning |
 //! | `set cutnode on\|off` | Cut-node reductions: reduce late moves more at expected cut nodes |
 //! | `set allnode on\|off` | All-node reductions: reduce late moves less at expected all-nodes (off by default) |
-//! | `set ttpv on\|off` | TT PV: reduce late moves less at nodes that are or have been on the principal variation |
+//! | `set ttpv on\|off` | TT PV: reduce late moves less at nodes that are or have been on the principal variation (off by default) |
 //! | `set histprune on\|off` | History pruning: skip quiet moves with a bad history near the leaves (off by default) |
 //! | `set rfp\|razoring\|futility\|seeprune\|delta\|seeorder on\|off` | Stage 14's pruning and SEE ordering |
 //! | `eval` | The static evaluation, term by term |
@@ -169,7 +169,7 @@ Commands:
   set lmp on|off       Late move pruning: skip late quiet moves near the leaves
   set cutnode on|off   Reduce late moves more at expected cut nodes
   set allnode on|off   Reduce late moves less at expected all-nodes (default off)
-  set ttpv on|off      Reduce late moves less at nodes that are or have been on the PV
+  set ttpv on|off      Reduce late moves less at nodes once on the PV (default off)
   set histprune on|off History pruning: skip quiet moves with a bad history near the
                        leaves (default off)
   set rfp|razoring|futility|seeprune|delta on|off

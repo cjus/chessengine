@@ -12,8 +12,8 @@
 //!   [`Bound`]). A result searched at least as deep as needed can end the search of the
 //!   position at once (a **TT cutoff**);
 //! - whether the position is or has been on the **principal variation** (from M5, after
-//!   Stockfish's `ttPv`, GPL-3.0), so that the search reduces late moves there less on later
-//!   visits.
+//!   Stockfish's `ttPv`, GPL-3.0), so that the search can reduce late moves there less on
+//!   later visits (the `tt_pv` technique, off by default).
 //!
 //! ## Bounds
 //!
