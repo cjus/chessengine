@@ -113,6 +113,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "cb2026-trainer"
+version = "0.1.0"
+dependencies = [
+ "cb2026-chess",
+ "cb2026-nnue",
+]
+
+[[package]]
 name = "cnp"
 version = "0.1.0"
 source = "git+https://github.com/cjus/chess-node-protocol?rev=bafda928d0298267ebd86d753bda78f54138770c#bafda928d0298267ebd86d753bda78f54138770c"

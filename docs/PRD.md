@@ -229,8 +229,19 @@ teaching value, and the trainer uses the Mac's GPU through Metal.
 
   bullet (MIT), the trainer many engines use, would be allowed by "License and IP", but its
   training code wouldn't be ours to explain, so it isn't used.
-- **Build and tests:** the trainer is not among the workspace's default members, so `cargo
-  build` and the `cb2026` binary never compile wgpu. `scripts/check.sh` checks it with the rest;
+
+  **The CPU trainer** (2026-10-23): the target is `(1 − w) σ(score / scale) + w × result` from
+  the side to move's view, with a result weight `w` of 0.25; the loss is the squared error of
+  `σ(output)`; AdamW (learning rate 0.001, weight decay 0.01) with every weight clipped to ±1.98
+  after each step; batches of 16,384 shared among the CPU's threads; 20 epochs, the learning
+  rate a tenth for the last quarter; the last 1% of the records for validation; the eval scale
+  fitted from the data (159 on a 134,000-record sample); a network file after every epoch and a
+  checkpoint to resume from. Its gradients match finite differences to 0.1%. **Measured:** about
+  2.4 million records a second on 8 of the M1 Max's threads, so 20 epochs on 100 million records
+  take about 15 minutes. Generating the records (about 12 hours) is the slow step, so the GPU
+  backend is for teaching and for larger networks, not for the first ones.
+- **Build and tests:** the trainer is not among the workspace's default members (done
+  2026-10-23), so `cargo build` and the `cb2026` binary never compile wgpu. `scripts/check.sh` checks it with the rest;
   its GPU tests sit behind a cargo feature and run on the Mac, since the nightly Linux CI has no
   GPU.
 - **Nets** are not committed: they are published as release assets and fetched by a script, as

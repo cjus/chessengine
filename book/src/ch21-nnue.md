@@ -1,11 +1,12 @@
 # NNUE
 
-*Stage 21 · in progress · code in `crates/nnue`, `crates/tools/src/selfplay.rs`*
+*Stage 21 · in progress · code in `crates/nnue`, `crates/tools/src/selfplay.rs`,
+`crates/trainer`*
 
 > This chapter is being written as stage 21 is built. So far it covers the network's
-> definition (its inputs, its layers and its whole-number weights) and the format of its
-> training data. The trainer and the engine's use of the network come in the next sections,
-> with what it's worth once it can be measured.
+> definition (its inputs, its layers and its whole-number weights), its training data and the
+> trainer. The engine's use of the network comes next, with what it's worth once it can be
+> measured.
 
 Chapters 15 and 16 built an evaluation from terms a person designed and tuned their weights on
 cb2026's own games. An **NNUE** ("efficiently updatable neural network") replaces those terms
@@ -200,6 +201,91 @@ every start, so chapter 16's runs can still be repeated.
 `datagen --format records` writes records, and `records` checks a file and shows what is in
 it. Sixty games make about 4,100 records, 132 KB; 100 million records take 3.2 GB. Records have
 no file header, so files from separate runs can simply be joined.
+
+## The trainer
+
+The trainer (`crates/trainer`) learns the weights. It uses no machine-learning library: every
+gradient is worked out by hand, so each step can be read.
+
+### What it learns to predict
+
+The network's output `y` means `y × eval scale` centipawns, and `σ(y)` the expected result for
+the side to move. Each record gives two estimates of what `σ(y)` should be: the search's score,
+`σ(score / eval scale)`, which is precise but sometimes wrong, and the game's result, which is
+right about the game but noisy about any one position in it. The **target** blends them, a
+quarter result by default:
+
+```rust,ignore
+{{#include ../../crates/trainer/src/example.rs:example}}
+```
+
+The eval scale comes from the data, fitted as chapter 16 fitted `K`: on 134,000 records with
+balanced starts it came out at 159, close to the 146 found earlier.
+
+### Forward, loss, backward
+
+The forward pass is the network itself, run on the example's inputs:
+
+```rust,ignore
+{{#include ../../crates/trainer/src/backprop.rs:forward}}
+```
+
+The loss is the squared difference between `σ(y)` and the target. Training needs its
+**gradient**: for every weight, how much the loss changes as that weight changes. The chain
+rule gives it, working back from the output. The loss's slope with respect to `y` is
+`2 (σ(y) − target) σ(y) (1 − σ(y))`:
+
+```rust,ignore
+{{#include ../../crates/trainer/src/backprop.rs:loss}}
+```
+
+From there, an output weight's gradient is that slope times its hidden value's activation, and
+a hidden value's is the slope times its output weight times the activation's own slope, which is
+zero wherever the clipping holds the value at 0 or 1. A first-layer weight collects its hidden
+value's gradient once for each view in which its input is on: only about 32 of the 768 rows
+change for any one position.
+
+```rust,ignore
+{{#include ../../crates/trainer/src/backprop.rs:backward}}
+```
+
+Hand-written gradients need checking. The test nudges weights a little each way, measures how
+the loss moves, and compares that with the formulas: they agree to 0.1%. The check itself
+taught two lessons. Near the clipping's corners a nudge measures the wrong slope, so those
+hidden values are left out. And in `f32`, σ(y) near ½ is only exact to about 6 × 10⁻⁸, a few
+percent of the change a small nudge makes, so the test measures the loss in `f64`.
+
+### Stepping: AdamW
+
+The gradients of a batch of records are averaged, and **AdamW** moves each weight against its
+gradient, as chapter 16's tuner did. It keeps a running average of each weight's gradient and
+of its square, and steps by about their ratio, so rarely used inputs learn as fast as common
+ones. It also pulls every weight a little towards zero (weight decay), and afterwards clips it
+to ±1.98, the limit the whole-number network relies on:
+
+```rust,ignore
+{{#include ../../crates/trainer/src/adam.rs:step}}
+```
+
+### The loop
+
+Each **epoch** visits every training record once in a new random order, in batches of 16,384.
+A batch is shared out among the CPU's threads, and their gradients are added up in a fixed
+order, so the same settings always give the same network. The learning rate drops to a tenth
+for the last quarter of the epochs. After each epoch the trainer writes the network, with
+whole-number weights, as a file the engine can read, and a checkpoint to resume from.
+
+The last 1% of the records, whole games the training never sees, are the **validation set**.
+The training loss shows how well the network fits the positions it learns from; the validation
+loss shows how well it has learnt chess. A test makes the difference plain. A student network
+learns the scores of a random "teacher" network of the same shape: on 1,920 positions its
+training loss falls 200-fold, but on unseen positions it is only 38% better than guessing the
+average, and with 576 positions no better at all. It has learnt the positions by heart. Only
+many positions teach a network chess, which is why a first one needs about 100 million.
+
+On the M1 Max, with 8 threads, the trainer handles about 2.4 million records a second, so an
+epoch of 100 million records takes about 45 seconds and 20 epochs about 15 minutes. Generating
+those records takes about 12 hours: data, not training, is what takes the time.
 
 ## Pitfalls
 
