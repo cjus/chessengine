@@ -446,6 +446,10 @@ compiler vectorises.
 - **An eval scale that doesn't match** quietly changes every margin in the search.
 - **Overflow** in the integer arithmetic gives silently wrong scores. The weight limit and the
   bounds above rule it out, and a test runs the largest possible weights.
+- **A network that quietly doesn't load.** An engine that can't read its `EvalFile` says so
+  in an `info string` and plays on with the hand-crafted evaluation, and a match tool ignores
+  info strings, so a test of the network would measure the old evaluation against itself.
+  `mac-sprt.sh` loads each network through UCI before the match and stops if it doesn't load.
 - **A move the accumulators miss.** Every place the search makes a move must update the
   child's accumulator; a debug build checks each evaluation.
 - **A GPU kernel is as slow as its slowest invocation.** One invocation per weight looks

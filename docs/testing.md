@@ -140,6 +140,22 @@ with any time losses, illegal moves, failures and aborted games. The games are k
 While the match runs, `mac-sprt.sh` also posts the score so far every 2,000 games
 (`PROGRESS_EVERY`, 0 for none), as one comment it keeps editing.
 
+**NNUE networks** (from stage 21). `NET=<file>` gives the PR's engine that network through UCI
+`EvalFile`, and main's engine keeps the hand-crafted evaluation, so with a PR that doesn't change
+the engine's code the SPRT measures the network against the HCE. With `BASE_NET=<file>` too,
+main's engine gets that network, to compare two (256 against 512, or one generation against the
+next):
+
+```sh
+NET=~/nnue-data/gen1/net-256/epoch-20.nnue nohup scripts/mac-sprt.sh <PR> > ~/sprt-<PR>.log 2>&1 &
+tail -f ~/sprt-<PR>.log
+```
+
+An engine that can't load its network says so in an `info string` and plays on with the HCE,
+and the match tool ignores info strings, so before the match the script loads each network
+through UCI as the match will and stops if it doesn't load. The comments name each network
+with the start of its SHA-256, and its games go in `target/sprt/pr<PR>-<commit>-net-<hash>.pgn`.
+
 Claude follows a running SPRT with `scripts/watch-sprt.sh <PR> [hours] [undecided games]`,
 which checks the PR every 10 minutes for the result comment and prints it. If the progress
 comment reaches `undecided games` (default 8,000) first, it prints that and exits 3, so that

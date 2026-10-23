@@ -288,6 +288,12 @@ teaching value, and the trainer uses the Mac's GPU through Metal.
   file format, the CPU trainer and the GPU backend, alongside the engine's inference; none of
   these change the engine's play until a net is switched on. The first SPRT, net against HCE,
   needs both halves.
+- **Judging a net** (2026-10-23): `NET=<file> scripts/mac-sprt.sh <PR>` gives the PR's engine
+  the net (UCI `EvalFile`) and leaves main's on the HCE; `BASE_NET=<file>` gives main's engine a
+  net too, to compare two. The PR is the one that would make the net the default, so the
+  result lands where the decision is made. The script loads each net through UCI before the
+  match and stops if it doesn't load, since an engine that can't load its net plays on with the
+  HCE and the match would quietly test the HCE against itself.
 
 ### Extras
 
