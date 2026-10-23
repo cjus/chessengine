@@ -206,7 +206,7 @@ impl std::fmt::Display for NetError {
 impl std::error::Error for NetError {}
 
 /// A network with whole-number weights, as the engine runs it.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Network {
     hidden: usize,
     activation: Activation,
@@ -232,6 +232,21 @@ impl Accumulator {
     /// The hidden layer seen from `view`'s side, before the activation.
     pub fn view(&self, view: Color) -> &[i16] {
         &self.views[view.index()]
+    }
+
+    /// Copies `other` into this accumulator without allocating: for a null move, which
+    /// changes no piece.
+    pub fn copy_from(&mut self, other: &Accumulator) {
+        for (mine, theirs) in self.views.iter_mut().zip(&other.views) {
+            mine.copy_from_slice(theirs);
+        }
+    }
+}
+
+/// A network's description, not its 200,000 numbers.
+impl std::fmt::Debug for Network {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Network({})", self.summary())
     }
 }
 
@@ -293,6 +308,20 @@ impl Network {
         fnv1a(&self.payload())
     }
 
+    /// A one-line description: the shape, activation, eval scale and checksum.
+    pub fn summary(&self) -> String {
+        let activation = match self.activation {
+            Activation::ClippedRelu => "CReLU",
+            Activation::SquaredClippedRelu => "SCReLU",
+        };
+        format!(
+            "{INPUTS} -> {} x 2 -> 1, {activation}, eval scale {}, checksum {:016x}",
+            self.hidden,
+            self.eval_scale,
+            self.checksum()
+        )
+    }
+
     /// The weights of one input: a row of one weight per hidden value.
     fn row(&self, input: usize) -> &[i16] {
         &self.input_weights[input * self.hidden..(input + 1) * self.hidden]
@@ -327,6 +356,34 @@ impl Network {
         }
     }
     // ANCHOR_END: accumulator
+
+    /// An accumulator of the right size with nothing in it yet, for the search to fill: it
+    /// keeps one per ply and never allocates while searching.
+    pub fn empty_accumulator(&self) -> Accumulator {
+        Accumulator {
+            views: [vec![0; self.hidden], vec![0; self.hidden]],
+        }
+    }
+
+    /// Computes `pos`'s accumulator from scratch into `acc`, without allocating.
+    pub fn refresh(&self, pos: &Position, acc: &mut Accumulator) {
+        for view in Color::ALL {
+            let values = &mut acc.views[view.index()];
+            values.copy_from_slice(&self.input_biases);
+            for input in features::active(pos, view) {
+                add(values, self.row(input));
+            }
+        }
+    }
+
+    // ANCHOR: update_into
+    /// Writes into `child` the accumulator after a move with these `changes`, given `parent`,
+    /// the accumulator before it: what the search does at every move, without allocating.
+    pub fn update_into(&self, parent: &Accumulator, child: &mut Accumulator, changes: &Changes) {
+        child.copy_from(parent);
+        self.update(child, changes);
+    }
+    // ANCHOR_END: update_into
 
     // ANCHOR: evaluate
     /// The position's value in centipawns, from `side_to_move`'s point of view, given its
@@ -692,6 +749,28 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn the_searchs_in_place_updates_match_the_others() {
+        let net = random_network(64, Activation::SquaredClippedRelu, 16);
+        let mut parent = net.empty_accumulator();
+        let mut child = net.empty_accumulator();
+        for pos in special_move_positions() {
+            net.refresh(&pos, &mut parent);
+            assert_eq!(parent, net.accumulator(&pos));
+            for &mv in pos.legal_moves().iter() {
+                let mut next = pos.clone();
+                next.make_move(mv);
+                net.update_into(&parent, &mut child, &Changes::of(&pos, mv));
+                assert_eq!(child, net.accumulator(&next), "{mv:?} in {}", pos.to_fen());
+            }
+            child.copy_from(&parent);
+            assert_eq!(child, parent);
+        }
+        assert!(
+            format!("{net:?}").starts_with("Network(768 -> 64 x 2 -> 1, SCReLU, eval scale 146")
+        );
     }
 
     #[test]

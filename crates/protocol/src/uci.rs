@@ -15,6 +15,7 @@
 //! < option name SyzygyProbeLimit type spin default 7 min 0 max 7
 //! < option name OwnBook type check default false
 //! < option name BookFile type string default <empty>
+//! < option name EvalFile type string default <empty>
 //! < option name MultiPV type spin default 1 min 1 max 256
 //! < option name Skill Level type spin default 20 min 0 max 20
 //! < option name UCI_LimitStrength type check default false
@@ -51,7 +52,7 @@ use cb2026_engine::levels::{ELO_RANGE, FULL_STRENGTH};
 use cb2026_engine::tablebase::TablebaseLoader;
 use cb2026_engine::time::{self, TimeParams};
 use cb2026_engine::tt::{DEFAULT_HASH_MB, MAX_HASH_MB};
-use cb2026_engine::{AUTHOR, Engine, Limits, MAX_THREADS, SearchInfo, id_name};
+use cb2026_engine::{AUTHOR, Engine, Limits, MAX_THREADS, Network, SearchInfo, id_name};
 
 /// Where the engine's replies go. Shared between the command loop and the search thread.
 type Output = Arc<Mutex<Box<dyn Write + Send>>>;
@@ -174,6 +175,10 @@ impl Session {
                 send(
                     &self.output,
                     "option name BookFile type string default <empty>",
+                );
+                send(
+                    &self.output,
+                    "option name EvalFile type string default <empty>",
                 );
                 send(
                     &self.output,
@@ -353,6 +358,23 @@ impl Session {
                             "no opening book".to_string()
                         }
                         Err(e) => format!("opening book not loaded: {e}"),
+                    };
+                    send(&self.output, &format!("info string {message}"));
+                }
+            }
+            "evalfile" => {
+                if let Some(engine) = self.engine.as_mut() {
+                    let message = match load_network(value) {
+                        Ok(Some(net)) => {
+                            let message = format!("NNUE network {}", net.summary());
+                            engine.network = Some(Arc::new(net));
+                            message
+                        }
+                        Ok(None) => {
+                            engine.network = None;
+                            "no NNUE network: the hand-crafted evaluation".to_string()
+                        }
+                        Err(e) => format!("NNUE network not loaded: {e}"),
                     };
                     send(&self.output, &format!("info string {message}"));
                 }
@@ -568,6 +590,17 @@ fn load_book(path: &str) -> Result<Option<OpeningBook>, String> {
     }
     let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
     OpeningBook::from_bytes(&bytes).map(Some)
+}
+
+/// Reads an NNUE network from `path` (`None` for an empty path or `<empty>`).
+fn load_network(path: &str) -> Result<Option<Network>, String> {
+    if path.trim().is_empty() || path == "<empty>" {
+        return Ok(None);
+    }
+    let bytes = std::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
+    Network::from_bytes(&bytes)
+        .map(Some)
+        .map_err(|e| format!("{path}: {e}"))
 }
 
 /// Formats progress as a UCI `info` line.
@@ -884,6 +917,43 @@ mod tests {
             assert!(!moves[1].starts_with("bestmove a2a3"), "{lines:?}");
         }
         std::fs::remove_file(&path).unwrap();
+    }
+
+    #[test]
+    fn eval_file_loads_an_nnue_network() {
+        let mut float =
+            cb2026_nnue::FloatNetwork::zeros(32, cb2026_nnue::Activation::SquaredClippedRelu, 146);
+        float.input_biases.fill(0.5);
+        float.output_weights[0] = 0.25;
+        let net = float.quantize().unwrap();
+        let path = std::env::temp_dir().join(format!("cb2026-uci-{}.nnue", std::process::id()));
+        std::fs::write(&path, net.to_bytes()).unwrap();
+        let lines = session(&format!(
+            "uci\nsetoption name EvalFile value {}\nposition startpos\ngo depth 3\nisready\nsetoption name EvalFile value\ngo depth 3\nisready\nsetoption name EvalFile value /no/such.nnue\nisready\n",
+            path.display()
+        ));
+        std::fs::remove_file(&path).unwrap();
+        assert!(
+            lines
+                .iter()
+                .any(|l| l == "option name EvalFile type string default <empty>")
+        );
+        let loaded = format!("info string NNUE network {}", net.summary());
+        assert!(lines.contains(&loaded), "{lines:?}");
+        assert!(
+            lines
+                .iter()
+                .any(|l| l == "info string no NNUE network: the hand-crafted evaluation")
+        );
+        assert!(
+            lines
+                .iter()
+                .any(|l| l.starts_with("info string NNUE network not loaded: /no/such.nnue"))
+        );
+        assert_eq!(
+            lines.iter().filter(|l| l.starts_with("bestmove")).count(),
+            2
+        );
     }
 
     #[test]

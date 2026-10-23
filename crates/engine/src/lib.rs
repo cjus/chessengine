@@ -59,6 +59,8 @@
 //! - **Evaluation (stages 9, 15–16):** a tapered, hand-crafted evaluation with a per-term trace
 //!   for the shell's `eval` command, and a Texel tuner that fits its weights to self-play games
 //!   (the tuned values are available, but haven't yet measured stronger than the hand-set ones).
+//!   From stage 21 the search can evaluate with an NNUE network instead ([`Engine::network`],
+//!   defined in `cb2026_nnue`), keeping one accumulator per ply ([`Techniques::nnue`]).
 //! - **Everything else a real engine needs (stages 6, 17–19):** time management, Lazy SMP,
 //!   Syzygy tablebases, a Polyglot opening book, and strength limiting.
 //!
@@ -94,6 +96,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use cb2026_chess::{Move, Position};
+/// The NNUE network type, for front ends that load one (stage 21; see `cb2026_nnue`).
+pub use cb2026_nnue::Network;
 
 use book::OpeningBook;
 use correction::CorrectionHistory;
@@ -253,6 +257,9 @@ pub struct Engine {
     pub limit_strength: bool,
     /// The strength to play at when limited (the UCI `UCI_Elo`).
     pub elo: u32,
+    /// The NNUE network to evaluate with, if one is loaded (the UCI `EvalFile`; stage 21).
+    /// With none, or with [`Techniques::nnue`] off, the hand-crafted evaluation is used.
+    pub network: Option<Arc<Network>>,
 }
 
 impl Default for Engine {
@@ -275,6 +282,7 @@ impl Default for Engine {
             skill_level: levels::FULL_STRENGTH,
             limit_strength: false,
             elo: levels::ELO_RANGE.1,
+            network: None,
         }
     }
 }
@@ -455,9 +463,12 @@ impl Engine {
             tablebase_params,
             multipv,
             time,
+            network,
             ..
         } = self;
         let tablebase = tablebase.as_deref();
+        // The network, if the search is to evaluate with one.
+        let network = network.as_deref().filter(|_| techniques.nnue);
         let self_multipv = (*multipv).max(1);
         let tablebase_params = *tablebase_params;
         // ANCHOR: horizon_search
@@ -494,6 +505,9 @@ impl Engine {
                     if let Some(tb) = tablebase {
                         searcher.use_tablebase(tb, tablebase_params);
                     }
+                    if let Some(net) = network {
+                        searcher.use_network(net);
+                    }
                     run_helper(&mut searcher, position, root_moves, max_depth, helper);
                     searcher.stats()
                 }));
@@ -514,6 +528,9 @@ impl Engine {
             searcher.use_correction(correction);
             if let Some(tb) = tablebase {
                 searcher.use_tablebase(tb, tablebase_params);
+            }
+            if let Some(net) = network {
+                searcher.use_network(net);
             }
             let result = main_search(
                 &mut searcher,
@@ -613,6 +630,9 @@ impl Engine {
         searcher.use_correction(&mut self.correction);
         if let Some(tb) = self.tablebase.as_deref() {
             searcher.use_tablebase(tb, self.tablebase_params);
+        }
+        if let Some(net) = self.network.as_deref().filter(|_| self.techniques.nnue) {
+            searcher.use_network(net);
         }
         let depth = depth.clamp(1, MAX_PLY);
         let mut previous = None;
@@ -835,6 +855,134 @@ mod tests {
     }
 
     const KIWIPETE: &str = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
+
+    /// A network that counts material, built by hand: hidden values 0–4 count the side's own
+    /// pawns to queens and 5–9 the opponent's, worth 100, 300, 300, 495 and 900 centipawns. Values
+    /// 10–31 have small pseudo-random weights for every piece on every square but no output
+    /// weight: they don't change the score, but the accumulator checks see every square.
+    fn material_network() -> Network {
+        use cb2026_chess::{Color, Piece, PieceType, Square};
+        let (hidden, scale) = (32, 500);
+        let mut float =
+            cb2026_nnue::FloatNetwork::zeros(hidden, cb2026_nnue::Activation::ClippedRelu, scale);
+        // Per piece type, the weight of each piece (so a count of 8 pawns is still under 1) and
+        // the output weight: 8 × 0.125 × 1.6 × 500 is 800 centipawns for eight pawns.
+        let values = [
+            (0.125, 1.6),
+            (0.5, 1.2),
+            (0.5, 1.2),
+            (0.5, 1.98),
+            (1.0, 1.8),
+        ];
+        let mut state = 0x9e37_79b9_7f4a_7c15u64;
+        let mut noise = || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            ((state >> 40) as f32 / (1u64 << 24) as f32 * 2.0 - 1.0) * 0.05
+        };
+        for square in Square::all() {
+            for (side, color) in [Color::White, Color::Black].into_iter().enumerate() {
+                for (t, piece_type) in PieceType::ALL.into_iter().enumerate() {
+                    let input = cb2026_nnue::features::index(
+                        Color::White,
+                        Piece::new(color, piece_type),
+                        square,
+                    );
+                    let row = &mut float.input_weights[input * hidden..(input + 1) * hidden];
+                    if let Some(&(weight, _)) = values.get(t) {
+                        row[5 * side + t] = weight;
+                    }
+                    row[10..].iter_mut().for_each(|w| *w = noise());
+                }
+            }
+        }
+        for (t, &(_, worth)) in values.iter().enumerate() {
+            float.output_weights[t] = worth;
+            float.output_weights[5 + t] = -worth;
+        }
+        float.quantize().unwrap()
+    }
+
+    #[test]
+    fn a_material_network_counts_material_for_the_side_to_move() {
+        let net = material_network();
+        let eval = |fen: &str| net.evaluate_position(&Position::from_fen(fen).unwrap());
+        assert_eq!(eval(cb2026_chess::STARTING_FEN), 0);
+        // White is a knight up: +3 pawns for White to move, −3 for Black.
+        let up = "r1bqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR";
+        assert!((eval(&format!("{up} w KQkq - 0 1")) - 300).abs() <= 2);
+        assert!((eval(&format!("{up} b KQkq - 0 1")) + 300).abs() <= 2);
+        // And the search with it takes a free rook, whichever side is to move.
+        let mut engine = Engine::new();
+        engine.network = Some(Arc::new(net));
+        for (fen, capture) in [
+            ("4k3/8/8/8/8/8/3r4/3QK3 w - - 0 1", "d1d2"),
+            ("3qk3/3R4/8/8/8/8/8/4K3 b - - 0 1", "d8d7"),
+        ] {
+            assert_eq!(
+                search_with(&mut engine, fen, 4).pv[0].to_uci(false),
+                capture
+            );
+        }
+    }
+
+    #[test]
+    fn searching_with_a_network_keeps_every_accumulator_in_step() {
+        // In a debug build every evaluation checks the accumulator the search updated move by
+        // move against one computed from scratch. These positions have castling both ways,
+        // en passant, promotions with and without captures, a Chess960 castling where the king
+        // stays put, and checks (null moves, the quiescence search and ProbCut too).
+        let fens = [
+            cb2026_chess::STARTING_FEN,
+            KIWIPETE,
+            "4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 2",
+            "1n2k3/P7/8/8/8/8/8/4K3 w - - 0 1",
+            "4k3/8/8/8/8/8/8/R5KR w KQ - 0 1",
+            "r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 4 4",
+        ];
+        let mut engine = Engine::new();
+        engine.network = Some(Arc::new(material_network()));
+        engine.techniques.probcut = true;
+        for fen in fens {
+            let info = search_with(&mut engine, fen, 6);
+            let pos = Position::from_fen(fen).unwrap();
+            assert!(pos.legal_moves().contains(&info.pv[0]), "{fen}");
+        }
+        // Helper threads keep their own accumulators.
+        engine.threads = 3;
+        search_with(&mut engine, KIWIPETE, 6);
+    }
+
+    #[test]
+    fn with_no_network_or_the_switch_off_the_search_is_the_hand_crafted_one() {
+        let nodes = |engine: &mut Engine| search_with(engine, KIWIPETE, 5).nodes;
+        let hand_crafted = nodes(&mut Engine::new());
+        let mut engine = Engine::new();
+        engine.network = Some(Arc::new(material_network()));
+        engine.techniques.nnue = false;
+        assert_eq!(nodes(&mut engine), hand_crafted);
+        // Switched on, the network changes the search.
+        engine.techniques.nnue = true;
+        assert_ne!(nodes(&mut engine), hand_crafted);
+    }
+
+    #[test]
+    fn the_networks_evaluation_stays_below_tablebase_and_mate_scores() {
+        // Output weights at their limit and the largest eval scale: a raw score far beyond
+        // the limit, which the search must clamp.
+        let mut float = cb2026_nnue::FloatNetwork::zeros(
+            64,
+            cb2026_nnue::Activation::SquaredClippedRelu,
+            cb2026_nnue::network::MAX_EVAL_SCALE,
+        );
+        float.input_biases.fill(1.0);
+        float.output_weights.fill(cb2026_nnue::float::WEIGHT_LIMIT);
+        let mut engine = Engine::new();
+        engine.network = Some(Arc::new(float.quantize().unwrap()));
+        let info = search_with(&mut engine, cb2026_chess::STARTING_FEN, 2);
+        assert_eq!(info.score, Score::Centipawns(search::NNUE_EVAL_LIMIT));
+    }
 
     #[test]
     fn check_extensions_see_further_along_checks() {

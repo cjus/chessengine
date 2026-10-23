@@ -372,6 +372,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Instant;
 
 use cb2026_chess::{Move, PieceType, Position};
+use cb2026_nnue::{Accumulator, Changes, Network};
 
 use crate::Score;
 use crate::correction::{CorrectionHistory, CorrectionSettings};
@@ -390,6 +391,9 @@ pub const MATE: i32 = 32_000;
 pub const INFINITY: i32 = 32_001;
 /// The deepest the search ever goes, in plies from the root.
 pub const MAX_PLY: u32 = 128;
+/// The network's evaluation is kept within this many centipawns: far beyond any real advantage,
+/// and well below tablebase and mate scores, which the search must never mistake it for.
+pub const NNUE_EVAL_LIMIT: i32 = 20_000;
 /// Search depth when the caller gives no limit at all (no depth, time, nodes or `infinite`).
 pub const DEFAULT_DEPTH: u32 = 6;
 /// How many nodes pass between checks of the stop flag, the clock and the node limit.
@@ -722,6 +726,9 @@ pub struct Techniques {
     /// ProbCut: cut a node off when a good capture beats beta by a margin in a shallower
     /// search (needs the quiescence search; off by default).
     pub probcut: bool,
+    /// Evaluate with the NNUE network when one is loaded ([`crate::Engine::network`], stage
+    /// 21). Off, or with none loaded, the hand-crafted evaluation.
+    pub nnue: bool,
 }
 
 impl Default for Techniques {
@@ -800,6 +807,8 @@ impl Default for Techniques {
             // Off by default: it measured weaker, −10.2 ± 9.1 Elo after 2,593 games at 8+0.08
             // (cjus/chessengine#117), though it took 9.6% off the bench; see chapter 12.1.
             probcut: false,
+            // The network is used only when one is loaded, and none is by default.
+            nnue: true,
         }
     }
 }
@@ -945,6 +954,8 @@ pub(crate) struct Searcher<'a> {
     correction: Option<&'a mut CorrectionHistory>,
     /// What the search has done so far (see [`crate::stats`]).
     stats: SearchStats,
+    /// The NNUE network and one accumulator per ply, if the search evaluates with a network.
+    nnue: Option<NnueStack<'a>>,
     /// The search tree, when one is being recorded.
     tree: Option<SearchTree>,
 }
@@ -985,6 +996,13 @@ enum MoveSearch {
     },
 }
 
+/// The network a search evaluates with, and an accumulator for each ply: the one at ply `p`
+/// belongs to the position the search is at `p` plies from the root.
+struct NnueStack<'a> {
+    net: &'a Network,
+    accumulators: Vec<Accumulator>,
+}
+
 impl<'a> Searcher<'a> {
     pub(crate) fn new(
         params: &'a EvalParams,
@@ -1022,6 +1040,7 @@ impl<'a> Searcher<'a> {
             tb_hits: 0,
             correction: None,
             stats: SearchStats::default(),
+            nnue: None,
             tree: None,
         }
     }
@@ -1031,6 +1050,55 @@ impl<'a> Searcher<'a> {
     pub(crate) fn use_correction(&mut self, correction: &'a mut CorrectionHistory) {
         self.correction = Some(correction);
     }
+
+    /// Evaluates with `net` from now on, keeping an accumulator for every ply (stage 21).
+    pub(crate) fn use_network(&mut self, net: &'a Network) {
+        self.nnue = Some(NnueStack {
+            net,
+            accumulators: (0..MAX_PLY + 2).map(|_| net.empty_accumulator()).collect(),
+        });
+    }
+
+    // ANCHOR: nnue_search
+    /// Computes the root's accumulator from scratch: every search starts here.
+    fn refresh_accumulator(&mut self, root: &Position) {
+        if let Some(nnue) = &mut self.nnue {
+            nnue.net.refresh(root, &mut nnue.accumulators[0]);
+        }
+    }
+
+    /// Makes the accumulator for the child at `ply + 1` from the one at `ply`, for `mv` played
+    /// in `pos` (`None`: a null move, which changes no piece). Called wherever a child is
+    /// about to be searched.
+    fn update_accumulator(&mut self, pos: &Position, mv: Option<Move>, ply: u32) {
+        if let Some(nnue) = &mut self.nnue {
+            let (parents, children) = nnue.accumulators.split_at_mut(ply as usize + 1);
+            let (parent, child) = (&parents[ply as usize], &mut children[0]);
+            match mv {
+                Some(mv) => nnue.net.update_into(parent, child, &Changes::of(pos, mv)),
+                None => child.copy_from(parent),
+            }
+        }
+    }
+
+    /// The static evaluation of `pos`, at `ply`: the network's, from the accumulator the
+    /// search has kept up to date, or the hand-crafted evaluation's.
+    fn evaluate(&self, pos: &Position, ply: u32) -> i32 {
+        match &self.nnue {
+            Some(nnue) => {
+                let acc = &nnue.accumulators[ply as usize];
+                // Debug builds check every incremental update against a fresh computation.
+                debug_assert!(
+                    *acc == nnue.net.accumulator(pos),
+                    "accumulator out of step at ply {ply}"
+                );
+                let value = nnue.net.evaluate(acc, pos.side_to_move());
+                value.clamp(-NNUE_EVAL_LIMIT, NNUE_EVAL_LIMIT)
+            }
+            None => evaluate(pos, self.params),
+        }
+    }
+    // ANCHOR_END: nnue_search
 
     /// `raw_eval`, the static evaluation of `pos`, corrected by the correction history if
     /// there is one and it is switched on.
@@ -1165,13 +1233,13 @@ impl<'a> Searcher<'a> {
             return 0;
         }
         if ply >= MAX_PLY {
-            return evaluate(pos, self.params);
+            return self.evaluate(pos, ply);
         }
         if depth == 0 {
             return if self.techniques.quiescence {
                 self.quiescence(pos, ply, alpha, beta, pv)
             } else {
-                evaluate(pos, self.params)
+                self.evaluate(pos, ply)
             };
         }
 
@@ -1264,7 +1332,7 @@ impl<'a> Searcher<'a> {
         let raw_eval = if in_check {
             -INFINITY
         } else {
-            evaluate(pos, self.params)
+            self.evaluate(pos, ply)
         };
         let static_eval = if in_check {
             -INFINITY
@@ -1330,6 +1398,7 @@ impl<'a> Searcher<'a> {
             let mut child = pos.clone();
             child.make_null_move();
             self.push_move(pos, None);
+            self.update_accumulator(pos, None, ply);
             self.keys.push(pos.hash());
             let mut null_pv = Vec::new();
             let score = -self.negamax(
@@ -1401,6 +1470,7 @@ impl<'a> Searcher<'a> {
                 let mut child = pos.clone();
                 child.make_move(mv);
                 self.push_move(pos, Some(mv));
+                self.update_accumulator(pos, Some(mv), ply);
                 // The quiescence search first: it is cheap, and if even it can't reach the
                 // margin, the shallower search seldom does.
                 let mut score = -self.quiescence(
@@ -1721,6 +1791,7 @@ impl<'a> Searcher<'a> {
 
             searched += 1;
             self.push_move(pos, Some(mv));
+            self.update_accumulator(pos, Some(mv), ply);
             let child_depth = (depth - 1 + extension).saturating_sub(shallower);
             self.double_extensions += u32::from(doubled);
             let score = self.search_move(
@@ -1967,14 +2038,14 @@ impl<'a> Searcher<'a> {
             pos.noisy_moves()
         };
         if ply >= MAX_PLY {
-            return evaluate(pos, self.params);
+            return self.evaluate(pos, ply);
         }
 
         let mut best = -INFINITY;
         if !in_check {
             // Stand pat: not capturing is an option, so the static score is a lower bound. It
             // is corrected, as in the main search.
-            best = self.corrected_eval(pos, evaluate(pos, self.params));
+            best = self.corrected_eval(pos, self.evaluate(pos, ply));
             if self.techniques.alpha_beta && best >= beta {
                 return best;
             }
@@ -2027,6 +2098,7 @@ impl<'a> Searcher<'a> {
             }
             let mut child = pos.clone();
             child.make_move(mv);
+            self.update_accumulator(pos, Some(mv), ply);
             let score = -self.quiescence(&child, ply + 1, -beta, -alpha, &mut child_pv);
             if self.aborted {
                 break;
@@ -2069,12 +2141,13 @@ impl<'a> Searcher<'a> {
         self.tt_pv[0] = true;
         // As at every other node (see `negamax`).
         self.cutoffs[2] = 0;
+        self.refresh_accumulator(pos);
         // The root's static evaluation, for the improving heuristic two plies down. `negamax`
         // stores its own, but the root is searched here.
         self.evals[0] = if pos.in_check() {
             -INFINITY
         } else {
-            evaluate(pos, self.params)
+            self.evaluate(pos, 0)
         };
         let mut result = RootResult {
             best_move: root_moves.first().copied(),
@@ -2088,6 +2161,7 @@ impl<'a> Searcher<'a> {
             let mut child = pos.clone();
             child.make_move(mv);
             self.push_move(pos, Some(mv));
+            self.update_accumulator(pos, Some(mv), 0);
             let score = self.search_move(
                 &child,
                 depth.saturating_sub(1),

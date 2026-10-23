@@ -230,6 +230,11 @@ pub const SWITCHES: &[Switch] = &[
         flag: |e| &mut e.techniques.probcut,
     },
     Switch {
+        name: "nnue",
+        description: "Evaluate with the NNUE network when one is loaded (set evalfile)",
+        flag: |e| &mut e.techniques.nnue,
+    },
+    Switch {
         name: "correction",
         description: "Correction history (static evaluation corrected by pawn structure)",
         flag: |e| &mut e.techniques.correction_history,

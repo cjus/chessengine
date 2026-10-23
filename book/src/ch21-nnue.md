@@ -1,12 +1,12 @@
 # NNUE
 
 *Stage 21 · in progress · code in `crates/nnue`, `crates/tools/src/selfplay.rs`,
-`crates/trainer`*
+`crates/trainer`, `crates/engine/src/search.rs`*
 
 > This chapter is being written as stage 21 is built. So far it covers the network's
-> definition (its inputs, its layers and its whole-number weights), its training data and the
-> trainer. The engine's use of the network comes next, with what it's worth once it can be
-> measured.
+> definition (its inputs, its layers and its whole-number weights), its training data, the
+> trainer and the network in the search. What it's worth comes once a network has been trained
+> on the full data and measured.
 
 Chapters 15 and 16 built an evaluation from terms a person designed and tuned their weights on
 cb2026's own games. An **NNUE** ("efficiently updatable neural network") replaces those terms
@@ -287,6 +287,52 @@ On the M1 Max, with 8 threads, the trainer handles about 2.4 million records a s
 epoch of 100 million records takes about 45 seconds and 20 epochs about 15 minutes. Generating
 those records takes about 12 hours: data, not training, is what takes the time.
 
+## The network in the search
+
+The search evaluates millions of positions a second, each a move away from one it has just
+seen. So each search thread keeps a stack of accumulators, one per ply: the one at ply `p`
+belongs to the position `p` moves from the root. Wherever the search is about to look at a
+child, it builds the child's accumulator from its own with the move's changes; for a null move,
+which moves no piece, it copies it. The root's is computed from scratch at the start of each
+search.
+
+```rust,ignore
+{{#include ../../crates/nnue/src/network.rs:update_into}}
+```
+
+```rust,ignore
+{{#include ../../crates/engine/src/search.rs:nnue_search}}
+```
+
+Getting this right everywhere is the hard part. The search makes moves in five places: the
+main move loop, null-move pruning, ProbCut, the quiescence search and the root. Miss one and
+the network quietly evaluates the wrong position. So in a debug build every evaluation
+compares the accumulator it was handed with one computed from scratch, and a test searches
+positions with castling, en passant, promotions, Chess960 castling and checks. Leaving out the
+null move's copy, or the quiescence search's update, fails it at once.
+
+The network's score is clamped to ±20,000 centipawns, so that nothing it computes could be
+taken for a tablebase win or a mate. Correction history (chapter 14.2) corrects it just as it
+corrects the hand-crafted evaluation.
+
+A network is loaded with the UCI option `EvalFile`, the shell's `set evalfile`, or
+`cb2026 bench NET`; the `nnue` switch turns it off again. With no network loaded nothing
+changes: the bench is the same to the node.
+
+### A lesson from a random network
+
+The first test searched with a network of random weights, and on one position, Kiwipete, it
+took 11 million nodes to reach depth 4, where the hand-crafted evaluation needs 5,000. The
+accumulators were right. The evaluation was the problem: random scores tell the quiescence
+search nothing, so almost no capture sequence is cut off early, and Kiwipete is full of
+captures. A network built by hand to count material, a sensible evaluation if a simple one,
+searched 26,000. A network trained on only 134,000 positions searches the bench in 4.6 times as
+many nodes as the hand-crafted evaluation. Pruning is only as good as the evaluation it trusts.
+
+Each node costs about 5% more with a 256-wide network than with the hand-crafted evaluation:
+1.50 million nodes a second against 1.57 million on the M1 Max, in plain Rust that the
+compiler vectorises.
+
 ## Pitfalls
 
 - **Trainer and engine must agree** on the numbering, the layers and the scales. They share
@@ -296,6 +342,8 @@ those records takes about 12 hours: data, not training, is what takes the time.
 - **An eval scale that doesn't match** quietly changes every margin in the search.
 - **Overflow** in the integer arithmetic gives silently wrong scores. The weight limit and the
   bounds above rule it out, and a test runs the largest possible weights.
+- **A move the accumulators miss.** Every place the search makes a move must update the
+  child's accumulator; a debug build checks each evaluation.
 - **Scores from the wrong side.** The search scores for the side to move; records keep White's
   side, like the result, and the trainer turns both to the side to move's view. Mixing the two
   up teaches the network nonsense for every position with Black to move.

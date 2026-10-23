@@ -31,7 +31,7 @@ How to run each check:
 | Check | What to do | Expected |
 | --- | --- | --- |
 | **Load** | Add `target/release/cb2026` as an engine | It's recognised as a UCI engine (XBoard engine in XBoard), named `cb2026 <version>` |
-| **Options** | Open the engine's options dialog | Hash, Threads, Ponder, MultiPV, Skill Level, UCI_LimitStrength/UCI_Elo, SyzygyPath, OwnBook/BookFile, Move Overhead are listed and can be changed |
+| **Options** | Open the engine's options dialog | Hash, Threads, Ponder, MultiPV, Skill Level, UCI_LimitStrength/UCI_Elo, SyzygyPath, OwnBook/BookFile, EvalFile, Move Overhead are listed and can be changed |
 | **Analysis + MultiPV** | Analyse a position with 3 lines | Three lines, each with depth, score and PV, updating as it thinks; switching positions restarts the analysis |
 | **Timed game** | Play a 3+2 game against it | It moves within its time and never loses on time; the game ends normally |
 | **Chess960** | Start a Chess960 game, castle with both sides | Castling works for both sides; no illegal-move errors |

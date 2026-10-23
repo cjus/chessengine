@@ -198,6 +198,17 @@ teaching value, and the trainer uses the Mac's GPU through Metal.
   module, comes only if measuring shows the evaluation is a hot spot the compiler misses
   (CLAUDE.md rules 4 and 5); x86 releases would then need an AVX2 build or runtime CPU
   detection. The HCE stays as a switchable mode; `EvalFile` loads another net.
+- **In the search** (2026-10-23): one accumulator per ply in each search thread, updated in
+  place at every move the search makes (null moves copy it) and computed afresh at the root;
+  debug builds check every update against a fresh computation. The net's score is clamped to
+  ±20,000 cp, below tablebase and mate scores, and correction history applies to it as to the
+  HCE's. The `nnue` technique switch (on by default) uses the net whenever one is loaded: by
+  UCI `EvalFile`, the shell's `set evalfile`, or `cb2026 bench NET`. With no net nothing
+  changes. **Measured** on the M1 Max: about 5% fewer nodes a second than the HCE (1.50 against
+  1.57 million) with a 256-wide net, in plain Rust. A weak net searches far more nodes (4.6×
+  the bench with a net from 134,000 positions, millions at depth 4 on Kiwipete with random
+  weights), because a noisy evaluation prunes badly. The levels were calibrated with the HCE;
+  with a net they would need calibrating again.
 - **Data:** `datagen` self-play, with the HCE for the first net and each net's own games for the
   next, stores the search score as well as the game result, in a compact binary file. A first
   net needs about 100 million positions. `datagen` made about 190 a second per thread on the M1
@@ -311,7 +322,7 @@ moves ...`, every `go` parameter, `stop`, `ponderhit`, `quit`, and `info` lines 
 | OwnBook | check | false | |
 | BookFile | string | `<empty>` | |
 | Clear Hash | button | | |
-| EvalFile | string | built-in net | M6 only |
+| EvalFile | string | `<empty>` | M6: an NNUE network file (`.nnue`); empty means the HCE. A built-in net comes when one beats the HCE |
 
 Technique switches and tuning parameters are not shown to GUIs by default; they appear only in a
 developer build or when the engine is started with `--dev`, so GUI option lists stay clean.
