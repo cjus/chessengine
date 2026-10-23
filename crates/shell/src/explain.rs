@@ -146,7 +146,7 @@ pub const SWITCHES: &[Switch] = &[
     },
     Switch {
         name: "ttcapture",
-        description: "TT capture: late moves reduced more when the hash move is a capture",
+        description: "TT capture: late moves reduced more when the hash move is a capture (off by default)",
         flag: |e| &mut e.techniques.tt_capture_reductions,
     },
     Switch {

@@ -220,8 +220,9 @@
 //! When the hash move is a capture (or a promotion to a queen), late quiet moves are reduced
 //! `lmr_tt_capture` (1) more. As in Stockfish 16 and 17 (GPL-3.0), whose comment rates it "~3
 //! Elo" without saying why; the code here is cb2026's own. A plausible reason: the node's best
-//! move is probably that capture, and a quiet move searched late seldom does better. It is being
-//! tested (cjus/chessengine#171); see chapter 14.1.
+//! move is probably that capture, and a quiet move searched late seldom does better. It failed:
+//! −6.5 ± 7.7 Elo after 3,668 games at 8+0.08 (cjus/chessengine#171), so it is off by default;
+//! see chapter 14.1.
 //!
 //! ## History pruning
 //!
@@ -553,7 +554,7 @@ impl Default for SearchParams {
             // (cjus/chessengine#167); 0 and 1 give Stockfish 16's (cjus/chessengine#165).
             lmr_cutoff_all_node_plies: 1,
             cutoff_count_double_extended: 0,
-            // As in Stockfish 16 and 17 (GPL-3.0), for its SPRT (cjus/chessengine#171).
+            // As in Stockfish 16 and 17 (GPL-3.0); it failed at 1 (cjus/chessengine#171).
             lmr_tt_capture: 1,
             lmp_max_depth: 3,
             lmp_base: 3,
@@ -676,7 +677,7 @@ pub struct Techniques {
     /// being refuted (needs LMR).
     pub cutoff_reductions: bool,
     /// Reduce late moves more when the hash move is a capture (needs LMR and the
-    /// transposition table).
+    /// transposition table; off by default).
     pub tt_capture_reductions: bool,
     /// Late move pruning: skip late quiet moves near the leaves.
     pub late_move_pruning: bool,
@@ -765,8 +766,9 @@ impl Default for Techniques {
             // Passed its SPRT: +12.8 ± 8.2 Elo after 3,144 games at 8+0.08
             // (cjus/chessengine#165); see chapter 14.1.
             cutoff_reductions: true,
-            // On for its SPRT (cjus/chessengine#171); see chapter 14.1.
-            tt_capture_reductions: true,
+            // Off by default: it failed its SPRT, −6.5 ± 7.7 Elo after 3,668 games at 8+0.08
+            // (cjus/chessengine#171); see chapter 14.1.
+            tt_capture_reductions: false,
             late_move_pruning: true,
             // Off by default: it measured weaker, −5.3 ± 7.1 Elo after 4,548 games at 8+0.08
             // (cjus/chessengine#140); see chapter 13.1.

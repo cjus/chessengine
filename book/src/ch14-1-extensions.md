@@ -599,7 +599,11 @@ still shrink:
   (292,044, 450,207 and 698,814 nodes, against 319,002, 473,898 and 764,000).
 - The game's 58 positions at depth 10 shrink by 14.7% in all, and 30 of them get smaller.
 
-It is being tested (cjus/chessengine#171).
+**It failed**, by about **−6 Elo** (see "What it's worth"), so it is off by default. A smaller
+tree isn't a stronger engine when the moves cut away mattered. cb2026 already reduces late
+moves at expected cut nodes by 2 plies and after many fail highs by 1 or 2, and Stockfish tunes
+its reductions together, where cb2026 adds them one at a time; one more ply on top may reduce
+these moves too far. Untested: the extra ply only at nodes that are not expected cut nodes.
 
 ## What it saves
 
@@ -714,6 +718,7 @@ that it is small, about **+5 Elo**, and it took over 14,000 of them to say so.
 | Smaller reductions where the principal variation was (Stockfish's `ttPv`, 1 ply less) vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | +0.3 ± 5.2 Elo over 8,100 games (+1939 −1933 =4228): no verdict (LLR −1.57), stopped; off by default |
 | Larger reductions after many fail highs (1 ply more when the next ply has counted more than 3) vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+12.8 ± 8.2 Elo** over 3,144 games (+776 −660 =1708): passed (LLR 2.95); on by default |
 | Stockfish 17's version of them (2 plies at an expected all-node; a doubly extended move's fail high counted once less) vs Stockfish 16's, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+13.7 ± 8.5 Elo** over 2,953 games (+741 −625 =1587): passed (LLR 2.96); the default |
+| Larger reductions when the hash move is a capture (1 ply more) vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−6.5 ± 7.7 Elo** over 3,668 games (+819 −888 =1961): failed (LLR −2.95); off by default |
 
 ## Further reading
 
