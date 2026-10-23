@@ -1,0 +1,15 @@
+[package]
+name = "cb2026-nnue"
+description = "The NNUE evaluation's definition for cb2026: its inputs, layers, integer weights and file format. No I/O."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+cb2026-chess.workspace = true
+
+[lints]
+workspace = true
