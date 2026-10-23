@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-23, 13:49 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-23, 14:03 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -76,8 +76,8 @@ the tablebase tests run again, the download script following the mirror's new di
 sections, #177; NNUE training records, 32 bytes each, written by `datagen --format records`
 and shown by `records`, #178; the `make-book` tool and the first Lichess opening book,
 97,432 moves from 1.5 million games of September 2026, #173, #174; the second version of
-larger reductions when the hash move is a capture, off the principal variation, next on the
-M3, #179; balanced starts for records, beyond 200 cp drawn again, #180; the CPU
+larger reductions when the hash move is a capture, off the principal variation, its SPRT
+running on the M3, #179; balanced starts for records, beyond 200 cp drawn again, #180; the CPU
 NNUE trainer, about 2.4 million records a second on the M1 Max, #182.*
 
 ## Stages
@@ -149,12 +149,16 @@ NNUE trainer, about 2.4 million records a second on the M1 Max, #182.*
 | M5: larger reductions after many fail highs, as in Stockfish (chapter 14.1) | #165 | 767859 | Merged: +12.8 ± 8.2, 3,144 games, [0, 5] passed (M3 Max) |
 | M5: larger reductions after many fail highs in Stockfish 17's version (chapter 14.1) | #167 | 749181 | Merged: +13.7 ± 8.5, 2,953 games, [0, 5] passed (M3 Max) |
 | M5: larger reductions when the hash move is a capture, as in Stockfish (chapter 14.1) | #171 | 749181 (719329 with them on) | Merged, off by default: −6.5 ± 7.7, 3,668 games, [0, 5] failed (M3 Max) |
-| M5: larger reductions when the hash move is a capture, off the principal variation (chapter 14.1) | #179, `claude/tt-capture-non-pv` | 754886 | Draft, its SPRT next on the M3 Max: [0, 5] at 8+0.08 |
+| M5: larger reductions when the hash move is a capture, off the principal variation (chapter 14.1) | #179, `claude/tt-capture-non-pv` | 754886 | Draft, its SPRT running on the M3 Max: [0, 5] at 8+0.08 |
 | v1.0: opening books from people's games, the `make-book` tool and `scripts/lichess-book.sh` (chapter 18) | #173 | 749181 | Merged, no functional change. The first book, from Lichess's September 2026 games: 97,432 moves from 1,499,615 games, 1.6 MB, 58 minutes on the M3 (#174) |
 
-**Nothing is running on the M3 now** (2026-10-23, 13:49 MDT): the first Lichess book is built
-(#174). Next on the M3: #179's SPRT, the second version of larger reductions when the hash move
-is a capture, off the principal variation (chapter 14.1; its command is in #179).
+**Running now on the M3: #179's SPRT**, the second version of larger reductions when the hash
+move is a capture, off the principal variation (chapter 14.1), [0, 5] at 8+0.08, started by
+Carlos by 14:02 MDT on 2026-10-23 (rebased onto `main` after #173, bench 754886). Claude
+watches it with `scripts/watch-sprt.sh 179`. On the result: rebase #179, record it (code
+comments, module docs, chapter 14.1's passage and "What it's worth" row, the PRD, the ledger,
+this file), run `scripts/check.sh` and merge; a fail or no verdict means off by default, merged
+as a record.
 
 v1.0's last gate is the GUI matrix (#37), on Carlos's Mac. En
 Croissant, Cute Chess and XBoard are done, with two fixes found on the way (#169, #170); HIARCS
@@ -173,7 +177,9 @@ The first full book, from September 2026 (29 GB), took 58 minutes on the M3 on 2
 nearly all of it the download (about 8.4 MB/s): of 89,616,462 games, 1,499,615 passed (1.7%);
 of 8,036,080 different moves counted, 97,432 were kept, 1.6 MB. From the starting position: e4
 47%, d4 33%, Nf3 9%, c4 6%, b3, g3 and f4 1% each, and 13 more under half a percent each. It is
-at `~/books/cb2026-lichess-2026-09.bin` on the M3. Books are never committed.
+at `~/books/cb2026-lichess-2026-09.bin` on the M3 and on the M1 Max, where cb2026 1.0.0 loads it
+(97,432 entries) and answers 1.e4 with c5 most often. Books are never committed; whether to
+attach this one to the v1.0.0 release is Carlos's call (#183).
 
 The SPRT of larger reductions when the hash move is a capture (#171) finished on 2026-10-23 at
 12:36 MDT. It started at about 09:40 and failed in 3,668 games, about 3 hours: **−6.5 ± 7.7**,
