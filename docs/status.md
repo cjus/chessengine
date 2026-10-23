@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-23, 15:25 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-23, 15:37 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -81,7 +81,8 @@ running on the M3, #179; balanced starts for records, beyond 200 cp drawn again,
 NNUE trainer, about 2.4 million records a second on the M1 Max, #182; the engine evaluates with
 an NNUE network when one is loaded (`EvalFile`), #185; the trainer trains on the GPU through
 wgpu on Metal, 1.2× the CPU at a hidden layer of 256 and 2.8× at 1,024 on the M1 Max, #186;
-measuring it on the M3 Max is Carlos's, #187.*
+measuring it on the M3 Max is Carlos's, #187; the GPU backend prepares batches on all the
+trainer's threads, 5.3 million records a second at 256 instead of 2.7, the same network, #188.*
 
 ## Stages
 
@@ -600,15 +601,18 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    - Done: **the GPU backend** (#186): `trainer --backend gpu`, built with `--features gpu`,
      WGSL kernels through wgpu (Metal on the Mac), each tested against the CPU. WGSL has no float
      atomics, so the CPU sorts each batch's rows by input and cuts the lists into segments of
-     256 rows (the kings' lists are 16 times the average). On the M1 Max, 2.8M records, records a
-     second, CPU (8 threads) against GPU: 2.2M / 2.7M at 256, 1.1M / 2.6M at 512, 0.46M / 1.3M at
-     1,024, the same losses. At 256 the GPU waits for the batch preparation on one CPU thread
-     (4.7 ms against 3.5 ms a batch): preparing batches on several threads is the next speed-up
-     if one is needed. The trainer's threads now default to the performance cores (10 threads
-     were 17% slower than 8). `scripts/check.sh` checks the `gpu` feature on its own.
+     256 rows (the kings' lists are 16 times the average). The trainer's threads now default to
+     the performance cores (10 threads were 17% slower than 8). `scripts/check.sh` checks the
+     `gpu` feature on its own.
+   - Done: **batches prepared on all the trainer's threads** (#188). On one thread the
+     preparation (about 4 ms a batch) was longer than the GPU's work at 256 (3.5 ms); on 8 it
+     takes 0.8 ms, and any number of threads gives the same lists (tested), so the same network.
+     On the M1 Max, 2.8M records, records a second, CPU (8 threads) against GPU: 2.3M / 5.3M at
+     256, 1.1M / 3.0M at 512, 0.54M / 1.4M at 1,024, the same losses. 20 epochs on 100M records
+     at 256: about 6 minutes on the GPU. The GPU's work is now the limit at every size.
    - Next: **#187 (Carlos)**, `scripts/mac-trainer-speed.sh` on the M3 Max, a few minutes. Its
-     cores, GPU and bandwidth all differ from the M1 Max's, so the CPU may win at 256 there; its
-     table picks the backend for the long runs. Record it in chapter 21 ("Other Macs"), the
+     cores, GPU and bandwidth all differ from the M1 Max's, so the GPU's lead may differ there;
+     its table picks the backend for the long runs. Record it in chapter 21 ("Other Macs"), the
      PRD and here.
    - Then the first ~100M-position run on the M3 (about 12 hours, Carlos's to start), training
      (minutes), and the SPRT, net against HCE.

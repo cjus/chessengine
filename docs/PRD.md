@@ -260,13 +260,15 @@ teaching value, and the trainer uses the Mac's GPU through Metal.
   each input's list into segments of 256 rows; sums over the batch go in chunks of 128 examples.
   Every sum has a fixed order, so a GPU repeats its own results; the tests compare the GPU's
   gradients, an AdamW step and a short run with the CPU's. **Measured** on the M1 Max (32 GPU
-  cores) on 2.8 million records, records a second, CPU on 8 threads against GPU: 2.2M against
-  2.7M at a hidden layer of 256, 1.1M against 2.6M at 512, 0.46M against 1.3M at 1,024, with the
-  same losses. At 256 the GPU waits for the batch preparation on one CPU thread (4.7 ms against
-  3.5 ms of GPU work a batch); preparing batches on several threads is the next speed-up if one
-  is needed. **The M3 Max will differ:** faster and more performance cores (10 or 12), a newer
-  GPU of 30 or 40 cores, and 300 or 400 GB/s of memory bandwidth against the M1 Max's 400, so
-  the CPU may win at 256 there. `scripts/mac-trainer-speed.sh` measures both backends on the
+  cores) on 2.8 million records, records a second, CPU on 8 threads against GPU: 2.3M against
+  5.3M at a hidden layer of 256, 1.1M against 3.0M at 512, 0.54M against 1.4M at 1,024, with the
+  same losses; 20 epochs on 100M records at 256 take about 6 minutes. The batch preparation
+  (decoding the records, sorting the rows) is shared among the trainer's threads (2026-10-23):
+  on one thread it took about 4 ms a batch against 3.5 ms of GPU work, so the GPU waited and
+  trained at 2.7M; on 8 it takes 0.8 ms, and the GPU's work is the limit at every size.
+  **The M3 Max will differ:** faster and more performance cores (10 or 12), a newer GPU of 30
+  or 40 cores, and 300 or 400 GB/s of memory bandwidth against the M1 Max's 400, so the GPU's
+  lead (2.3–2.8× on the M1 Max) could grow or shrink there. `scripts/mac-trainer-speed.sh` measures both backends on the
   Mac it runs on, and its numbers pick the backend for the long runs.
 - **Build and tests:** the trainer is not among the workspace's default members (done
   2026-10-23), so `cargo build` and the `cb2026` binary never compile wgpu. `scripts/check.sh`
