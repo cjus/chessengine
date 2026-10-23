@@ -518,6 +518,49 @@ time control. The flag is still kept in the table, for another try. Untested: St
 graded reductions (2 or 3 plies, by the hash entry's score and depth), and the other uses
 Stockfish makes of the flag, such as skipping reverse futility pruning at flagged nodes.
 
+## Reductions after many fail highs
+
+The node types above are guesses passed down before a node's moves are searched. The search
+also learns as it goes. When the moves at a node are refuted one after another, every refutation
+is a fail high one ply down, and a node whose moves keep being refuted is probably failing low:
+its late moves are unlikely to do better than the first ones. Stockfish (GPL-3.0) counts those
+fail highs and reduces more once there are several (cjus/chessengine#165). cb2026 does the
+same, with code of its own.
+
+Each ply has a count. Entering a node clears the count two plies down, so the next ply's count,
+the one a node reads, covers its own children and its siblings':
+
+```rust,ignore
+{{#include ../../crates/engine/src/search.rs:cutoff_count_reset}}
+```
+
+A fail high adds to its ply's count, and adds twice when the node had no hash move to try first,
+as in Stockfish 16 (its code doesn't say why).
+
+```rust,ignore
+{{#include ../../crates/engine/src/search.rs:cutoff_count}}
+```
+
+When the count is more than `lmr_cutoff_count` (3), late moves are reduced `lmr_cutoff_plies`
+(1) more:
+
+```rust,ignore
+{{#include ../../crates/engine/src/search.rs:cutoff_reduction}}
+```
+
+Stockfish's own comment rates it about 5 Elo. `set cutoffs off` switches it off, and gives the
+search without it exactly.
+
+It applies often. Over the game's positions at depth 10, the count was over 3 for 60% of the
+moves late move reductions reduced (and for 47% at expected all-nodes), so the trees shrink:
+- The bench shrinks by 28%, from 1,072,184 to 767,859 nodes.
+- The six positions of chapters 10 to 14 shrink by 26%, 24% and 12% at depths 9 to 11
+  (324,275, 500,421 and 828,983 nodes, against 437,022, 657,366 and 939,364).
+- The game's 58 positions at depth 10 shrink by 28.4% in all, and 36 of them get smaller.
+
+Smaller reductions at expected all-nodes, the opposite direction, failed (above). The games
+decide whether this one is right.
+
 ## What it saves
 
 The six positions of chapters 10 to 14 (bench positions 2 to 7) at depth 8, measured

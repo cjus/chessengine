@@ -198,6 +198,17 @@
 //! 8+0.08, stopped (cjus/chessengine#160), so it is off by default; see chapter 14.1. The flag
 //! is still kept in the table.
 //!
+//! ## Reductions after many fail highs
+//!
+//! Each ply counts its fail highs, afresh under each node two plies up, so a node's count for
+//! the next ply covers its own children and its siblings'. A fail high at a node without a hash
+//! move counts twice. When that count is more than `lmr_cutoff_count` (3), the moves at this
+//! ply are being refuted, and this node is probably failing low with them, so its late moves
+//! are reduced `lmr_cutoff_plies` (1) more. As in Stockfish 16 (GPL-3.0), whose comment rates
+//! it "~5 Elo"; the code here is cb2026's own. In a game's positions at depth 10 it applies to
+//! about 60% of the moves late move reductions reduce, and the trees are about 28% smaller. It
+//! is being tested (cjus/chessengine#165); see chapter 14.1.
+//!
 //! ## History pruning
 //!
 //! Late move pruning skips quiet moves by how late they come; **history pruning** skips them by
@@ -408,6 +419,11 @@ pub struct SearchParams {
     /// A node that fails low takes its parent's "is or has been on the PV" flag only above
     /// this depth.
     pub tt_pv_fail_low_depth: u32,
+    /// Late move reductions are `lmr_cutoff_plies` larger when the next ply has counted more
+    /// than this many fail highs (see [`Techniques::cutoff_reductions`])...
+    pub lmr_cutoff_count: u32,
+    /// ...this many.
+    pub lmr_cutoff_plies: i32,
     /// Late move pruning applies up to this depth...
     pub lmp_max_depth: u32,
     /// ...once `lmp_base + depth²` quiet moves have been tried...
@@ -506,6 +522,9 @@ impl Default for SearchParams {
             lmr_tt_pv: 1,
             // As in Stockfish 16 (GPL-3.0): above depth 3.
             tt_pv_fail_low_depth: 3,
+            // As in Stockfish 16 (GPL-3.0), for its SPRT (cjus/chessengine#165).
+            lmr_cutoff_count: 3,
+            lmr_cutoff_plies: 1,
             lmp_max_depth: 3,
             lmp_base: 3,
             // Doubling it when improving was part of both failed versions (#60, #63).
@@ -623,6 +642,9 @@ pub struct Techniques {
     /// the transposition table remembers them (needs LMR and the table; off by default, no
     /// measured gain).
     pub tt_pv: bool,
+    /// Reduce late moves more when the next ply has had many fail highs: the moves here are
+    /// being refuted (needs LMR).
+    pub cutoff_reductions: bool,
     /// Late move pruning: skip late quiet moves near the leaves.
     pub late_move_pruning: bool,
     /// History pruning: skip quiet moves with a bad history near the leaves (off by default).
@@ -707,6 +729,8 @@ impl Default for Techniques {
             // Off by default: no verdict, +0.3 ± 5.2 Elo after 8,100 games at 8+0.08, stopped
             // (cjus/chessengine#160); see chapter 14.1.
             tt_pv: false,
+            // On for its SPRT (cjus/chessengine#165); see chapter 14.1.
+            cutoff_reductions: true,
             late_move_pruning: true,
             // Off by default: it measured weaker, −5.3 ± 7.1 Elo after 4,548 games at 8+0.08
             // (cjus/chessengine#140); see chapter 13.1.
@@ -756,6 +780,7 @@ impl Techniques {
             cut_node_reductions: false,
             all_node_reductions: false,
             tt_pv: false,
+            cutoff_reductions: false,
             late_move_pruning: false,
             history_pruning: false,
             reverse_futility: false,
@@ -860,6 +885,9 @@ pub(crate) struct Searcher<'a> {
     /// Whether the node at each ply of the current line is or has been on the principal
     /// variation (see [`Techniques::tt_pv`]).
     tt_pv: Vec<bool>,
+    /// Fail highs counted at each ply since the node two plies up was entered, a cutoff at a
+    /// node without a hash move counting twice (see [`Techniques::cutoff_reductions`]).
+    cutoffs: Vec<u32>,
     /// The depth of the current iteration, which limits how far extensions can reach.
     root_depth: u32,
     /// Double extensions on the line from the root to the current node, which
@@ -946,6 +974,7 @@ impl<'a> Searcher<'a> {
             evals: vec![-INFINITY; MAX_PLY as usize + 1],
             excluded: vec![None; MAX_PLY as usize + 1],
             tt_pv: vec![false; MAX_PLY as usize + 1],
+            cutoffs: vec![0; MAX_PLY as usize + 3],
             root_depth: 0,
             double_extensions: 0,
             lmr: lmr_table(&search_params),
@@ -1106,6 +1135,12 @@ impl<'a> Searcher<'a> {
                 evaluate(pos, self.params)
             };
         }
+
+        // ANCHOR: cutoff_count_reset
+        // The fail highs two plies down are counted afresh under each node: the next ply's
+        // count then covers this node's children and its siblings'.
+        self.cutoffs[ply as usize + 2] = 0;
+        // ANCHOR_END: cutoff_count_reset
 
         // ANCHOR: tt_probe
         // Transposition table: a deep enough result may settle this position at once, and in
@@ -1577,6 +1612,15 @@ impl<'a> Searcher<'a> {
                     reduction += p.lmr_cut_node;
                 }
                 // ANCHOR_END: cut_node_reduction
+                // ANCHOR: cutoff_reduction
+                // Reduce more when many moves at this ply have been refuted: this node is
+                // probably failing low, and its late moves along with it.
+                if self.techniques.cutoff_reductions
+                    && self.cutoffs[ply as usize + 1] > p.lmr_cutoff_count
+                {
+                    reduction += p.lmr_cutoff_plies;
+                }
+                // ANCHOR_END: cutoff_reduction
                 // ANCHOR: all_node_reduction
                 // Reduce less at an expected all-node: every move has to fail low for its
                 // score to hold, so a late move that is wrongly reduced into failing low
@@ -1657,6 +1701,10 @@ impl<'a> Searcher<'a> {
             // Beta cutoff: the opponent won't allow this position, so stop looking.
             if self.techniques.alpha_beta && alpha >= beta {
                 self.note(Note::BetaCutoff(mv, searched));
+                // ANCHOR: cutoff_count
+                // Counted for the node above, twice without a hash move, as in Stockfish 16.
+                self.cutoffs[ply as usize] += 1 + u32::from(tt_move.is_none());
+                // ANCHOR_END: cutoff_count
                 if quiet {
                     self.ordering
                         .record_cutoff(pos, mv, &quiets_tried, ply, depth, &previous);
@@ -1963,6 +2011,8 @@ impl<'a> Searcher<'a> {
         self.root_depth = depth;
         // The root is always on the principal variation.
         self.tt_pv[0] = true;
+        // As at every other node (see `negamax`).
+        self.cutoffs[2] = 0;
         // The root's static evaluation, for the improving heuristic two plies down. `negamax`
         // stores its own, but the root is searched here.
         self.evals[0] = if pos.in_check() {
@@ -2529,11 +2579,28 @@ mod tests {
     #[test]
     fn cut_node_reductions_change_the_tree_only_through_late_move_reductions() {
         // Kiwipete: with a material-only evaluation, a quiet position's tree is too small for
-        // late move reductions to matter.
+        // late move reductions to matter. At depth 7, with cutoff reductions on, the trees were
+        // the same either way (here and in the all-node test below), probably because
+        // reductions are capped at depth − 2.
         let fen = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
         let nodes = |cut_node_reductions, lmr| {
             let techniques = Techniques {
                 cut_node_reductions,
+                lmr,
+                ..Techniques::default()
+            };
+            search(fen, 8, techniques).nodes
+        };
+        assert_ne!(nodes(true, true), nodes(false, true));
+        assert_eq!(nodes(true, false), nodes(false, false));
+    }
+
+    #[test]
+    fn cutoff_reductions_change_the_tree_only_through_late_move_reductions() {
+        let fen = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
+        let nodes = |cutoff_reductions, lmr| {
+            let techniques = Techniques {
+                cutoff_reductions,
                 lmr,
                 ..Techniques::default()
             };
@@ -2552,7 +2619,7 @@ mod tests {
                 lmr,
                 ..Techniques::default()
             };
-            search(fen, 7, techniques).nodes
+            search(fen, 8, techniques).nodes
         };
         assert_ne!(nodes(true, true), nodes(false, true));
         assert_eq!(nodes(true, false), nodes(false, false));

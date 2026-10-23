@@ -140,6 +140,11 @@ pub const SWITCHES: &[Switch] = &[
         flag: |e| &mut e.techniques.tt_pv,
     },
     Switch {
+        name: "cutoffs",
+        description: "Cutoff reductions: late moves reduced more when the next ply has had many fail highs",
+        flag: |e| &mut e.techniques.cutoff_reductions,
+    },
+    Switch {
         name: "lmp",
         description: "Late move pruning",
         flag: |e| &mut e.techniques.late_move_pruning,
