@@ -66,6 +66,7 @@ name = "cb2026-engine"
 version = "0.1.0"
 dependencies = [
  "cb2026-chess",
+ "cb2026-nnue",
 ]
 
 [[package]]
@@ -81,6 +82,7 @@ version = "0.1.0"
 dependencies = [
  "cb2026-chess",
  "cb2026-engine",
+ "cb2026-nnue",
 ]
 
 [[package]]

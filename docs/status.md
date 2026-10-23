@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-23, 14:03 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-23, 14:18 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -78,7 +78,8 @@ and shown by `records`, #178; the `make-book` tool and the first Lichess opening
 97,432 moves from 1.5 million games of September 2026, #173, #174; the second version of
 larger reductions when the hash move is a capture, off the principal variation, its SPRT
 running on the M3, #179; balanced starts for records, beyond 200 cp drawn again, #180; the CPU
-NNUE trainer, about 2.4 million records a second on the M1 Max, #182.*
+NNUE trainer, about 2.4 million records a second on the M1 Max, #182; the engine evaluates with
+an NNUE network when one is loaded (`EvalFile`), #185.*
 
 ## Stages
 
@@ -98,7 +99,7 @@ NNUE trainer, about 2.4 million records a second on the M1 Max, #182.*
 | 18 Polyglot books | Merged | #50 | 1207153 | No functional change (book off by default) |
 | 19 Levels, MultiPV | Merged | #51 | 1207153 | No functional change at full strength; levels not yet calibrated (#36) |
 | 20 XBoard, pondering, conformance tests, Lichess docs | Merged | #52 | 1207153 | No functional change |
-| 21 NNUE | In progress | #177 (the net's definition), #178 (training records), #180 (balanced starts), #182 (the CPU trainer) | 749181 | No functional change yet; M6 stretch goal |
+| 21 NNUE | In progress | #177 (the net's definition), #178 (training records), #180 (balanced starts), #182 (the CPU trainer), #185 (inference) | 749181 | No functional change yet; M6 stretch goal |
 
 ### Built on top of stage 20 (not stages)
 
@@ -588,10 +589,13 @@ Run the full test suite on every commit you replay, not only at the tip: each be
      a second, so 20 epochs on 100M records take about 15 minutes. On a 134,000-record sample
      (1,800 games) the validation loss went from 0.105 to 0.047 in 12 epochs, still far above
      the training loss: it needs the full data.
-   - Next: **the engine's inference** (accumulators in the search, `EvalFile`, an `eval` switch
-     between the HCE and the net), needed for the first SPRT. Then the first ~100M-position run
-     on the M3 (about 12 hours, Carlos's to start), training (minutes), and the SPRT, net
-     against HCE.
-   - The GPU backend: training is so fast on the CPU that it isn't needed for the first nets;
-     it is for teaching and for larger nets later. Carlos to decide when (it was planned
-     next).
+   - Done: **the engine's inference** (#185): an accumulator per ply in every search
+     thread, updated at each move (checked against a fresh computation in debug builds), the
+     net's score clamped below tablebase and mate scores, the `nnue` switch, UCI `EvalFile`,
+     the shell's `set evalfile` and `cb2026 bench NET`. With no net nothing changes (bench
+     749181). About 5% slower per node than the HCE with a 256-wide net; weak nets search many
+     more nodes, since a noisy evaluation prunes badly.
+   - Next, by Carlos's order (2026-10-23): **the GPU backend** for the trainer. Then the first
+     ~100M-position run on the M3 (about 12 hours, Carlos's to start), training (minutes), and
+     the SPRT, net against HCE. Training is fast on the CPU (minutes for 100M records), so the
+     data run doesn't have to wait for the GPU backend.

@@ -4,12 +4,13 @@
 //! so flags are only for people at a terminal and for scripts.
 
 /// What the user asked the binary to do.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Command {
     /// Run in the given mode.
     Run(Mode),
-    /// Run the fixed benchmark and print its node count and speed.
-    Bench,
+    /// Run the fixed benchmark and print its node count and speed, evaluating with the NNUE
+    /// network in this file if one is given.
+    Bench(Option<String>),
     /// Print the engine name and version.
     Version,
     /// Print usage.
@@ -42,7 +43,8 @@ Node Protocol when a program starts it (its first line, `uci`, `xboard` or a JSO
 decides).
 
 Commands:
-  bench          Run the fixed benchmark; prints total nodes and speed
+  bench [NET]    Run the fixed benchmark; prints total nodes and speed. With NET (a .nnue
+                 file), evaluate with that NNUE network
 
 Options:
   --shell        Force the interactive shell
@@ -64,12 +66,13 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
             "--uci" => Ok(Command::Run(Mode::Uci)),
             "--xboard" => Ok(Command::Run(Mode::Xboard)),
             "--cnp" => Ok(Command::Run(Mode::Cnp)),
-            "bench" => Ok(Command::Bench),
+            "bench" => Ok(Command::Bench(None)),
             "-V" | "--version" => Ok(Command::Version),
             "-h" | "--help" => Ok(Command::Help),
             other => Err(format!("unknown argument '{other}'")),
         },
-        _ => Err("expected at most one argument".to_string()),
+        [command, net] if command == "bench" => Ok(Command::Bench(Some(net.clone()))),
+        _ => Err("expected at most one argument (or bench and a network file)".to_string()),
     }
 }
 
@@ -97,7 +100,11 @@ mod tests {
 
     #[test]
     fn commands_and_info_flags() {
-        assert_eq!(parse_strs(&["bench"]), Ok(Command::Bench));
+        assert_eq!(parse_strs(&["bench"]), Ok(Command::Bench(None)));
+        assert_eq!(
+            parse_strs(&["bench", "net.nnue"]),
+            Ok(Command::Bench(Some("net.nnue".to_string())))
+        );
         assert_eq!(parse_strs(&["-V"]), Ok(Command::Version));
         assert_eq!(parse_strs(&["--version"]), Ok(Command::Version));
         assert_eq!(parse_strs(&["-h"]), Ok(Command::Help));

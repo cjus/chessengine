@@ -13,7 +13,7 @@ use std::io::{self, BufRead, IsTerminal, Read};
 use std::process::ExitCode;
 
 use args::{Command, Mode, USAGE};
-use cb2026_engine::Engine;
+use cb2026_engine::{Engine, Network};
 use cb2026_protocol::Protocol;
 use cb2026_shell::{Shell, Style};
 
@@ -31,11 +31,26 @@ fn main() -> ExitCode {
             println!("{}\n\n{USAGE}", cb2026_engine::id_name());
             ExitCode::SUCCESS
         }
-        Ok(Command::Bench) => {
-            let (nodes, time) = cb2026_engine::bench::bench(
-                &mut cb2026_engine::Engine::new(),
-                cb2026_engine::bench::BENCH_DEPTH,
-            );
+        Ok(Command::Bench(net)) => {
+            let mut engine = Engine::new();
+            if let Some(path) = net {
+                match std::fs::read(&path)
+                    .map_err(|e| e.to_string())
+                    .and_then(|bytes| Network::from_bytes(&bytes).map_err(|e| e.to_string()))
+                {
+                    Ok(net) => {
+                        // On stderr, so the three lines below stay as tools expect them.
+                        eprintln!("NNUE network {}", net.summary());
+                        engine.network = Some(std::sync::Arc::new(net));
+                    }
+                    Err(e) => {
+                        eprintln!("cb2026: {path}: {e}");
+                        return ExitCode::from(EXIT_USAGE);
+                    }
+                }
+            }
+            let (nodes, time) =
+                cb2026_engine::bench::bench(&mut engine, cb2026_engine::bench::BENCH_DEPTH);
             // The same layout as Stockfish and OpenBench use, so tools can read it.
             println!("Total time (ms) : {}", time.as_millis());
             println!("Nodes searched  : {nodes}");

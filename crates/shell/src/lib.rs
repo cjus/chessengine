@@ -42,6 +42,7 @@
 //! | `level <0-20>`, `elo <n>\|off`, `set multipv <N>` | Strength level; limit to an Elo; show several lines |
 //! | `set syzygy <path>`, `tb` | Load Syzygy tablebases; show the tablebase result for the position |
 //! | `set book <path>`, `set ownbook on\|off`, `book` | Load a Polyglot opening book; play from it; show its moves here |
+//! | `set evalfile <path>`, `set nnue on\|off` | Load an NNUE network and evaluate with it; switch back to the hand-crafted evaluation |
 //! | `set killers\|countermoves\|history\|conthist on\|off` | Switch a quiet-move ordering heuristic off |
 //! | `set capthist on\|off`, `set capthistq on\|off` | Capture history: order captures by what they win and their cutoffs, instead of by MVV-LVA; in the quiescence search too (both off by default) |
 //! | `set pvs on\|off`, `set aspiration on\|off` | Principal variation search; aspiration windows |
@@ -95,6 +96,7 @@ use std::sync::atomic::AtomicBool;
 use cb2026_chess::{Bitboard, Color, Move, Piece, PieceType, Position, Square};
 use std::time::Duration;
 
+use cb2026_engine::Network;
 use cb2026_engine::book::OpeningBook;
 use cb2026_engine::levels;
 use cb2026_engine::stats::SearchStats;
@@ -156,6 +158,7 @@ Commands:
   tb                   The tablebase result and best move for this position
   set book <path>      Load a Polyglot opening book (.bin; none: unload)
   set ownbook on|off   Play book moves when the book has any (default off)
+  set evalfile <path>  Evaluate with an NNUE network (.nnue; none: the hand-crafted one)
   book                 The book's moves for this position, with their weights
   set killers|countermoves|history|conthist on|off
                        Quiet-move ordering heuristics (conthist: continuation history)
@@ -1020,6 +1023,27 @@ impl Shell {
                             message
                         }
                         Err(e) => format!("Opening book not loaded: {e}"),
+                    },
+                );
+            }
+            (Some("evalfile"), path) => {
+                let path = path.unwrap_or("");
+                if path.is_empty() {
+                    self.engine.network = None;
+                    return Response::text("No NNUE network: the hand-crafted evaluation.");
+                }
+                return Response::text(
+                    match std::fs::read(path)
+                        .map_err(|e| format!("{path}: {e}"))
+                        .and_then(|bytes| {
+                            Network::from_bytes(&bytes).map_err(|e| format!("{path}: {e}"))
+                        }) {
+                        Ok(net) => {
+                            let message = format!("NNUE network {}.", net.summary());
+                            self.engine.network = Some(std::sync::Arc::new(net));
+                            message
+                        }
+                        Err(e) => format!("NNUE network not loaded: {e}"),
                     },
                 );
             }

@@ -12,5 +12,8 @@ publish.workspace = true
 cb2026-chess.workspace = true
 cb2026-engine.workspace = true
 
+[dev-dependencies]
+cb2026-nnue.workspace = true
+
 [lints]
 workspace = true
