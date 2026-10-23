@@ -19,11 +19,14 @@
 //! - [`texel`]: the Texel tuner's error, gradient and optimiser (the `tune` tool).
 //! - [`mistakes`]: how often a strength level makes inaccuracies, mistakes and blunders, as
 //!   Lichess counts them, to compare the levels with people (the `mistakes` tool).
-//! - The `perft-suite`, `find-magics`, `match`, `gauntlet`, `datagen`, `tune` and `mistakes`
-//!   command-line tools (`src/bin/`).
+//! - [`book_maker`]: Polyglot opening books from people's games, such as Lichess's (the
+//!   `make-book` tool).
+//! - The `perft-suite`, `find-magics`, `match`, `gauntlet`, `datagen`, `tune`, `mistakes` and
+//!   `make-book` command-line tools (`src/bin/`).
 
 #![forbid(unsafe_code)]
 
+pub mod book_maker;
 pub mod game;
 pub mod gauntlet;
 pub mod match_runner;

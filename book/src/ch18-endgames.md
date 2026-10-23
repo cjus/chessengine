@@ -129,7 +129,7 @@ The key is a Zobrist hash (chapter 4), with one difference that matters: the ran
 are fixed by the format. Any program can then compute the same key for the same position and
 read any book. The 781 numbers (768 for pieces on squares, 4 for castling rights, 8 for en
 passant files, 1 for the side to move) were published with Fabien Letouzey's PolyGlot program.
-cb2026 copies them from python-chess and checks them against the format's published test
+cb2026 takes them from the format's published description and checks them against its test
 hashes:
 
 ```rust,ignore
@@ -158,7 +158,51 @@ Book moves:
 The engine ignores the book (set ownbook on to use it).
 ```
 
-cb2026 ships no book. Any Polyglot book works with it.
+cb2026 ships no book. Any Polyglot book works with it, and it can make one.
+
+### Making a book from people's games
+
+Lichess publishes every rated game played on it, a month to a file, under the Creative Commons
+CC0 licence: about 90 million games and 30 GB a month. The `make-book` tool turns games like
+these into a Polyglot book. It reads them from standard input, so the month is decompressed
+on the way in and never stored:
+
+```text
+scripts/lichess-book.sh 2026-09 ~/books/lichess-2026-09.bin
+```
+
+It keeps the games where both players are rated 2200 or more, at blitz or slower, with no
+bots. Lichess's files include engines playing each other on BOT accounts, at ratings well
+above any person's: in the first 150,000 games of September 2026, bots played most of the
+games between two players rated 2600 or more. Of the whole month, 1.7% of the games passed:
+1,499,615 of 89,616,462. For each position in their first 20 plies, the tool counts the move
+played and what it scored for the side that played it. Positions are found by their Polyglot key, so moves
+reached by different move orders add up:
+
+```rust,ignore
+{{#include ../../crates/tools/src/book_maker.rs:count}}
+```
+
+A move goes into the book when at least 20 games played it and it scored at least 35%. Its
+weight is its points, two for a win and one for a draw, as in PolyGlot's own `make-book`. The
+engine then plays popular moves that do well most often, and a move nobody wins with not at
+all:
+
+```rust,ignore
+{{#include ../../crates/tools/src/book_maker.rs:build}}
+```
+
+The minimum number of games matters more than it looks. A blitz game is usually decided long
+after the opening, so one game says almost nothing about its first moves. Twenty games of the
+same move begin to.
+
+September 2026's book took 58 minutes to make, nearly all of it downloading the 29 GB file.
+Of the 8,036,080 different moves the tool counted, in all the positions it saw, 97,432 passed,
+a book of 1.6 MB: most of the rest were played in fewer than 20 games. From
+the starting position the engine plays 1.e4 47% of the time, 1.d4 33%, 1.Nf3 9% and 1.c4 6%;
+1.b3, 1.g3 and 1.f4 about 1% each; and 13 more moves, 1.Na3 among them, less than half a
+percent each. Those passed the test, played often enough and scoring well enough, and their
+small weight keeps them rare.
 
 ## Pitfalls
 

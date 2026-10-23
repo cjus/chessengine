@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-23, 13:30 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-23, 13:49 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -74,9 +74,10 @@ our own NNUE trainer, with a CPU reference and a GPU backend through wgpu on Met
 the tablebase tests run again, the download script following the mirror's new directories,
 #176; stage 21 started: the net's definition in `crates/nnue`, with chapter 21's first
 sections, #177; NNUE training records, 32 bytes each, written by `datagen --format records`
-and shown by `records`, #178; the first Lichess opening book building on the M3, #174, with
-the second version of larger reductions when the hash move is a capture, off the principal
-variation, next, #179; balanced starts for records, beyond 200 cp drawn again, #180; the CPU
+and shown by `records`, #178; the `make-book` tool and the first Lichess opening book,
+97,432 moves from 1.5 million games of September 2026, #173, #174; the second version of
+larger reductions when the hash move is a capture, off the principal variation, next on the
+M3, #179; balanced starts for records, beyond 200 cp drawn again, #180; the CPU
 NNUE trainer, about 2.4 million records a second on the M1 Max, #182.*
 
 ## Stages
@@ -148,21 +149,31 @@ NNUE trainer, about 2.4 million records a second on the M1 Max, #182.*
 | M5: larger reductions after many fail highs, as in Stockfish (chapter 14.1) | #165 | 767859 | Merged: +12.8 ± 8.2, 3,144 games, [0, 5] passed (M3 Max) |
 | M5: larger reductions after many fail highs in Stockfish 17's version (chapter 14.1) | #167 | 749181 | Merged: +13.7 ± 8.5, 2,953 games, [0, 5] passed (M3 Max) |
 | M5: larger reductions when the hash move is a capture, as in Stockfish (chapter 14.1) | #171 | 749181 (719329 with them on) | Merged, off by default: −6.5 ± 7.7, 3,668 games, [0, 5] failed (M3 Max) |
-| M5: larger reductions when the hash move is a capture, off the principal variation (chapter 14.1) | #179, `claude/tt-capture-non-pv` | 754886 | Draft, its SPRT next on the M3 Max, after the book (#174): [0, 5] at 8+0.08 |
+| M5: larger reductions when the hash move is a capture, off the principal variation (chapter 14.1) | #179, `claude/tt-capture-non-pv` | 754886 | Draft, its SPRT next on the M3 Max: [0, 5] at 8+0.08 |
+| v1.0: opening books from people's games, the `make-book` tool and `scripts/lichess-book.sh` (chapter 18) | #173 | 749181 | Merged, no functional change. The first book, from Lichess's September 2026 games: 97,432 moves from 1,499,615 games, 1.6 MB, 58 minutes on the M3 (#174) |
 
-**Running now on the M3: the first full Lichess opening book** (#174, for #173), started by
-Carlos by 13:15 MDT on 2026-10-23; it takes about half an hour, mostly the download. When he
-pastes its summary in #174, record the numbers in chapter 18 and #173 (rebase it onto `main`
-first), then mark #173 ready and merge it. Next on the M3: #179's SPRT, the second version of
-larger reductions when the hash move is a capture, off the principal variation (chapter 14.1;
-its command is in #179).
+**Nothing is running on the M3 now** (2026-10-23, 13:49 MDT): the first Lichess book is built
+(#174). Next on the M3: #179's SPRT, the second version of larger reductions when the hash move
+is a capture, off the principal variation (chapter 14.1; its command is in #179).
 
 v1.0's last gate is the GUI matrix (#37), on Carlos's Mac. En
 Croissant, Cute Chess and XBoard are done, with two fixes found on the way (#169, #170); HIARCS
-Chess Explorer (installed 2026-10-23) and ChessX are next, then the Lichess bot. The results so far are in
+Chess Explorer (installed 2026-10-23) is done but for adding and removing the engine; ChessX is
+optional; then the Lichess bot. The results so far are in
 a comment on #37. Once the matrix is recorded, the version PR (#154) merges and Carlos tags
 `v1.0.0`. `main` has changed since the robustness run (#146) in search only through reductions
 (#155, #165, #167), and in those two protocol fixes: no change to time handling.
+
+**Opening books (#173, merged).** Carlos asked for a book from the Lichess database. The
+`make-book` tool (`crates/tools/src/book_maker.rs`) reads games in PGN from standard input and
+writes a Polyglot book; `scripts/lichess-book.sh <YYYY-MM> <book.bin>` streams one month from
+https://database.lichess.org/ (CC0, about 30 GB) into it. Defaults: both players 2200+, blitz or
+slower, no bots, the first 20 plies, moves played in 20+ games scoring 35%+, weighted by points.
+The first full book, from September 2026 (29 GB), took 58 minutes on the M3 on 2026-10-23,
+nearly all of it the download (about 8.4 MB/s): of 89,616,462 games, 1,499,615 passed (1.7%);
+of 8,036,080 different moves counted, 97,432 were kept, 1.6 MB. From the starting position: e4
+47%, d4 33%, Nf3 9%, c4 6%, b3, g3 and f4 1% each, and 13 more under half a percent each. It is
+at `~/books/cb2026-lichess-2026-09.bin` on the M3. Books are never committed.
 
 The SPRT of larger reductions when the hash move is a capture (#171) finished on 2026-10-23 at
 12:36 MDT. It started at about 09:40 and failed in 3,668 games, about 3 hours: **−6.5 ± 7.7**,

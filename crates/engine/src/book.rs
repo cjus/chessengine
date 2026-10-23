@@ -10,6 +10,8 @@
 //! 16-byte entries (position key, move, weight, learning data), all big-endian. The position
 //! key is a Zobrist hash, but with the format's own fixed random numbers (see
 //! [`polyglot_key`]), so any program can read any book. Lookup is a binary search on the key.
+//! It also writes books ([`OpeningBook::from_entries`], [`OpeningBook::to_bytes`]), for the
+//! `make-book` tool, which builds one from people's games (`cb2026_tools::book_maker`).
 //!
 //! The book is off by default (UCI `OwnBook`), because testing needs the engine's own moves:
 //! a book would make test games start the same way and hide what the search does. GUIs and
@@ -77,6 +79,25 @@ pub struct OpeningBook {
 }
 
 impl OpeningBook {
+    /// A book from `(key, move, weight)` entries in any order, with moves encoded by
+    /// [`encode_move`].
+    pub fn from_entries(mut entries: Vec<(u64, u16, u16)>) -> OpeningBook {
+        entries.sort_unstable();
+        OpeningBook { entries }
+    }
+
+    /// The book as the bytes of a `.bin` file, sorted by key, with the learning data zero.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(self.entries.len() * ENTRY_SIZE);
+        for &(key, mv, weight) in &self.entries {
+            bytes.extend(key.to_be_bytes());
+            bytes.extend(mv.to_be_bytes());
+            bytes.extend(weight.to_be_bytes());
+            bytes.extend([0; 4]);
+        }
+        bytes
+    }
+
     /// Reads a book from the bytes of a `.bin` file.
     pub fn from_bytes(bytes: &[u8]) -> Result<OpeningBook, String> {
         if !bytes.len().is_multiple_of(ENTRY_SIZE) {
@@ -145,9 +166,21 @@ impl OpeningBook {
     }
 }
 
-/// Decodes a Polyglot move in `pos`: to-square in bits 0–5, from-square in bits 6–11,
-/// promotion piece in bits 12–14. Castling is "king takes rook" (`e1h1`), cb2026's own
-/// encoding.
+/// Encodes `mv` as a Polyglot move: to-square in bits 0–5, from-square in bits 6–11,
+/// promotion piece in bits 12–14 (1 knight, 2 bishop, 3 rook, 4 queen). Castling is "king
+/// takes rook" (`e1h1`), cb2026's own encoding, so it needs nothing special.
+pub fn encode_move(mv: Move) -> u16 {
+    let promotion = match mv.promotion() {
+        None => 0,
+        Some(PieceType::Knight) => 1,
+        Some(PieceType::Bishop) => 2,
+        Some(PieceType::Rook) => 3,
+        Some(_) => 4,
+    };
+    promotion << 12 | (mv.from().index() as u16) << 6 | mv.to().index() as u16
+}
+
+/// Decodes a Polyglot move in `pos`, as [`encode_move`] encodes it.
 fn decode_move(pos: &Position, raw: u16) -> Option<Move> {
     let square = |bits: u16| Square::from_index(usize::from(bits & 63));
     let to = square(raw)?;
@@ -195,29 +228,15 @@ mod tests {
 
     /// A book's bytes from `(position moves, move, weight)` entries.
     fn book_bytes(entries: &[(&str, &str, u16)]) -> Vec<u8> {
-        let mut rows: Vec<(u64, u16, u16)> = entries
+        let rows = entries
             .iter()
             .map(|&(moves, uci, weight)| {
                 let pos = play(moves);
                 let mv = pos.parse_uci_move(uci).unwrap();
-                let raw = (mv.from().index() << 6 | mv.to().index()) as u16
-                    | match mv.promotion() {
-                        Some(PieceType::Queen) => 4 << 12,
-                        _ => 0,
-                    };
-                (polyglot_key(&pos), raw, weight)
+                (polyglot_key(&pos), encode_move(mv), weight)
             })
             .collect();
-        rows.sort();
-        rows.iter()
-            .flat_map(|&(key, mv, weight)| {
-                let mut e = key.to_be_bytes().to_vec();
-                e.extend(mv.to_be_bytes());
-                e.extend(weight.to_be_bytes());
-                e.extend([0; 4]);
-                e
-            })
-            .collect()
+        OpeningBook::from_entries(rows).to_bytes()
     }
 
     #[test]
@@ -254,6 +273,35 @@ mod tests {
         // e1 = 4, h1 = 7.
         let castle = decode_move(&pos, 4 << 6 | 7).unwrap();
         assert_eq!(pos.to_san(castle), "O-O");
+    }
+
+    #[test]
+    fn moves_encode_and_decode() {
+        // Castling (king takes rook), an under-promotion with a capture, and a quiet move.
+        let pos = Position::from_fen("r3k3/1P6/8/8/8/8/8/R3K2R w KQq - 0 1").unwrap();
+        for uci in ["e1h1", "e1a1", "b7a8n", "b7b8q", "a1a7"] {
+            let mv = pos.parse_uci_move(uci).unwrap();
+            assert_eq!(decode_move(&pos, encode_move(mv)), Some(mv), "{uci}");
+        }
+        // The format's numbers: e1 is 4, h1 is 7, and a knight promotion is 1.
+        let castle = pos.parse_uci_move("e1h1").unwrap();
+        assert_eq!(encode_move(castle), 4 << 6 | 7);
+        let promotion = pos.parse_uci_move("b7a8n").unwrap();
+        assert_eq!(encode_move(promotion), 1 << 12 | 49 << 6 | 56);
+    }
+
+    #[test]
+    fn written_books_read_back() {
+        let bytes = book_bytes(&[("e2e4", "c7c5", 3), ("", "e2e4", 2), ("", "d2d4", 1)]);
+        assert_eq!(bytes.len(), 3 * ENTRY_SIZE);
+        let book = OpeningBook::from_bytes(&bytes).unwrap();
+        assert_eq!(book.to_bytes(), bytes);
+        let first: Vec<String> = book
+            .moves(&Position::startpos())
+            .iter()
+            .map(|m| format!("{} {}", m.mv, m.weight))
+            .collect();
+        assert_eq!(first, ["e2e4 2", "d2d4 1"]);
     }
 
     #[test]
