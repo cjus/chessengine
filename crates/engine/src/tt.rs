@@ -10,7 +10,10 @@
 //!   leaves behind a best move for nearly every position depth *d + 1* visits;
 //! - the **score**, the **depth** it was searched to, and what kind of score it is (the
 //!   [`Bound`]). A result searched at least as deep as needed can end the search of the
-//!   position at once (a **TT cutoff**).
+//!   position at once (a **TT cutoff**);
+//! - whether the position is or has been on the **principal variation** (from M5, after
+//!   Stockfish's `ttPv`, GPL-3.0), so that the search can reduce late moves there less on
+//!   later visits (the `tt_pv` technique, off by default).
 //!
 //! ## Bounds
 //!
@@ -135,6 +138,9 @@ pub struct Entry {
     pub bound: Bound,
     /// The search that stored it, for replacement.
     pub generation: u8,
+    /// Whether the position is or has been on the principal variation (the search's `tt_pv`
+    /// flag, after Stockfish's).
+    pub pv: bool,
 }
 // ANCHOR_END: entry
 
@@ -242,9 +248,16 @@ impl Default for TranspositionTable {
 
 // ANCHOR: pack
 /// Packs everything but the key into one word:
-/// move (16 bits) | score (16) | depth (8) | bound (2) | generation (8).
+/// move (16 bits) | score (16) | depth (8) | bound (2) | generation (8) | pv (1).
 /// A bound of 0 marks an empty slot.
-fn pack(best_move: Option<Move>, score: i32, depth: u8, bound: Bound, generation: u8) -> u64 {
+fn pack(
+    best_move: Option<Move>,
+    score: i32,
+    depth: u8,
+    bound: Bound,
+    generation: u8,
+    pv: bool,
+) -> u64 {
     let bound_bits: u64 = match bound {
         Bound::Exact => 1,
         Bound::Lower => 2,
@@ -255,6 +268,7 @@ fn pack(best_move: Option<Move>, score: i32, depth: u8, bound: Bound, generation
         | u64::from(depth) << 32
         | bound_bits << 40
         | u64::from(generation) << 42
+        | u64::from(pv) << 50
 }
 
 /// Unpacks a word made by [`pack`] (`None` for an empty slot).
@@ -274,6 +288,7 @@ fn unpack(key: u64, data: u64) -> Option<Entry> {
         depth: (data >> 32) as u8,
         bound,
         generation: (data >> 42) as u8,
+        pv: (data >> 50) & 1 == 1,
     })
 }
 // ANCHOR_END: pack
@@ -359,8 +374,17 @@ impl TranspositionTable {
     }
 
     // ANCHOR: store
-    /// Stores a search result for the position with `key`.
-    pub fn store(&self, key: u64, best_move: Option<Move>, score: i32, depth: u32, bound: Bound) {
+    /// Stores a search result for the position with `key`, and whether the position is or has
+    /// been on the principal variation (`pv`).
+    pub fn store(
+        &self,
+        key: u64,
+        best_move: Option<Move>,
+        score: i32,
+        depth: u32,
+        bound: Bound,
+        pv: bool,
+    ) {
         let generation = self.generation.load(Ordering::Relaxed);
         let depth = depth.min(u8::MAX as u32) as u8;
         let slot = self.slot_to_store(key, generation);
@@ -375,7 +399,7 @@ impl TranspositionTable {
                 old.filter(|old| old.key == key)
                     .and_then(|old| old.best_move)
             });
-            slot.write(key, pack(best_move, score, depth, bound, generation));
+            slot.write(key, pack(best_move, score, depth, bound, generation, pv));
         }
     }
 
@@ -461,12 +485,18 @@ mod tests {
         let pos = Position::startpos();
         let mv = pos.parse_uci_move("e2e4").unwrap();
         assert_eq!(tt.probe(pos.hash()), None);
-        tt.store(pos.hash(), Some(mv), 35, 6, Bound::Exact);
+        tt.store(pos.hash(), Some(mv), 35, 6, Bound::Exact, true);
         let entry = tt.probe(pos.hash()).unwrap();
         assert_eq!(entry.best_move, Some(mv));
         assert_eq!(
-            (entry.score, entry.depth, entry.bound),
-            (35, 6, Bound::Exact)
+            (entry.score, entry.depth, entry.bound, entry.pv),
+            (35, 6, Bound::Exact, true)
+        );
+        tt.store(pos.hash(), Some(mv), -35, 7, Bound::Upper, false);
+        let entry = tt.probe(pos.hash()).unwrap();
+        assert_eq!(
+            (entry.score, entry.depth, entry.bound, entry.pv),
+            (-35, 7, Bound::Upper, false)
         );
         // A different key in the same slot is not mistaken for this one.
         assert_eq!(tt.probe(pos.hash() ^ 1), None);
@@ -480,12 +510,12 @@ mod tests {
         let mut tt = TranspositionTable::new(0);
         tt.set_buckets(false);
         assert_eq!(tt.len(), BUCKET_SLOTS);
-        tt.store(1, None, 10, 8, Bound::Exact);
-        tt.store(2, None, 20, 3, Bound::Exact);
+        tt.store(1, None, 10, 8, Bound::Exact, false);
+        tt.store(2, None, 20, 3, Bound::Exact, false);
         assert_eq!(tt.probe(1).unwrap().score, 10);
         // A newer search replaces it.
         tt.new_search();
-        tt.store(2, None, 20, 3, Bound::Exact);
+        tt.store(2, None, 20, 3, Bound::Exact, false);
         assert_eq!(tt.probe(2).unwrap().score, 20);
     }
 
@@ -494,8 +524,8 @@ mod tests {
         let tt = TranspositionTable::new(1);
         let pos = Position::startpos();
         let mv = pos.parse_uci_move("d2d4").unwrap();
-        tt.store(pos.hash(), Some(mv), 20, 4, Bound::Exact);
-        tt.store(pos.hash(), None, -50, 5, Bound::Upper);
+        tt.store(pos.hash(), Some(mv), 20, 4, Bound::Exact, false);
+        tt.store(pos.hash(), None, -50, 5, Bound::Upper, false);
         let entry = tt.probe(pos.hash()).unwrap();
         assert_eq!(entry.best_move, Some(mv));
         assert_eq!(entry.bound, Bound::Upper);
@@ -564,13 +594,13 @@ mod tests {
         // One bucket: small keys all share the first slot with buckets off.
         let mut tt = TranspositionTable::new(0);
         tt.set_buckets(false);
-        tt.store(1, None, 10, 5, Bound::Exact);
-        tt.store(2, None, 20, 5, Bound::Exact);
+        tt.store(1, None, 10, 5, Bound::Exact, false);
+        tt.store(2, None, 20, 5, Bound::Exact, false);
         assert_eq!(tt.probe(1), None);
         tt.set_buckets(true);
         tt.clear();
         for key in 1..=8 {
-            tt.store(key, None, key as i32, 5, Bound::Exact);
+            tt.store(key, None, key as i32, 5, Bound::Exact, false);
         }
         for key in 1..=8 {
             assert_eq!(tt.probe(key).unwrap().score, key as i32);
@@ -583,17 +613,17 @@ mod tests {
         tt.set_buckets(true);
         // Keys 1 to 8 searched to depths 10 to 17.
         for key in 1..=8 {
-            tt.store(key, None, 0, 9 + key as u32, Bound::Exact);
+            tt.store(key, None, 0, 9 + key as u32, Bound::Exact, false);
         }
         // Too shallow to replace even the shallowest entry from this search.
-        tt.store(9, None, 0, 3, Bound::Exact);
+        tt.store(9, None, 0, 3, Bound::Exact, false);
         assert_eq!(tt.probe(9), None);
         // As deep as the shallowest: it goes.
-        tt.store(9, None, 0, 10, Bound::Exact);
+        tt.store(9, None, 0, 10, Bound::Exact, false);
         assert_eq!(tt.probe(1), None);
         assert!((2..=9).all(|key| tt.probe(key).is_some()));
         // A position already in the bucket is updated in its own slot.
-        tt.store(5, None, 55, 1, Bound::Upper);
+        tt.store(5, None, 55, 1, Bound::Upper, false);
         assert_eq!(tt.probe(5).unwrap().score, 55);
         assert!((2..=9).all(|key| tt.probe(key).is_some()));
     }
@@ -602,14 +632,14 @@ mod tests {
     fn an_old_deep_entry_goes_before_a_fresh_shallow_one() {
         let mut tt = TranspositionTable::new(0);
         tt.set_buckets(true);
-        tt.store(1, None, 0, 9, Bound::Exact);
+        tt.store(1, None, 0, 9, Bound::Exact, false);
         tt.new_search();
         tt.new_search();
         for key in 2..=8 {
-            tt.store(key, None, 0, 2, Bound::Exact);
+            tt.store(key, None, 0, 2, Bound::Exact, false);
         }
         // Key 1 is worth 9 - 2 × 8 = -7, the others 2.
-        tt.store(9, None, 0, 2, Bound::Exact);
+        tt.store(9, None, 0, 2, Bound::Exact, false);
         assert_eq!(tt.probe(1), None);
         assert!((2..=9).all(|key| tt.probe(key).is_some()));
     }
@@ -618,7 +648,7 @@ mod tests {
     fn hashfull_counts_this_search_only() {
         let tt = TranspositionTable::new(0);
         assert_eq!(tt.hashfull(), 0);
-        tt.store(5, None, 0, 1, Bound::Exact);
+        tt.store(5, None, 0, 1, Bound::Exact, false);
         assert_eq!(tt.hashfull(), 1000 / BUCKET_SLOTS as u32);
         tt.new_search();
         assert_eq!(tt.hashfull(), 0);

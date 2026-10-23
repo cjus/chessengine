@@ -180,6 +180,24 @@
 //! trees by a fifth or more. It failed: −8.5 ± 8.4 Elo after 2,993 games at 8+0.08
 //! (cjus/chessengine#158), so it is off by default; see chapter 14.1.
 //!
+//! ## Reductions where the principal variation was
+//!
+//! The principal variation changes as the search deepens, and the positions on an old one are
+//! then searched with null windows like any others, though they are more likely than most to
+//! matter again. So a node carries a flag, `tt_pv`: it is or has been on the principal
+//! variation. It is set at a PV node and kept in the transposition table with the node's
+//! result, so a later visit finds it. A node that fails low under a flagged parent, above
+//! depth `tt_pv_fail_low_depth` (3), takes the flag too: the opponent's last move was probably
+//! good. At a flagged node that isn't a PV node now, late move reductions are `lmr_tt_pv` (1)
+//! ply smaller.
+//!
+//! The flag and both rules are Stockfish's (GPL-3.0), whose own comment rates the reduction
+//! "~7 Elo"; it takes off 1 to 3 plies, depending on the hash entry. The code here is cb2026's
+//! own, and 1 was set by hand. Over a game's positions at depth 10, about 2% of the non-PV
+//! nodes from depth 3 had the flag. It had no verdict: +0.3 ± 5.2 Elo after 8,100 games at
+//! 8+0.08, stopped (cjus/chessengine#160), so it is off by default; see chapter 14.1. The flag
+//! is still kept in the table.
+//!
 //! ## History pruning
 //!
 //! Late move pruning skips quiet moves by how late they come; **history pruning** skips them by
@@ -384,6 +402,12 @@ pub struct SearchParams {
     pub lmr_cut_node: i32,
     /// Late move reductions are this many plies smaller at an expected all-node.
     pub lmr_all_node: i32,
+    /// Late move reductions are this many plies smaller at a node that is or has been on the
+    /// principal variation (but isn't a PV node now, which has its own ply off).
+    pub lmr_tt_pv: i32,
+    /// A node that fails low takes its parent's "is or has been on the PV" flag only above
+    /// this depth.
+    pub tt_pv_fail_low_depth: u32,
     /// Late move pruning applies up to this depth...
     pub lmp_max_depth: u32,
     /// ...once `lmp_base + depth²` quiet moves have been tried...
@@ -477,6 +501,11 @@ impl Default for SearchParams {
             lmr_cut_node: 2,
             // Set by hand, not tuned; it failed at 1 (cjus/chessengine#158).
             lmr_all_node: 1,
+            // Set by hand, not tuned; no verdict at 1 (cjus/chessengine#160). Stockfish
+            // (GPL-3.0) takes off 1 to 3 plies, depending on the hash entry.
+            lmr_tt_pv: 1,
+            // As in Stockfish 16 (GPL-3.0): above depth 3.
+            tt_pv_fail_low_depth: 3,
             lmp_max_depth: 3,
             lmp_base: 3,
             // Doubling it when improving was part of both failed versions (#60, #63).
@@ -590,6 +619,10 @@ pub struct Techniques {
     /// Reduce late moves less at expected all-nodes (needs LMR; off by default, measured
     /// weaker).
     pub all_node_reductions: bool,
+    /// Reduce late moves less at nodes that are or have been on the principal variation, as
+    /// the transposition table remembers them (needs LMR and the table; off by default, no
+    /// measured gain).
+    pub tt_pv: bool,
     /// Late move pruning: skip late quiet moves near the leaves.
     pub late_move_pruning: bool,
     /// History pruning: skip quiet moves with a bad history near the leaves (off by default).
@@ -671,6 +704,9 @@ impl Default for Techniques {
             // Off by default: it failed its SPRT, −8.5 ± 8.4 Elo after 2,993 games at 8+0.08
             // (cjus/chessengine#158); see chapter 14.1.
             all_node_reductions: false,
+            // Off by default: no verdict, +0.3 ± 5.2 Elo after 8,100 games at 8+0.08, stopped
+            // (cjus/chessengine#160); see chapter 14.1.
+            tt_pv: false,
             late_move_pruning: true,
             // Off by default: it measured weaker, −5.3 ± 7.1 Elo after 4,548 games at 8+0.08
             // (cjus/chessengine#140); see chapter 13.1.
@@ -719,6 +755,7 @@ impl Techniques {
             history_lmr: false,
             cut_node_reductions: false,
             all_node_reductions: false,
+            tt_pv: false,
             late_move_pruning: false,
             history_pruning: false,
             reverse_futility: false,
@@ -820,6 +857,9 @@ pub(crate) struct Searcher<'a> {
     /// A move to leave out at each ply: the hash move, while a singular extension's search
     /// asks whether any other move comes close to it.
     excluded: Vec<Option<Move>>,
+    /// Whether the node at each ply of the current line is or has been on the principal
+    /// variation (see [`Techniques::tt_pv`]).
+    tt_pv: Vec<bool>,
     /// The depth of the current iteration, which limits how far extensions can reach.
     root_depth: u32,
     /// Double extensions on the line from the root to the current node, which
@@ -905,6 +945,7 @@ impl<'a> Searcher<'a> {
             moved: Vec::new(),
             evals: vec![-INFINITY; MAX_PLY as usize + 1],
             excluded: vec![None; MAX_PLY as usize + 1],
+            tt_pv: vec![false; MAX_PLY as usize + 1],
             root_depth: 0,
             double_extensions: 0,
             lmr: lmr_table(&search_params),
@@ -1095,6 +1136,16 @@ impl<'a> Searcher<'a> {
         }
         // ANCHOR_END: tt_probe
 
+        let pv_node = beta - alpha > 1;
+        // ANCHOR: tt_pv
+        // Is or has been on the principal variation: a PV node now, or one the table remembers
+        // as one. A singular extension's search, of the same node, keeps the node's flag.
+        if excluded.is_none() {
+            self.tt_pv[ply as usize] = pv_node || tt_entry.is_some_and(|entry| entry.pv);
+        }
+        let tt_pv = self.tt_pv[ply as usize];
+        // ANCHOR_END: tt_pv
+
         // ANCHOR: iir
         // Internal iterative reduction: with no hash move to try first, move ordering is poor
         // and the node probably isn't important; search it a ply shallower.
@@ -1125,7 +1176,7 @@ impl<'a> Searcher<'a> {
             if self.techniques.tt {
                 let stored = score_to_tt(score, ply);
                 self.tt
-                    .store(pos.hash(), None, stored, MAX_PLY, Bound::Exact);
+                    .store(pos.hash(), None, stored, MAX_PLY, Bound::Exact, tt_pv);
             }
             return score;
         }
@@ -1133,7 +1184,6 @@ impl<'a> Searcher<'a> {
 
         let p = self.search_params;
         let in_check = pos.in_check();
-        let pv_node = beta - alpha > 1;
         // ANCHOR: static_eval
         // The static evaluation, for the pruning decisions (meaningless in check), corrected by
         // what the search has learnt about positions with these pawns.
@@ -1320,6 +1370,7 @@ impl<'a> Searcher<'a> {
                         stored,
                         probcut_depth + 1,
                         Bound::Lower,
+                        tt_pv,
                     );
                 }
                 return score;
@@ -1534,6 +1585,13 @@ impl<'a> Searcher<'a> {
                     reduction -= p.lmr_all_node;
                 }
                 // ANCHOR_END: all_node_reduction
+                // ANCHOR: tt_pv_reduction
+                // Reduce less at a node that has been on the principal variation: it may be
+                // again.
+                if self.techniques.tt_pv && tt_pv && !pv_node {
+                    reduction -= p.lmr_tt_pv;
+                }
+                // ANCHOR_END: tt_pv_reduction
                 // Reduce a move with a good history less: it has caused cutoffs elsewhere. And
                 // one with a bad history more.
                 if self.techniques.history_lmr {
@@ -1625,6 +1683,15 @@ impl<'a> Searcher<'a> {
         } else {
             Bound::Upper
         };
+        // ANCHOR: tt_pv_fail_low
+        // After a fail low under a node that is or has been on the principal variation, the
+        // opponent's last move was probably good, so this position may be on the next one.
+        if bound == Bound::Upper && ply > 0 && excluded.is_none() && depth > p.tt_pv_fail_low_depth
+        {
+            self.tt_pv[ply as usize] |= self.tt_pv[ply as usize - 1];
+        }
+        let tt_pv = self.tt_pv[ply as usize];
+        // ANCHOR_END: tt_pv_fail_low
         // ANCHOR: tt_store
         // (Not in a singular extension's search: its result leaves the best move out.)
         if self.techniques.tt && !self.aborted && excluded.is_none() {
@@ -1636,7 +1703,7 @@ impl<'a> Searcher<'a> {
             };
             let score = score_to_tt(best, ply);
             self.tt
-                .store(pos.hash(), move_to_store, score, depth, bound);
+                .store(pos.hash(), move_to_store, score, depth, bound, tt_pv);
         }
         // ANCHOR_END: tt_store
 
@@ -1894,6 +1961,8 @@ impl<'a> Searcher<'a> {
         beta: i32,
     ) -> RootResult {
         self.root_depth = depth;
+        // The root is always on the principal variation.
+        self.tt_pv[0] = true;
         // The root's static evaluation, for the improving heuristic two plies down. `negamax`
         // stores its own, but the root is searched here.
         self.evals[0] = if pos.in_check() {
