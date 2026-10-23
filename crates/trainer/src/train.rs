@@ -147,42 +147,115 @@ pub fn fresh(
     }
 }
 
-// ANCHOR: train
-/// Trains from `checkpoint` until `settings.epochs` epochs are done, calling `report` as it
-/// goes, and returns where training ended.
+/// Where training steps are worked out: on the CPU's threads ([`CpuBackend`]) or, with the
+/// `gpu` feature, on the GPU (`crate::gpu::GpuBackend`). Both compute the same thing; the loop
+/// in [`train_with`] doesn't care which.
+pub trait Backend {
+    /// Trains on the records `batch` of `data`: the gradients of their mean loss, then one
+    /// AdamW step at `learning_rate`.
+    fn step(&mut self, data: &Dataset, batch: &[u32], learning_rate: f32);
+    /// The records' summed loss since the last call (the GPU keeps it on the GPU until asked).
+    fn take_loss(&mut self) -> f64;
+    /// Training as it stands, with `epochs_done` epochs done (the GPU's copy is read back).
+    fn checkpoint(&mut self, epochs_done: u32) -> Checkpoint;
+}
+
+/// Training on the CPU's threads: each batch is shared out among them.
+pub struct CpuBackend {
+    net: FloatNetwork,
+    adam: AdamW,
+    targets: Targets,
+    workers: Vec<Worker>,
+    loss: f64,
+}
+
+impl CpuBackend {
+    /// Training from `checkpoint`, on `settings.threads` threads.
+    pub fn new(checkpoint: Checkpoint, settings: &Settings) -> CpuBackend {
+        let targets = Targets {
+            eval_scale: checkpoint.net.eval_scale as f32,
+            result_weight: settings.result_weight,
+        };
+        let workers = (0..settings.threads.max(1))
+            .map(|_| Worker::new(checkpoint.net.hidden))
+            .collect();
+        CpuBackend {
+            net: checkpoint.net,
+            adam: checkpoint.adam,
+            targets,
+            workers,
+            loss: 0.0,
+        }
+    }
+}
+
+// ANCHOR: cpu_step
+impl Backend for CpuBackend {
+    fn step(&mut self, data: &Dataset, batch: &[u32], learning_rate: f32) {
+        self.loss += batch_gradients(&self.net, data, batch, self.targets, &mut self.workers);
+        let grads = &mut self.workers[0].grads;
+        grads.scale(1.0 / batch.len() as f32);
+        self.adam.learning_rate = learning_rate;
+        self.adam.step(&mut self.net, grads);
+    }
+    // ANCHOR_END: cpu_step
+
+    fn take_loss(&mut self) -> f64 {
+        std::mem::take(&mut self.loss)
+    }
+
+    fn checkpoint(&mut self, epochs_done: u32) -> Checkpoint {
+        Checkpoint {
+            net: self.net.clone(),
+            adam: self.adam.clone(),
+            epochs_done,
+        }
+    }
+}
+
+/// Trains from `checkpoint` on the CPU until `settings.epochs` epochs are done, calling
+/// `report` as it goes, and returns where training ended.
 pub fn train(
     data: &Dataset,
     validation: &Dataset,
     settings: &Settings,
-    mut checkpoint: Checkpoint,
+    checkpoint: Checkpoint,
     report: &mut dyn FnMut(Report<'_>),
 ) -> Checkpoint {
-    let targets = Targets {
-        eval_scale: checkpoint.net.eval_scale as f32,
-        result_weight: settings.result_weight,
-    };
+    let start = checkpoint.epochs_done;
+    let mut backend = CpuBackend::new(checkpoint, settings);
+    train_with(data, validation, settings, &mut backend, start, report)
+}
+
+// ANCHOR: train
+/// Trains with `backend`, which has `start` epochs done, until `settings.epochs` are, calling
+/// `report` as it goes, and returns where training ended.
+pub fn train_with(
+    data: &Dataset,
+    validation: &Dataset,
+    settings: &Settings,
+    backend: &mut dyn Backend,
+    start: u32,
+    report: &mut dyn FnMut(Report<'_>),
+) -> Checkpoint {
     let threads = settings.threads.max(1);
-    let mut workers: Vec<Worker> = (0..threads)
-        .map(|_| Worker::new(checkpoint.net.hidden))
-        .collect();
-    for epoch in checkpoint.epochs_done..settings.epochs {
+    let mut checkpoint = backend.checkpoint(start);
+    for epoch in start..settings.epochs {
         let drop = if epoch >= settings.lr_drop_epoch {
             LR_DROP
         } else {
             1.0
         };
-        checkpoint.adam.learning_rate = settings.learning_rate * drop;
+        let learning_rate = settings.learning_rate * drop;
         let order = shuffled(data.len(), settings.seed.wrapping_add(u64::from(epoch)));
         let started = Instant::now();
         let batches = order.len().div_ceil(settings.batch_size);
         let every = (batches / REPORTS_PER_EPOCH).max(1);
         let mut total_loss = 0.0;
         for (b, batch) in order.chunks(settings.batch_size).enumerate() {
-            total_loss += batch_gradients(&checkpoint.net, data, batch, targets, &mut workers);
-            let grads = &mut workers[0].grads;
-            grads.scale(1.0 / batch.len() as f32);
-            checkpoint.adam.step(&mut checkpoint.net, grads);
+            backend.step(data, batch, learning_rate);
             if (b + 1) % every == 0 && b + 1 < batches {
+                total_loss += backend.take_loss();
                 let done = (b + 1) * settings.batch_size;
                 report(Report::Progress {
                     epoch: epoch + 1,
@@ -192,14 +265,20 @@ pub fn train(
                 });
             }
         }
-        checkpoint.epochs_done = epoch + 1;
+        total_loss += backend.take_loss();
+        let seconds = started.elapsed().as_secs_f64();
+        checkpoint = backend.checkpoint(epoch + 1);
+        let targets = Targets {
+            eval_scale: checkpoint.net.eval_scale as f32,
+            result_weight: settings.result_weight,
+        };
         let validation_loss = (!validation.is_empty())
             .then(|| mean_loss(&checkpoint.net, validation, targets, threads));
         report(Report::Epoch {
             epoch: epoch + 1,
             train_loss: total_loss / order.len().max(1) as f64,
             validation_loss,
-            records_per_second: order.len() as f64 / started.elapsed().as_secs_f64(),
+            records_per_second: order.len() as f64 / seconds,
             checkpoint: &checkpoint,
         });
     }

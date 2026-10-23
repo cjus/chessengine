@@ -13,9 +13,11 @@
 //! - [`data`]: the records in memory, split into training and validation sets.
 //! - [`train`]: the training loop, on all the CPU's cores.
 //! - [`checkpoint`]: saving training to resume it later.
+//! - `gpu` (the `gpu` feature): the same steps as compute kernels on the GPU, through wgpu, on
+//!   Metal on the Mac.
 //!
-//! This is the CPU version: it is the reference, and the version the book explains. A GPU
-//! version, computing the same thing faster, will be tested against it.
+//! The CPU version is the reference, and the version the book explains step by step; the GPU
+//! version computes the same thing and is tested against it.
 //!
 //! ## How training works
 //!
@@ -52,6 +54,8 @@ pub mod backprop;
 pub mod checkpoint;
 pub mod data;
 pub mod example;
+#[cfg(feature = "gpu")]
+pub mod gpu;
 pub mod scale;
 pub mod train;
 

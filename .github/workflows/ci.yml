@@ -87,6 +87,11 @@ jobs:
       - name: Clippy
         if: steps.scope.outputs.check == 'true'
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      # The trainer's GPU backend sits behind its `gpu` feature. There is no GPU here, so its
+      # tests say so and pass; they run on the GPU in scripts/check.sh on the Mac.
+      - name: Clippy (the trainer's GPU backend)
+        if: steps.scope.outputs.check == 'true'
+        run: cargo clippy -p cb2026-trainer --features gpu --all-targets --locked -- -D warnings
       - name: Cache the test tablebases
         if: steps.scope.outputs.check == 'true'
         uses: actions/cache@v4
@@ -104,12 +109,17 @@ jobs:
       - name: Tests
         if: steps.scope.outputs.check == 'true'
         run: cargo test --workspace --locked
+      - name: Tests (the trainer's GPU backend)
+        if: steps.scope.outputs.check == 'true'
+        run: cargo test -p cb2026-trainer --features gpu --locked gpu::
       - name: Perft suites (release build, every depth)
         if: steps.scope.outputs.check == 'true'
         run: cargo run --release --locked -p cb2026-tools --bin perft-suite
       - name: Docs
         if: steps.scope.outputs.check == 'true'
-        run: cargo doc --workspace --no-deps --document-private-items --locked
+        run: |
+          cargo doc --workspace --no-deps --document-private-items --locked
+          cargo doc -p cb2026-trainer --features gpu --no-deps --document-private-items --locked
         env:
           RUSTDOCFLAGS: -D warnings
       - uses: taiki-e/install-action@v2
