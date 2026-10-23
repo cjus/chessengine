@@ -283,9 +283,96 @@ training loss falls 200-fold, but on unseen positions it is only 38% better than
 average, and with 576 positions no better at all. It has learnt the positions by heart. Only
 many positions teach a network chess, which is why a first one needs about 100 million.
 
-On the M1 Max, with 8 threads, the trainer handles about 2.4 million records a second, so an
-epoch of 100 million records takes about 45 seconds and 20 epochs about 15 minutes. Generating
-those records takes about 12 hours: data, not training, is what takes the time.
+On the M1 Max, with its 8 performance cores, the trainer handles about 2 to 2.4 million
+records a second, so an epoch of 100 million records takes under a minute and 20 epochs under
+20 minutes. Generating those records takes about 12 hours: data, not training, is what takes the
+time. Every thread gets an equal share of each batch and the batch waits for the slowest, so the
+trainer leaves the efficiency cores out: with them, 10 threads were 17% slower than 8.
+
+### On the GPU
+
+The same training runs on the Mac's GPU with `--backend gpu` (in a trainer built with
+`--features gpu`). It goes through wgpu, a Rust library for WebGPU, which runs on Metal on the
+Mac and on Vulkan or DirectX 12 elsewhere, with an API that is safe Rust. The code that runs on
+the GPU, a **kernel**, is written in WGSL, WebGPU's shading language. Thousands of copies of a
+kernel, its **invocations**, run at once, each computing one number, such as one hidden value of
+one example, in **workgroups** of 64 that the GPU schedules together. A training step is a row
+of kernels, each one step of the formulas above: the hidden layer, the output and loss, the
+hidden values' slopes, the gradients, AdamW, the loss's running total. The network and AdamW's
+averages stay on the GPU for the whole run; only each batch's inputs and targets go up, and the
+network comes back once an epoch, for the file and the checkpoint. The CPU and GPU versions sit
+behind one interface, `Backend`, with one call per batch, so the loop above drives both.
+
+A GPU is fast at work that splits into many equal, independent pieces, and slow at anything
+else. Two parts of the backward pass weren't like that at first.
+
+**Sums over the batch.** An output weight's gradient is a sum over all 16,384 examples. With one
+invocation per weight looping over the whole batch, a network of 256 had only 513 invocations
+for a GPU that runs tens of thousands, and those sums took 25 of a batch's 35 milliseconds. So
+the batch is cut into chunks of 128 examples: one kernel sums each weight over each chunk, and a
+second adds up the chunks.
+
+**The sparse gradient.** A first-layer weight collects a term from every example in which its
+input is on. On the CPU, each thread adds its examples' terms into its own copy of the
+gradients. On the GPU, thousands of invocations would be adding into the same weights at once,
+which needs atomic addition, and WGSL has none for floats. So the CPU sorts each batch's rows by
+input first, with a counting sort, and each weight adds up its own list with nobody else writing
+to it. The lists turned out to be very uneven: in a batch the average input is on in about 700
+of the 32,768 rows, but a king on its first square is on in over 11,000. A kernel is as slow as
+its slowest invocation, so one invocation per weight, looping over its list, made this kernel as
+slow as its longest list, whatever the network's size: a network of 512 trained no faster than
+one of 1,024. So the lists are also cut into segments of up to 256 rows:
+
+```rust,ignore
+{{#include ../../crates/trainer/src/gpu.rs:group_by_input}}
+```
+
+One kernel sums each segment for every hidden value, and a second adds up each input's
+segments:
+
+```wgsl
+{{#include ../../crates/trainer/src/gpu/input_partials.wgsl}}
+```
+
+That doubled the speed of networks of 512. Every sum runs in a fixed order, so the same GPU
+gives the same network every time, but not quite the CPU's: floats added in another order round
+differently. The tests run both on the same batch and compare the gradients, an AdamW step and a
+short training run; breaking the segments on purpose makes the gradients' test fail.
+
+Measured on the M1 Max (32 GPU cores) on 2.8 million records, in records a second:
+
+| Hidden layer | CPU, 8 threads | GPU |
+| --- | --- | --- |
+| 256 | 2.2 million | 2.7 million |
+| 512 | 1.1 million | 2.6 million |
+| 1,024 | 0.46 million | 1.3 million |
+
+The training losses were the same to six decimals. The CPU's time grows with the network, since
+it does every multiplication itself. The GPU's grows more slowly, and at 256 it isn't the limit
+at all: the CPU prepares each batch (decoding the records and sorting the rows) on one thread in
+about 4.7 milliseconds, while the GPU's work takes 3.5. At 1,024 the GPU's work, 11.6
+milliseconds a batch, is the limit.
+
+Measuring had a trap of its own. On a file of 141,000 records the GPU seemed no faster than the
+CPU at 256. An epoch was only nine batches there, and the trainer reads the loss back 20 times
+an epoch for its progress line, so after every batch the CPU waited for the GPU to finish, and
+the two never worked at the same time. A real run has thousands of batches an epoch. A
+benchmark must look like the run it stands for.
+
+### Other Macs
+
+The numbers belong to one Mac. The M3 Max, where cb2026's long runs go, differs from the M1 Max
+in each of the things that set them. Its performance cores are faster, and it has 10 or 12 of
+them rather than 8, so the CPU trainer and the GPU backend's batch preparation both speed up.
+Its GPU is a newer design, with 30 or 40 cores rather than 24 or 32, that gives each running
+kernel only the on-chip memory it uses rather than the most it might need, so more invocations
+fit at once (Apple calls this Dynamic Caching). Its memory bandwidth is 300 or 400 GB/s,
+depending on the model, against the M1 Max's 400, and the sparse gradient's kernels do little
+arithmetic for each number they read, so memory is likely to bound them. So the CPU might win
+at 256 there, and the GPU's lead at 1,024 could grow or shrink. `scripts/mac-trainer-speed.sh` measures both backends on the Mac it runs
+on, and its numbers, not these, should pick the backend for a long run. A GPU of another design
+may also round a little differently, so a network is only repeated exactly on the same machine,
+backend and thread count.
 
 ## The network in the search
 
@@ -344,6 +431,11 @@ compiler vectorises.
   bounds above rule it out, and a test runs the largest possible weights.
 - **A move the accumulators miss.** Every place the search makes a move must update the
   child's accumulator; a debug build checks each evaluation.
+- **A GPU kernel is as slow as its slowest invocation.** One invocation per weight looks
+  natural, but if some weights have far more work than others (the kings' inputs in a batch),
+  the GPU sits idle while they finish. Cut the work into equal pieces and add them up after.
+- **A benchmark that doesn't look like the real run.** A small file made the GPU wait at every
+  progress report and look slower than it is.
 - **Scores from the wrong side.** The search scores for the side to move; records keep White's
   side, like the result, and the trainer turns both to the side to move's view. Mixing the two
   up teaches the network nonsense for every position with Black to move.
@@ -351,5 +443,7 @@ compiler vectorises.
 ## Further reading
 
 - Chess Programming Wiki: [NNUE](https://www.chessprogramming.org/NNUE).
+- [WGSL](https://www.w3.org/TR/WGSL/), WebGPU's shading language, and
+  [wgpu](https://wgpu.rs), the Rust library the trainer's GPU backend runs on.
 - Yu Nasu, *Efficiently Updatable Neural-Network-based Evaluation Functions for Computer
   Shogi* (2018), which introduced NNUE.

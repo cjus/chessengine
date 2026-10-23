@@ -248,13 +248,31 @@ teaching value, and the trainer uses the Mac's GPU through Metal.
   rate a tenth for the last quarter; the last 1% of the records for validation; the eval scale
   fitted from the data (159 on a 134,000-record sample); a network file after every epoch and a
   checkpoint to resume from. Its gradients match finite differences to 0.1%. **Measured:** about
-  2.4 million records a second on 8 of the M1 Max's threads, so 20 epochs on 100 million records
-  take about 15 minutes. Generating the records (about 12 hours) is the slow step, so the GPU
-  backend is for teaching and for larger networks, not for the first ones.
+  2 to 2.4 million records a second on the M1 Max's 8 performance cores, so 20 epochs on 100
+  million records take under 20 minutes. Generating the records (about 12 hours) is the slow
+  step. Threads default to the performance cores on Apple Silicon: each gets an equal share of
+  a batch, and with the 2 efficiency cores too, 10 threads were 17% slower than 8.
+
+  **The GPU backend** (2026-10-23): `trainer --backend gpu`, built with `--features gpu`. WGSL
+  kernels for the same formulas, the network and AdamW's moments kept on the GPU, only each
+  batch's inputs and targets sent up. WGSL has no atomic float addition, so for the first
+  layer's sparse gradient the CPU sorts each batch's rows by input (a counting sort) and cuts
+  each input's list into segments of 256 rows; sums over the batch go in chunks of 128 examples.
+  Every sum has a fixed order, so a GPU repeats its own results; the tests compare the GPU's
+  gradients, an AdamW step and a short run with the CPU's. **Measured** on the M1 Max (32 GPU
+  cores) on 2.8 million records, records a second, CPU on 8 threads against GPU: 2.2M against
+  2.7M at a hidden layer of 256, 1.1M against 2.6M at 512, 0.46M against 1.3M at 1,024, with the
+  same losses. At 256 the GPU waits for the batch preparation on one CPU thread (4.7 ms against
+  3.5 ms of GPU work a batch); preparing batches on several threads is the next speed-up if one
+  is needed. **The M3 Max will differ:** faster and more performance cores (10 or 12), a newer
+  GPU of 30 or 40 cores, and 300 or 400 GB/s of memory bandwidth against the M1 Max's 400, so
+  the CPU may win at 256 there. `scripts/mac-trainer-speed.sh` measures both backends on the
+  Mac it runs on, and its numbers pick the backend for the long runs.
 - **Build and tests:** the trainer is not among the workspace's default members (done
-  2026-10-23), so `cargo build` and the `cb2026` binary never compile wgpu. `scripts/check.sh` checks it with the rest;
-  its GPU tests sit behind a cargo feature and run on the Mac, since the nightly Linux CI has no
-  GPU.
+  2026-10-23), so `cargo build` and the `cb2026` binary never compile wgpu. `scripts/check.sh`
+  checks it with the rest, and checks the `gpu` feature on its own (clippy, the GPU tests, the
+  docs); the GPU tests run on Metal on the Mac, and on the nightly Linux CI, which has no GPU,
+  they say so and pass.
 - **Nets** are not committed: they are published as release assets and fetched by a script, as
   opening books are. A release build embeds the default net.
 - **Order:** the net's definition (inputs, layers, the integer format) comes first, in

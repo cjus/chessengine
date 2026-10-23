@@ -27,9 +27,14 @@ fi
 
 step cargo fmt --all --check
 step cargo clippy --workspace --all-targets --locked -- -D warnings
+# The trainer's GPU backend sits behind its `gpu` feature, so it is checked on its own. Its tests
+# run on the GPU (Metal on a Mac); with no GPU (the nightly Linux CI) they say so and pass.
+step cargo clippy -p cb2026-trainer --features gpu --all-targets --locked -- -D warnings
 step cargo test --workspace --locked
+step cargo test -p cb2026-trainer --features gpu --locked gpu::
 step cargo run --release --locked -p cb2026-tools --bin perft-suite
 RUSTDOCFLAGS="-D warnings" step cargo doc --workspace --no-deps --document-private-items --locked
+RUSTDOCFLAGS="-D warnings" step cargo doc -p cb2026-trainer --features gpu --no-deps --document-private-items --locked
 step cargo deny check
 step mdbook build book
 

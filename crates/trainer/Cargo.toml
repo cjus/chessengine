@@ -11,6 +11,16 @@ publish.workspace = true
 [dependencies]
 cb2026-chess.workspace = true
 cb2026-nnue.workspace = true
+# The GPU backend (`--features gpu`): wgpu runs on Metal on the Mac, Vulkan or DirectX 12
+# elsewhere; pollster waits for its asynchronous calls; bytemuck views numbers as bytes.
+bytemuck = { version = "1.25.2", optional = true }
+pollster = { version = "1.0.1", optional = true }
+wgpu = { version = "30.0.1", optional = true }
+
+[features]
+# The GPU backend. Off by default, so `cargo test --workspace` and CI never build wgpu;
+# `scripts/check.sh` builds and tests it on the Mac.
+gpu = ["dep:bytemuck", "dep:pollster", "dep:wgpu"]
 
 [[bin]]
 name = "trainer"

@@ -5,7 +5,11 @@
 //!     [--hidden 256] [--activation screlu|crelu] [--epochs 20] [--batch 16384]
 //!     [--lr 0.001] [--weight-decay 0.01] [--result-weight 0.25] [--eval-scale N|fit]
 //!     [--validation 0.01] [--threads N] [--seed 1] [--resume DIR/checkpoint.bin]
+//!     [--backend cpu|gpu]
 //! ```
+//!
+//! `--backend gpu` trains on the GPU (Metal on the Mac); it needs the trainer built with the
+//! `gpu` feature: `cargo run --release -p cb2026-trainer --features gpu -- ...`.
 //!
 //! The records come from `datagen --format records`. The last `--validation` share of them is
 //! held back to measure the network on games it never trained on. `--eval-scale fit` (the
@@ -25,12 +29,12 @@ use cb2026_nnue::{Activation, network::DEFAULT_HIDDEN};
 use cb2026_trainer::checkpoint::Checkpoint;
 use cb2026_trainer::data::Dataset;
 use cb2026_trainer::scale::fit_eval_scale;
-use cb2026_trainer::train::{Report, Settings, fresh, train};
+use cb2026_trainer::train::{Backend, CpuBackend, Report, Settings, fresh, train_with};
 
 const USAGE: &str = "Usage: trainer --data FILE [--data FILE ...] --out DIR [--hidden N] \
 [--activation screlu|crelu] [--epochs N] [--batch N] [--lr R] [--weight-decay R] \
 [--result-weight W] [--eval-scale N|fit] [--validation F] [--threads N] [--seed N] \
-[--resume CHECKPOINT]";
+[--resume CHECKPOINT] [--backend cpu|gpu]";
 
 /// Epochs, unless `--epochs` says otherwise.
 const DEFAULT_EPOCHS: u32 = 20;
@@ -67,6 +71,7 @@ fn run() -> Result<(), String> {
     let mut eval_scale = None;
     let mut validation_share = DEFAULT_VALIDATION;
     let mut resume = None;
+    let mut use_gpu = false;
     let mut settings = Settings {
         epochs: DEFAULT_EPOCHS,
         batch_size: DEFAULT_BATCH,
@@ -74,7 +79,7 @@ fn run() -> Result<(), String> {
         lr_drop_epoch: 0,
         weight_decay: DEFAULT_WEIGHT_DECAY,
         result_weight: DEFAULT_RESULT_WEIGHT,
-        threads: std::thread::available_parallelism().map_or(1, |n| n.get()),
+        threads: default_threads(),
         seed: 1,
     };
     let mut args = std::env::args().skip(1);
@@ -112,6 +117,13 @@ fn run() -> Result<(), String> {
             "--threads" => settings.threads = parse::<usize>(&arg, value()?)?.max(1),
             "--seed" => settings.seed = parse(&arg, value()?)?,
             "--resume" => resume = Some(PathBuf::from(value()?)),
+            "--backend" => {
+                use_gpu = match value()?.as_str() {
+                    "cpu" => false,
+                    "gpu" => true,
+                    other => return Err(format!("unknown backend '{other}' (cpu or gpu)")),
+                }
+            }
             other => return Err(format!("unknown argument '{other}'\n{USAGE}")),
         }
     }
@@ -196,13 +208,16 @@ fn run() -> Result<(), String> {
     );
 
     fs::create_dir_all(&out).map_err(|e| format!("can't create {}: {e}", out.display()))?;
+    let epochs_done = start.epochs_done;
+    let mut backend = backend(use_gpu, start, &settings)?;
     let began = Instant::now();
     let mut failure = None;
-    train(
+    train_with(
         &data,
         &validation,
         &settings,
-        start,
+        backend.as_mut(),
+        epochs_done,
         &mut |report| match report {
             Report::Progress {
                 epoch,
@@ -248,6 +263,49 @@ fn run() -> Result<(), String> {
         Some(e) => Err(e),
         None => Ok(()),
     }
+}
+
+/// Threads, unless `--threads` says otherwise: the performance cores on Apple Silicon, every
+/// core elsewhere. Each thread gets an equal share of a batch and the batch waits for the
+/// slowest, so a thread on an efficiency core holds the others up: on the M1 Max (8 performance
+/// and 2 efficiency cores) 10 threads trained 17% slower than 8.
+fn default_threads() -> usize {
+    let performance_cores = cfg!(target_os = "macos")
+        .then(|| {
+            std::process::Command::new("sysctl")
+                .args(["-n", "hw.perflevel0.physicalcpu"])
+                .output()
+                .ok()
+        })
+        .flatten()
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .and_then(|text| text.trim().parse::<usize>().ok());
+    performance_cores
+        .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get()))
+        .max(1)
+}
+
+/// The backend to train with: the CPU's threads, or the GPU if asked for (and built in).
+fn backend(
+    use_gpu: bool,
+    start: Checkpoint,
+    settings: &Settings,
+) -> Result<Box<dyn Backend>, String> {
+    if !use_gpu {
+        println!("training on the CPU, {} threads", settings.threads);
+        return Ok(Box::new(CpuBackend::new(start, settings)));
+    }
+    #[cfg(feature = "gpu")]
+    {
+        let gpu = cb2026_trainer::gpu::GpuBackend::new(start, settings)?;
+        println!("training on the GPU: {}", gpu.adapter());
+        Ok(Box::new(gpu))
+    }
+    #[cfg(not(feature = "gpu"))]
+    Err(
+        "this trainer was built without the GPU backend: build it with `--features gpu`"
+            .to_string(),
+    )
 }
 
 /// Writes `bytes` to `path` through a temporary file, so a crash never leaves half a file.

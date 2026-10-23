@@ -1,6 +1,11 @@
 # cargo-deny configuration: run `cargo deny check` (CI runs it on every PR).
 # See https://embarkstudios.github.io/cargo-deny/
 
+[graph]
+# Check the trainer's optional GPU backend (wgpu and its dependencies) too, not only what the
+# default build uses.
+features = ["cb2026-trainer/gpu"]
+
 [advisories]
 # Known security vulnerabilities and unmaintained crates fail the check.
 ignore = []
