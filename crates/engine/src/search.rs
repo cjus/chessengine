@@ -210,9 +210,10 @@
 //! passed: +12.8 ± 8.2 Elo after 3,144 games at 8+0.08 (cjus/chessengine#165), so it is on by
 //! default; see chapter 14.1.
 //!
-//! Stockfish 17's version is being tested (cjus/chessengine#167): at an expected all-node the
-//! reduction is `lmr_cutoff_all_node_plies` (1) larger again, and a fail high by a doubly
-//! extended move adds `cutoff_count_double_extended` (0) to the count instead of 1.
+//! Stockfish 17's version passed too, against the first: +13.7 ± 8.5 Elo after 2,953 games
+//! (cjus/chessengine#167), so it is the default. At an expected all-node the reduction is
+//! `lmr_cutoff_all_node_plies` (1) larger again, and a fail high by a doubly extended move adds
+//! `cutoff_count_double_extended` (0) to the count instead of 1.
 //!
 //! ## History pruning
 //!
@@ -537,8 +538,8 @@ impl Default for SearchParams {
             // tuned.
             lmr_cutoff_count: 3,
             lmr_cutoff_plies: 1,
-            // Stockfish 17's version (GPL-3.0), for its SPRT (cjus/chessengine#167); Stockfish
-            // 16's, which passed (cjus/chessengine#165), has 0 and 1.
+            // Stockfish 17's version (GPL-3.0), which passed against Stockfish 16's, +13.7 ± 8.5
+            // (cjus/chessengine#167); 0 and 1 give Stockfish 16's (cjus/chessengine#165).
             lmr_cutoff_all_node_plies: 1,
             cutoff_count_double_extended: 0,
             lmp_max_depth: 3,
