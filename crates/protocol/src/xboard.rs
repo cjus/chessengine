@@ -25,12 +25,15 @@
 //!
 //! Thinking output (`post`) is `depth score time nodes pv`, with the score in centipawns from
 //! the engine's side and the time in centiseconds. Mate scores are shown as 100000 plus the
-//! number of moves to mate (negative when being mated), the usual convention.
+//! number of moves to mate (negative when being mated), the usual convention. With MultiPV,
+//! each depth's lines are sent together, best last: XBoard sorts them by score to show them, but
+//! takes the last one as the engine's score and PV.
 //!
 //! See the CECP specification by Tim Mann and H.G. Muller,
 //! <https://www.gnu.org/software/xboard/engine-intf.html>, and the Chess Programming Wiki,
 //! [Chess Engine Communication Protocol](https://www.chessprogramming.org/Chess_Engine_Communication_Protocol).
 
+use std::cell::{Cell, RefCell};
 use std::io::{self, BufRead, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -470,16 +473,38 @@ impl Session {
         let post = self.post || analysis;
         let ponder = self.ponder && !analysis;
         let chess960 = self.chess960;
+        let multipv = engine.multipv.max(1);
         let handle = thread::spawn(move || {
+            // MultiPV: the engine reports a depth's lines together, best first. XBoard sorts
+            // each depth's lines by score for display, but keeps the last one it reads as the
+            // engine's score and PV (for the PGN, the evaluation graph and adjudication), so a
+            // depth's lines are held until the last arrives, then sent best last. If fewer
+            // arrive (a search stopped mid-depth), the next depth or the search's end sends them.
+            let pending = RefCell::new(Vec::<String>::new());
+            let expected = Cell::new(1);
+            let flush = || {
+                for line in pending.borrow_mut().drain(..).rev() {
+                    send(&output, &line);
+                }
+            };
             let mut on_info = |info: &SearchInfo| {
-                if post && info.multipv == 1 {
-                    send(&output, &thinking_line(info, chess960));
+                if !post {
+                    return;
+                }
+                if info.multipv == 1 {
+                    flush();
+                }
+                pending.borrow_mut().push(thinking_line(info, chess960));
+                if pending.borrow().len() >= expected.get() {
+                    flush();
                 }
             };
             // ANCHOR: ponder
             loop {
+                expected.set(multipv.min(position.legal_moves().len()).max(1));
                 let stop = Arc::clone(&lock(&thread_shared).stop);
                 let result = engine.search(&position, &keys, &limits, &stop, &mut on_info);
+                flush();
                 // Analysis and pondering wait to be stopped, or for the ponder hit.
                 while (analysis || lock(&thread_shared).pondering.is_some())
                     && !stop.load(Ordering::Relaxed)
@@ -755,6 +780,40 @@ mod tests {
             400,
         );
         assert_eq!(moves(&lines), ["e1e8"]);
+    }
+
+    #[test]
+    fn multipv_sends_each_depths_lines_best_last() {
+        let lines = session(
+            &["new", "force", "option MultiPV=3", "post", "sd 5", "go"],
+            1000,
+        );
+        let played = moves(&lines);
+        assert_eq!(played.len(), 1, "{lines:?}");
+        // Thinking lines (depth score time nodes pv), grouped by depth in the order sent.
+        let mut depths: Vec<(u32, Vec<(i32, String)>)> = Vec::new();
+        for line in &lines {
+            let words: Vec<&str> = line.split_whitespace().collect();
+            let (Some(depth), Some(score)) = (
+                words.first().and_then(|w| w.parse::<u32>().ok()),
+                words.get(1).and_then(|w| w.parse::<i32>().ok()),
+            ) else {
+                continue;
+            };
+            let first_move = words.get(4).copied().unwrap_or("").to_string();
+            match depths.last_mut() {
+                Some((d, group)) if *d == depth => group.push((score, first_move)),
+                _ => depths.push((depth, vec![(score, first_move)])),
+            }
+        }
+        assert_eq!(depths.len(), 5, "{lines:?}");
+        for (depth, group) in &depths {
+            assert_eq!(group.len(), 3, "depth {depth}: {lines:?}");
+            let best = group.iter().map(|(score, _)| *score).max().unwrap();
+            assert_eq!(group.last().unwrap().0, best, "depth {depth}: {lines:?}");
+        }
+        // XBoard takes the last line as the engine's PV: it starts with the move played.
+        assert_eq!(depths.last().unwrap().1.last().unwrap().1, played[0]);
     }
 
     #[test]
