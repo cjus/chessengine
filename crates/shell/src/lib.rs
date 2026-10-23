@@ -53,7 +53,7 @@
 //! | `set allnode on\|off` | All-node reductions: reduce late moves less at expected all-nodes (off by default) |
 //! | `set ttpv on\|off` | TT PV: reduce late moves less at nodes that are or have been on the principal variation (off by default) |
 //! | `set cutoffs on\|off` | Cutoff reductions: reduce late moves more when the next ply has had many fail highs |
-//! | `set ttcapture on\|off` | TT capture: reduce late moves more when the hash move is a capture (off by default) |
+//! | `set ttcapture on\|off` | TT capture: reduce late moves more when the hash move is a capture, off the principal variation (off by default) |
 //! | `set histprune on\|off` | History pruning: skip quiet moves with a bad history near the leaves (off by default) |
 //! | `set rfp\|razoring\|futility\|seeprune\|delta\|seeorder on\|off` | Stage 14's pruning and SEE ordering |
 //! | `eval` | The static evaluation, term by term |
@@ -176,8 +176,8 @@ Commands:
   set allnode on|off   Reduce late moves less at expected all-nodes (default off)
   set ttpv on|off      Reduce late moves less at nodes once on the PV (default off)
   set cutoffs on|off   Reduce late moves more when the next ply has had many fail highs
-  set ttcapture on|off Reduce late moves more when the hash move is a capture
-                       (default off)
+  set ttcapture on|off Reduce late moves more when the hash move is a capture, off
+                       the principal variation (default off)
   set histprune on|off History pruning: skip quiet moves with a bad history near the
                        leaves (default off)
   set rfp|razoring|futility|seeprune|delta on|off

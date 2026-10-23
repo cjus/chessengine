@@ -584,13 +584,8 @@ One more signal comes from the transposition table. Stockfish 16 and 17 (GPL-3.0
 moves a ply more when the move the table remembers as best here is a capture (or a promotion to
 a queen). Their comment rates it about 3 Elo and doesn't say why (cjus/chessengine#171). A
 plausible reason: the node's best move is probably that capture, and a quiet move searched this
-late seldom does better. cb2026 does the same, with code of its own:
-
-```rust,ignore
-{{#include ../../crates/engine/src/search.rs:tt_capture_reduction}}
-```
-
-`lmr_tt_capture` is 1, as in Stockfish, and `set ttcapture off` gives the search without it
+late seldom does better. cb2026's first version did the same at every node, with code of its
+own. `lmr_tt_capture` is 1, as in Stockfish, and `set ttcapture off` gives the search without it
 exactly. It applies less often than the reductions above: over the game's positions at depth
 10, the hash move was a capture for 12.5% of the moves late move reductions reduced. The trees
 still shrink:
@@ -599,11 +594,51 @@ still shrink:
   (292,044, 450,207 and 698,814 nodes, against 319,002, 473,898 and 764,000).
 - The game's 58 positions at depth 10 shrink by 14.7% in all, and 30 of them get smaller.
 
-**It failed**, by about **−6 Elo** (see "What it's worth"), so it is off by default. A smaller
-tree isn't a stronger engine when the moves cut away mattered. cb2026 already reduces late
-moves at expected cut nodes by 2 plies and after many fail highs by 1 or 2, and Stockfish tunes
-its reductions together, where cb2026 adds them one at a time; one more ply on top may reduce
-these moves too far. Untested: the extra ply only at nodes that are not expected cut nodes.
+**It failed**, by about **−6 Elo** (see "What it's worth"), so it went off by default. A smaller
+tree isn't a stronger engine when the moves cut away mattered. To see where it cut, the extra
+ply was tried at one kind of node at a time:
+
+| Extra ply when the hash move is a capture | Bench | The game's 58 positions at depth 10 |
+| --- | --- | --- |
+| Nowhere (`main`) | 749,181 | 1,898,454 |
+| At every node (the first version) | 719,329 (−4.0%) | 1,618,971 (−14.7%) |
+| Except at expected cut nodes | 719,458 (−4.0%) | 1,681,317 (−11.4%) |
+| On the principal variation only | 715,028 (−4.6%) | 1,695,304 (−10.7%) |
+| At expected all-nodes only | 755,028 (+0.8%) | 1,818,833 (−4.2%) |
+| Off the principal variation (all-nodes and cut nodes) | 754,886 (+0.8%) | 1,927,897 (+1.6%) |
+
+Leaving out expected cut nodes, the obvious narrowing, changes almost nothing. Their late moves
+are reduced 2 plies more already, so the extra ply mostly runs into the limit of depth − 2.
+Most of the first version's saving was on the principal variation, where cb2026 otherwise
+reduces late moves a ply less because the exact score matters; the extra ply took that back.
+That may be what cost the Elo.
+
+### The second version: off the principal variation
+
+So the second version leaves the principal variation alone. At a PV node the extra reduction is
+`lmr_tt_capture_pv` (0), and 1 gives the first version:
+
+```rust,ignore
+{{#include ../../crates/engine/src/search.rs:tt_capture_reduction}}
+```
+
+It barely changes the size of the tree:
+- The bench grows by 0.8%, to 754,886 nodes.
+- The six positions change by −0.05%, +1.2% and +1.7% at depths 9 to 11 (318,853, 479,481 and
+  777,375 nodes).
+- The game's positions grow by 1.6% in all: 26 get smaller and 29 bigger.
+
+More reductions and a bigger tree aren't a contradiction. A reduced search that fails high is
+searched again at full depth, and every search changes the moves and scores the table hands to
+the rest. Whatever the second version gains has to come from where the effort goes, not from a
+smaller tree.
+
+**It failed too**, by about **−7.5 Elo** (see "What it's worth"), so both versions are off by
+default. A smaller tree didn't help, and neither did a bigger one. cb2026 already reduces late
+moves more at expected cut nodes and after many fail highs. Off the principal variation, one more
+ply when the hash move is a capture seems to reduce some of them too far. Stockfish tunes its
+reductions together, where cb2026 adds them one at a time, so the ply may only pay off alongside
+Stockfish's other numbers.
 
 ## What it saves
 
@@ -718,7 +753,8 @@ that it is small, about **+5 Elo**, and it took over 14,000 of them to say so.
 | Smaller reductions where the principal variation was (Stockfish's `ttPv`, 1 ply less) vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | +0.3 ± 5.2 Elo over 8,100 games (+1939 −1933 =4228): no verdict (LLR −1.57), stopped; off by default |
 | Larger reductions after many fail highs (1 ply more when the next ply has counted more than 3) vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+12.8 ± 8.2 Elo** over 3,144 games (+776 −660 =1708): passed (LLR 2.95); on by default |
 | Stockfish 17's version of them (2 plies at an expected all-node; a doubly extended move's fail high counted once less) vs Stockfish 16's, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **+13.7 ± 8.5 Elo** over 2,953 games (+741 −625 =1587): passed (LLR 2.96); the default |
-| Larger reductions when the hash move is a capture (1 ply more) vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−6.5 ± 7.7 Elo** over 3,668 games (+819 −888 =1961): failed (LLR −2.95); off by default |
+| Larger reductions when the hash move is a capture (1 ply more, at every node) vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−6.5 ± 7.7 Elo** over 3,668 games (+819 −888 =1961): failed (LLR −2.95); off by default |
+| Its second version, off the principal variation (1 ply more at expected all-nodes and cut nodes, none at PV nodes) vs `main` without them, 8+0.08, test Mac (M3 Max), SPRT [0, 5] | **−7.5 ± 8.0 Elo** over 3,031 games (+608 −673 =1750): failed (LLR −2.96); off by default |
 
 ## Further reading
 
