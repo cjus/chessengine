@@ -69,6 +69,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "cb2026-nnue"
+version = "0.1.0"
+dependencies = [
+ "cb2026-chess",
+]
+
+[[package]]
 name = "cb2026-protocol"
 version = "0.1.0"
 dependencies = [

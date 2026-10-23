@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-23, 12:10 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-23, 12:33 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -69,7 +69,10 @@ value`, as GUIs clear one) is set to empty, no longer taken for an unknown optio
 the GUI matrix, #169; with MultiPV in XBoard mode every line is sent, each depth's best last as
 XBoard expects, no longer the best line only, also found during the GUI matrix, #170; larger
 reductions when the hash move is a capture running on the M3, #171; stage 21's plan in the PRD:
-our own NNUE trainer, with a CPU reference and a GPU backend through wgpu on Metal (Carlos).*
+our own NNUE trainer, with a CPU reference and a GPU backend through wgpu on Metal (Carlos);
+the tablebase tests run again, the download script following the mirror's new directories,
+#176; stage 21 started: the net's definition in `crates/nnue`, with chapter 21's first
+sections, #177.*
 
 ## Stages
 
@@ -89,7 +92,7 @@ our own NNUE trainer, with a CPU reference and a GPU backend through wgpu on Met
 | 18 Polyglot books | Merged | #50 | 1207153 | No functional change (book off by default) |
 | 19 Levels, MultiPV | Merged | #51 | 1207153 | No functional change at full strength; levels not yet calibrated (#36) |
 | 20 XBoard, pondering, conformance tests, Lichess docs | Merged | #52 | 1207153 | No functional change |
-| 21 NNUE | Not started | | | M6 stretch goal |
+| 21 NNUE | In progress | #177 (the net's definition) | 749181 | No functional change yet; M6 stretch goal |
 
 ### Built on top of stage 20 (not stages)
 
@@ -318,7 +321,7 @@ passed; the rest wait on GUI checks, level calibration or the v1.0 work.
 | M3 Evaluation | stages 15–16 | **Passed** 2026-10-18: stage 16 rated 2669 ± 10 by gauntlet at 8+0.08 (gate ≥2400 CCRL), #36 |
 | M4 Complete engine | stages 17–20 | Merged (#46–#55); levels calibrated at 40+0.4 on 2026-10-19, 629–2483 (#106); GUI matrix (#37) open |
 | M5 v1.0 | strength work, release | Started (the M5 branches above); release workflow merged (#40); `main` rated 2782 ± 11 by gauntlet on 2026-10-21 (#131; 2714 ± 10 on 2026-10-18, #36), above the gate (≥2400, goal 2600+); the robustness run clean on 2026-10-22 (#146); the GUI matrix (#37) is the last gate |
-| M6 NNUE | stage 21 | Not started |
+| M6 NNUE | stage 21 | Started 2026-10-23: the net's definition (#177) |
 
 ## Waiting on Carlos
 
@@ -542,3 +545,9 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    `crates/trainer`; inference in `crates/nnue`; nets as release assets. The net's definition,
    `datagen`'s scores and the trainer don't change how the engine plays, so they can start
    before the engine's inference, and before v1.0 is tagged. The first SPRT needs both.
+
+   Done: the net's definition (#177): `crates/nnue` numbers the 768 inputs, says what a move
+   changes, and holds the integer network (accumulator, evaluation, file format) and the float
+   one the trainer will learn, with chapter 21's first sections. Next, in order: `datagen`'s
+   training records (the whole position, search score, result and best move, about 32 bytes),
+   the CPU trainer, the GPU backend; the engine's inference alongside.

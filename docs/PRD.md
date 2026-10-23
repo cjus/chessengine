@@ -173,10 +173,31 @@ Each technique below is a separate function or clearly marked block, has its own
 **Decided 2026-10-23 (Carlos):** cb2026 trains its nets with a trainer of its own, for its
 teaching value, and the trainer uses the Mac's GPU through Metal.
 
-- **Inference** (`crates/nnue`, no I/O): the first net takes 768 inputs (piece, colour and
-  square, seen from each side) into one hidden layer, kept up to date move by move (the
-  accumulator) rather than recomputed. Integer weights, with SIMD (NEON, AVX2) in a marked
-  `unsafe` module. The HCE stays as a switchable mode; `EvalFile` loads another net.
+- **The net's definition** (`crates/nnue`, no I/O, decided 2026-10-23; the crate's docs and
+  chapter 21 have the details). Both the trainer and the engine use it:
+  - **Inputs:** 768 per side, numbered 384 × (0 ours, 1 theirs) + 64 × piece type (pawn 0 to
+    king 5) + square (a1 0 to h8 63), with the ranks flipped for Black's view. None depends on
+    the king's square, so no move forces a full recompute.
+  - **Layers:** a hidden layer of 256 per side, kept up to date move by move (the accumulator),
+    then one output from the side to move's half and the other side's. The size is read from the
+    file (any multiple of 32 up to 4096), so other sizes can be compared.
+  - **Activation:** SCReLU (clamp to 0..1, then square); CReLU is also supported, so the two
+    can be compared by SPRT on the same data.
+  - **Integers:** first-layer weights and biases as `i16` × 255, output weights `i16` × 64,
+    output bias `i32` × 255 × 64. Training clips every weight to ±1.98, so no legal position
+    can overflow (a hidden value peaks at 33 × 505 = 16,665).
+  - **File:** a 48-byte header that describes the net (format version, input set, hidden size,
+    activation, scales, eval scale) with an FNV-1a checksum, then the numbers, little-endian,
+    with one row of first-layer weights per input.
+- **Eval scale:** the net's output is in cb2026's own centipawns, so the search's margins, tuned
+  on the HCE, keep their meaning. The trainer fits the scale like the Texel tuner's `K`: `K` =
+  1.19 on 40,304 self-play positions (2026-10-23), which is σ(cp / 146). Using the usual 400
+  would let the score and result targets disagree and stretch the net's centipawns.
+- **Inference speed:** integer arithmetic in plain safe Rust, written so the compiler
+  vectorises it (NEON is always there on Apple Silicon). Hand-written SIMD, in a marked `unsafe`
+  module, comes only if measuring shows the evaluation is a hot spot the compiler misses
+  (CLAUDE.md rules 4 and 5); x86 releases would then need an AVX2 build or runtime CPU
+  detection. The HCE stays as a switchable mode; `EvalFile` loads another net.
 - **Data:** `datagen` self-play, with the HCE for the first net and each net's own games for the
   next, stores the search score as well as the game result, in a compact binary file. A first
   net needs about 100 million positions. `datagen` made about 190 a second per thread on the M1
@@ -676,7 +697,7 @@ The repository becoming public (planned, cjus/chessgui#71) makes its CI free.
 | M3 · Evaluation | Full HCE, eval trace, Texel tuner, self-play data generation, `eval`/`explain`/`tree`/`stats` (stages 15–16) | ≥2400 CCRL by gauntlet |
 | M4 · Complete engine | Lazy SMP, Syzygy, Polyglot, Chess960, MultiPV, pondering, levels, XBoard, Lichess bot, shell `match` command (stages 17–20) | GUI compatibility matrix passes; levels calibrated |
 | M5 · v1.0 release | Strength work towards 2600–2700, book finished, release binaries, robustness run | ≥2400 CCRL Blitz (goal 2600+); 10,000-game robustness run clean; book complete for stages 1–20 |
-| M6 · NNUE (stretch) | NNUE inference with SIMD, our own trainer (CPU reference and GPU via Metal), self-play data, HCE kept as a mode (stage 21; "Evaluation (NNUE, M6)") | Beats the HCE version by SPRT; book chapter done |
+| M6 · NNUE (stretch) | NNUE inference in vectorised integers, our own trainer (CPU reference and GPU via Metal), self-play data, HCE kept as a mode (stage 21; "Evaluation (NNUE, M6)") | Beats the HCE version by SPRT; book chapter done |
 
 **Gate results.** M0 passed on 2026-10-11: every perft suite exact (665,777,044 nodes, 0
 failures) at 278.8 million nodes/s on the M1 Max (cjus/chessengine#20).
@@ -821,6 +842,11 @@ about 26 s, and the M1 Max played about 970 games an hour.
       by hand, a CPU reference and a GPU backend through `wgpu` (Metal on the Mac). Inference in
       `crates/nnue`, the trainer in `crates/trainer`, outside the default build; nets published
       as release assets, not committed (Carlos, 2026-10-23).
+- [x] The first net (M6): 768 inputs per side, a hidden layer of 256, SCReLU (CReLU also
+      supported), integer scales 255 and 64 with weights clipped to ±1.98, an eval scale fitted
+      to cb2026's centipawns (about 146, not 400), a self-describing file with a checksum.
+      Inference in safe, compiler-vectorised Rust; hand-written SIMD only if measured (Carlos,
+      2026-10-23).
 - [x] Protocols: UCI, XBoard/CECP, Chess960, Lichess bot setup (2026-10-10).
 - [x] Shell: rich line-based REPL. No full-screen TUI at all: cb2026 is an engine used under
       chess GUIs (cjus/chessengine#9, 2026-10-10).

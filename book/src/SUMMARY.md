@@ -45,4 +45,4 @@
 
 # Part V: Neural networks
 
-- [NNUE]()
+- [NNUE](ch21-nnue.md)
