@@ -4,7 +4,8 @@
 //! ```text
 //! cargo run --release -p cb2026-tools --bin datagen -- \
 //!     --out data.txt [--format text|records] [--games 3000] [--nodes 6000] \
-//!     [--random-plies 8] [--threads 1] [--seed 1] [--openings tests/data/openings.epd]
+//!     [--random-plies 8] [--max-start-score N|off] [--threads 1] [--seed 1] \
+//!     [--openings tests/data/openings.epd]
 //! ```
 //!
 //! - `--format text` (the default), for the Texel tuner: each line is `FEN;result`, the result
@@ -12,6 +13,10 @@
 //! - `--format records`, for the NNUE trainer: 32-byte records with the whole position, the
 //!   search's score, the result and the best move (see `cb2026_nnue::record`). Files of records
 //!   can be joined with `cat`; `records` shows what one holds.
+//!
+//! `--max-start-score N` draws a game's random opening moves again while its start scores beyond
+//! `N` centipawns, so the games start roughly balanced; `off` keeps every start. The default is
+//! 200 for records and `off` for text, so the tuner's runs in chapter 16 can still be repeated.
 //!
 //! See `cb2026_tools::selfplay` for how games are played and which positions are kept.
 
@@ -25,7 +30,13 @@ use cb2026_tools::match_runner::parse_openings;
 use cb2026_tools::selfplay::{DatagenSettings, generate};
 
 const USAGE: &str = "Usage: datagen --out FILE [--format text|records] [--games N] [--nodes N] \
-[--random-plies N] [--threads N] [--seed N] [--openings FILE]";
+[--random-plies N] [--max-start-score N|off] [--threads N] [--seed N] [--openings FILE]";
+
+/// The largest start score, in centipawns, kept by default when writing records. Measured on
+/// 600 games (2026-10-23): with no limit 18.5% of the records were within ±100 cp and 37.5%
+/// beyond ±500; with 300, 24.4% and 27.9%; with 200, 30.0% and 25.3%, and White, draw and Black
+/// results of 41, 23 and 37% instead of 54, 17 and 29%. Records came as fast either way.
+const DEFAULT_MAX_START_SCORE: i32 = 200;
 
 /// What `datagen` writes.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -56,7 +67,9 @@ fn run() -> Result<(), String> {
         threads: 1,
         seed: 1,
         openings: Vec::new(),
+        max_start_score: None,
     };
+    let mut max_start_score = None;
     let mut openings_path = "tests/data/openings.epd".to_string();
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -74,6 +87,12 @@ fn run() -> Result<(), String> {
             "--games" => settings.games = number(value()?)? as usize,
             "--nodes" => settings.nodes = number(value()?)?,
             "--random-plies" => settings.random_plies = number(value()?)? as usize,
+            "--max-start-score" => {
+                max_start_score = Some(match value()?.as_str() {
+                    "off" => None,
+                    text => Some(number(text.to_string())?.min(i32::MAX as u64) as i32),
+                })
+            }
             "--threads" => settings.threads = number(value()?)? as usize,
             "--seed" => settings.seed = number(value()?)?,
             "--openings" => openings_path = value()?,
@@ -81,6 +100,10 @@ fn run() -> Result<(), String> {
         }
     }
     let out = out.ok_or("--out is required")?;
+    settings.max_start_score = max_start_score.unwrap_or(match format {
+        Format::Records => Some(DEFAULT_MAX_START_SCORE),
+        Format::Text => None,
+    });
     let text = std::fs::read_to_string(&openings_path)
         .map_err(|e| format!("can't read {openings_path}: {e}"))?;
     settings.openings = parse_openings(&text);

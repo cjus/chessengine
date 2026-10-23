@@ -4,7 +4,9 @@
 //! of the game it came from; the NNUE trainer also needs the search's score. This module
 //! produces them:
 //!
-//! 1. Start from an opening position and play a few **random moves**, so games differ.
+//! 1. Start from an opening position and play a few **random moves**, so games differ. Random
+//!    moves often leave one side far ahead, so optionally (`max_start_score`) the start is
+//!    searched and the random moves are drawn again until it is roughly balanced.
 //! 2. Let the engine play both sides with a small **fixed node count** per move (fast, and the
 //!    same on any machine).
 //! 3. **Record quiet positions**: not in check, best move not a capture or promotion, no mate
@@ -71,6 +73,9 @@ pub struct DatagenSettings {
     pub seed: u64,
     /// Opening positions, used in turn.
     pub openings: Vec<String>,
+    /// If set, a start (opening plus random moves) whose search score is beyond this many
+    /// centipawns is drawn again, so games start roughly balanced. `None` keeps every start.
+    pub max_start_score: Option<i32>,
 }
 
 /// A recorded position: its FEN and the game's result from White's side (1, 0.5 or 0).
@@ -251,9 +256,19 @@ fn is_quiet(pos: &Position, best: Move) -> bool {
 /// The starting position for game `index`: an opening, then random legal moves (stopping
 /// early if a random move ends the game).
 pub fn starting_position(settings: &DatagenSettings, index: usize) -> Position {
+    random_start(settings, index, 0)
+}
+
+/// Try `attempt` at a start for game `index`. Try 0 is [`starting_position`]'s; each later try
+/// draws other random moves from the same opening.
+fn random_start(settings: &DatagenSettings, index: usize, attempt: u64) -> Position {
     let fen = &settings.openings[index % settings.openings.len()];
     let mut position = Position::from_fen(fen).expect("opening FENs are valid");
-    let mut rng = Rng::new(settings.seed.wrapping_add(index as u64));
+    let seed = settings
+        .seed
+        .wrapping_add(index as u64)
+        .wrapping_add(attempt.wrapping_mul(ATTEMPT_SEED_STEP));
+    let mut rng = Rng::new(seed);
     for _ in 0..settings.random_plies {
         let moves = position.legal_moves();
         if moves.is_empty() {
@@ -268,6 +283,52 @@ pub fn starting_position(settings: &DatagenSettings, index: usize) -> Position {
         position = next;
     }
     position
+}
+
+/// How many times a start's random moves are drawn before giving up on a balanced one.
+const START_ATTEMPTS: u64 = 20;
+/// Spaces out the random seeds of successive tries, so they don't overlap other games' seeds.
+const ATTEMPT_SEED_STEP: u64 = 0x9e37_79b9_7f4a_7c15;
+
+// ANCHOR: balanced_start
+/// The start for game `index`, roughly balanced if `settings.max_start_score` is set: each try
+/// is searched like a move of the game, and the first that scores within the limit is used. If
+/// none of the `START_ATTEMPTS` (20) tries does, the most balanced is.
+pub fn balanced_start(engine: &mut Engine, settings: &DatagenSettings, index: usize) -> Position {
+    let Some(limit) = settings.max_start_score else {
+        return starting_position(settings, index);
+    };
+    let mut best: Option<(i32, Position)> = None;
+    for attempt in 0..START_ATTEMPTS {
+        let start = random_start(settings, index, attempt);
+        let imbalance = start_score(engine, &start, settings.nodes);
+        if imbalance <= limit {
+            return start;
+        }
+        if best.as_ref().is_none_or(|(b, _)| imbalance < *b) {
+            best = Some((imbalance, start));
+        }
+    }
+    best.expect("at least one try").1
+}
+// ANCHOR_END: balanced_start
+
+/// How far from level a start is: the size of its search score in centipawns, with a mate
+/// counted as the largest imbalance.
+fn start_score(engine: &mut Engine, start: &Position, nodes: u64) -> i32 {
+    engine.new_game();
+    let limits = Limits {
+        nodes: Some(nodes),
+        ..Limits::default()
+    };
+    let mut score = None;
+    engine.search(start, &[], &limits, &AtomicBool::new(false), &mut |info| {
+        score = Some(info.score)
+    });
+    match score {
+        Some(Score::Centipawns(cp)) => cp.abs(),
+        Some(Score::Mate(_)) | None => i32::MAX,
+    }
 }
 
 /// Plays `settings.games` games on `settings.threads` threads, calling `on_game` with each
@@ -286,7 +347,7 @@ pub fn generate(settings: &DatagenSettings, on_game: &(dyn Fn(usize, PlayedGame)
                     if index >= settings.games {
                         break;
                     }
-                    let start = starting_position(settings, index);
+                    let start = balanced_start(&mut engine, settings, index);
                     let game = play_game(&mut engine, &start, settings.nodes);
                     let _guard = report.lock().unwrap_or_else(|e| e.into_inner());
                     on_game(index, game);
@@ -359,6 +420,56 @@ mod tests {
         }
     }
 
+    fn settings_from(opening: &str, max_start_score: Option<i32>) -> DatagenSettings {
+        DatagenSettings {
+            games: 1,
+            nodes: 1000,
+            random_plies: 8,
+            threads: 1,
+            seed: 3,
+            openings: vec![opening.to_string()],
+            max_start_score,
+        }
+    }
+
+    #[test]
+    fn without_a_limit_the_start_is_the_first_random_one() {
+        let settings = settings_from(cb2026_chess::STARTING_FEN, None);
+        for index in 0..3 {
+            let start = balanced_start(&mut Engine::new(), &settings, index);
+            assert_eq!(start.to_fen(), starting_position(&settings, index).to_fen());
+        }
+    }
+
+    #[test]
+    fn with_a_limit_the_start_is_balanced() {
+        let settings = settings_from(cb2026_chess::STARTING_FEN, Some(100));
+        let mut engine = Engine::new();
+        for index in 0..4 {
+            let start = balanced_start(&mut engine, &settings, index);
+            assert!(
+                start_score(&mut engine, &start, settings.nodes) <= 100,
+                "{}",
+                start.to_fen()
+            );
+        }
+    }
+
+    #[test]
+    fn when_no_start_is_balanced_the_most_balanced_is_used() {
+        // Black has no queen: no random moves make that level, so every try fails the limit.
+        let opening = "rnb1kbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+        let settings = settings_from(opening, Some(50));
+        let mut engine = Engine::new();
+        let start = balanced_start(&mut engine, &settings, 0);
+        let chosen = start_score(&mut engine, &start, settings.nodes);
+        assert!(chosen > 50);
+        for attempt in 0..START_ATTEMPTS {
+            let other = random_start(&settings, 0, attempt);
+            assert!(chosen <= start_score(&mut engine, &other, settings.nodes));
+        }
+    }
+
     #[test]
     fn random_openings_differ_but_are_reproducible() {
         let settings = DatagenSettings {
@@ -368,6 +479,7 @@ mod tests {
             threads: 1,
             seed: 1,
             openings: vec![cb2026_chess::STARTING_FEN.to_string()],
+            max_start_score: None,
         };
         let a = starting_position(&settings, 0);
         let b = starting_position(&settings, 1);

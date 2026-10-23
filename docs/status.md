@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-23, 13:15 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-23, 13:17 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -76,7 +76,7 @@ the tablebase tests run again, the download script following the mirror's new di
 sections, #177; NNUE training records, 32 bytes each, written by `datagen --format records`
 and shown by `records`, #178; the first Lichess opening book building on the M3, #174, with
 the second version of larger reductions when the hash move is a capture, off the principal
-variation, next, #179.*
+variation, next, #179; balanced starts for records, beyond 200 cp drawn again, #180.*
 
 ## Stages
 
@@ -96,7 +96,7 @@ variation, next, #179.*
 | 18 Polyglot books | Merged | #50 | 1207153 | No functional change (book off by default) |
 | 19 Levels, MultiPV | Merged | #51 | 1207153 | No functional change at full strength; levels not yet calibrated (#36) |
 | 20 XBoard, pondering, conformance tests, Lichess docs | Merged | #52 | 1207153 | No functional change |
-| 21 NNUE | In progress | #177 (the net's definition), #178 (training records) | 749181 | No functional change yet; M6 stretch goal |
+| 21 NNUE | In progress | #177 (the net's definition), #178 (training records), #180 (balanced starts) | 749181 | No functional change yet; M6 stretch goal |
 
 ### Built on top of stage 20 (not stages)
 
@@ -559,10 +559,9 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    32 bytes each, with the whole position (castling rights as rooks that can still castle, so
    Chess960 works), the search score and result from White's side, and the best move;
    `datagen --format records` writes them and `records` checks a file. Next, in order:
-   - **Balanced openings for the data.** In a 60-game sample (2026-10-23) only 16% of the
-     recorded positions were within ±100 cp and 45% beyond ±500: 8 random plies on top of an
-     8-ply opening often leave one side far ahead. Before the long run on the M3, consider
-     dropping a game whose start scores beyond a few hundred centipawns, as many engines'
-     data generators do, or fewer random plies.
+   - Done: **balanced starts** (#180). For records, `datagen` draws a start's random moves
+     again while it scores beyond 200 cp. On 600 games: records within ±100 cp 18.5% → 30.0%,
+     beyond ±500 37.5% → 25.3%, White's wins 54% → 41%, at the same speed. Limits of 300 and
+     100, and 4 random plies, were measured too (chapter 21).
    - The CPU trainer, then the GPU backend; the engine's inference alongside.
    - The first ~100M-position run on the M3 (about 12 hours), Carlos's to start.
