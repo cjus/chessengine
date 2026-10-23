@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-23, 02:04 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-23, 06:56 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -63,7 +63,8 @@ moment the last one answered is taken, no longer refused as `Busy` while the ans
 thread ends (found by Solrac's chat, whose review sends two searches in a row); GitHub no longer
 checks PRs, to save Actions minutes: `scripts/check.sh` checks a PR before it merges, `main`'s
 ruleset requires no check, and CI runs nightly only if `main` changed (Carlos). 2026-10-23:
-larger reductions after many fail highs merged on, +12.8 ± 8.2, #165.*
+larger reductions after many fail highs merged on, +12.8 ± 8.2, #165; Stockfish 17's version of
+them running on the M3, #167.*
 
 ## Stages
 
@@ -132,9 +133,19 @@ larger reductions after many fail highs merged on, +12.8 ± 8.2, #165.*
 | M5: smaller reductions at expected all-nodes (chapter 14.1) | #158 | 1072184 (1284421 with them on) | Merged, off by default: −8.5 ± 8.4, 2,993 games, [0, 5] failed (M3 Max) |
 | M5: smaller reductions where the principal variation was, Stockfish's `ttPv` (chapter 14.1) | #160 | 1072184 (1198340 with them on) | Merged, off by default: +0.3 ± 5.2, 8,100 games, [0, 5] no verdict (LLR −1.57), stopped (M3 Max) |
 | M5: larger reductions after many fail highs, as in Stockfish (chapter 14.1) | #165 | 767859 | Merged: +12.8 ± 8.2, 3,144 games, [0, 5] passed (M3 Max) |
+| M5: larger reductions after many fail highs in Stockfish 17's version (chapter 14.1) | #167, `claude/cutoff-reductions-sf17` | 749181 | Draft, its SPRT running on the M3 Max: [0, 5] at 8+0.08 |
 
-**Nothing is running on the M3.** v1.0's last gate is the GUI matrix (#37), on Carlos's Mac.
-Once that is recorded, the version PR (#154) merges and Carlos tags `v1.0.0`. `main` has changed
+**Running now: #167** (larger reductions after many fail highs in Stockfish 17's version: 2
+plies at an expected all-node, and a fail high by a doubly extended move counted once less;
+chapter 14.1), started on the M3 on 2026-10-23 at about 06:50 MDT. A clear result should take
+1–3 hours, a small difference 5–8. A new session should restart the watcher,
+`scripts/watch-sprt.sh 167`, or just read #167's comments if the result is already there. Then
+rebase #167 onto `main` (in `docs/status.md` take `main`'s side and edit it), record the result
+in chapter 14.1, the search module docs, the parameters' comments, the ledger and this file, run
+`scripts/check.sh`, and merge. If it fails or has no verdict, set `lmr_cutoff_all_node_plies`
+to 0 and `cutoff_count_double_extended` to 1 (Stockfish 16's version, `main`'s), and merge as a
+record. It doesn't hold up v1.0: the last gate is the GUI matrix (#37), on Carlos's Mac. Once
+that is recorded, the version PR (#154) merges and Carlos tags `v1.0.0`. `main` has changed
 since the robustness run (#146) in search only, through reductions (#155, #165): no change to
 time handling.
 
@@ -477,7 +488,7 @@ Run the full test suite on every commit you replay, not only at the tip: each be
      as in Stockfish 16 (GPL-3.0, about 5 Elo by its own comment), passed (#165, +12.8 ± 8.2).
      Untested from Stockfish 17: a ply more of reduction when the hash move is a capture (about
      3 Elo by its comment), and its version of #165 (2 plies at expected all-nodes; chapter
-     14.1).
+     14.1; #167, running).
    - **Tuning singular extensions, continued**: depth 6 passed (#78) and depth 4 too (#80),
      which is about where Stockfish starts; `singular_margin` 3 passed too (#82), and 4
      failed (#84); `singular_tt_depth_margin` 4 failed against 3 (#123, −7.4 ± 8.0). That
