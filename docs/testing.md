@@ -84,7 +84,7 @@ followed by the reasons for the first few. A time loss names the move, how long 
 took and what was on its clock:
 
 ```text
-  White (cb2026 0.1.0) lost on time at move 87: took 412 ms with 260 ms on its clock
+  White (cb2026 1.0.0) lost on time at move 87: took 412 ms with 260 ms on its clock
 ```
 
 A little over the clock points at the engine's time management or its `Move Overhead`; hundreds

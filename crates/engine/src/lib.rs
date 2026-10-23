@@ -121,7 +121,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// The engine's authors, as reported to GUIs (`id author` in UCI).
 pub const AUTHOR: &str = "the cb2026 authors";
 
-/// The full engine identification, for example `cb2026 0.1.0`.
+/// The full engine identification, for example `cb2026 1.0.0`.
 ///
 /// GUIs show this string in their engine lists, so it includes the version: testers need to
 /// know exactly which build played a game.

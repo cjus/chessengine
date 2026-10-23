@@ -10,13 +10,14 @@ checksum = "3bc62ac97cc33321f50863d514c3bc38a453947a8f9e781137e47c7401020aed"
 
 [[package]]
 name = "cb2026-chess"
-version = "0.1.0"
+version = "1.0.0"
 
 [[package]]
 name = "cb2026-engine"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "cb2026-chess",
+ "cb2026-nnue",
 ]
 
 [[package]]
@@ -30,8 +31,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cb2026-nnue"
+version = "1.0.0"
+dependencies = [
+ "cb2026-chess",
+]
+
+[[package]]
 name = "cb2026-protocol"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "cb2026-chess",
  "cb2026-engine",
