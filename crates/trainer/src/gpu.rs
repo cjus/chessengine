@@ -26,7 +26,7 @@
 //! So the CPU sorts each batch's rows by input first (a counting sort: `offsets` and
 //! `entries`), and then each weight adds up its own list with nobody else writing to it. The
 //! lists are in a fixed order, so the GPU gives the same result every time. The sorting, with
-//! the decoding of the records, is shared among the trainer's threads (see [`prepare`]).
+//! the decoding of the records, is shared among the trainer's threads (see `prepare`).
 //!
 //! The lists are very uneven. In a batch of 16,384 the average input is on in about 700 of the
 //! 32,768 rows, but a king on its first square is on in over 11,000. With one invocation per
