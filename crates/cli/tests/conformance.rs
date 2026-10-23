@@ -213,6 +213,29 @@ fn uci_game_over_position() {
 }
 
 #[test]
+fn uci_string_option_cleared_with_an_empty_value() {
+    // A GUI clears a path option by sending `value` with nothing after it (some with a
+    // trailing space); the option must be set to empty, not taken for an unknown one.
+    let lines = run(
+        &[
+            Step("uci", 0),
+            Step("setoption name BookFile value", 0),
+            Step("setoption name SyzygyPath value ", 0),
+            Step("isready", 300),
+            Step("quit", 0),
+        ],
+        "\n",
+    );
+    let texts = texts(&lines);
+    assert!(texts.contains(&"info string no opening book"), "{texts:?}");
+    assert!(
+        !texts.iter().any(|t| t.contains("unknown option")),
+        "{texts:?}"
+    );
+    assert!(texts.contains(&"readyok"));
+}
+
+#[test]
 fn xboard_game_with_clock() {
     let lines = run(
         &[

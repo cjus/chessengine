@@ -18,6 +18,7 @@ binary the way GUIs do, including their awkward habits, and checks every respons
 | Very short clocks (50 ms) | `uci_very_short_clock` |
 | `stop` straight after `go` | `uci_stop_straight_after_go` |
 | A position with no legal move | `uci_game_over_position` |
+| A string option cleared with an empty value (`setoption name BookFile value`) | `uci_string_option_cleared_with_an_empty_value` |
 | An XBoard game with clock, pondering and thinking output | `xboard_game_with_clock` |
 
 The protocol crates' unit tests cover the rest of each protocol (pondering, MultiPV,
