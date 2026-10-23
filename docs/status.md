@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-23, 09:47 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-23, 12:10 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -68,7 +68,8 @@ them merged, +13.7 ± 8.5, #167; a string option cleared with an empty value (`s
 value`, as GUIs clear one) is set to empty, no longer taken for an unknown option, found during
 the GUI matrix, #169; with MultiPV in XBoard mode every line is sent, each depth's best last as
 XBoard expects, no longer the best line only, also found during the GUI matrix, #170; larger
-reductions when the hash move is a capture running on the M3, #171.*
+reductions when the hash move is a capture running on the M3, #171; stage 21's plan in the PRD:
+our own NNUE trainer, with a CPU reference and a GPU backend through wgpu on Metal (Carlos).*
 
 ## Stages
 
@@ -535,3 +536,9 @@ Run the full test suite on every commit you replay, not only at the tip: each be
      1 to 20; NNUE (stage 21) is still to come.
    - Then Carlos tags `v1.0.0` (cloud sessions can't push tags), and the Release workflow builds
      the binaries and a draft release for him to check and publish.
+
+   Stage 21's plan is in the PRD, "Evaluation (NNUE, M6)" (Carlos, 2026-10-23): our own trainer
+   for its teaching value, a CPU reference and a GPU backend through wgpu (Metal on the Mac), in
+   `crates/trainer`; inference in `crates/nnue`; nets as release assets. The net's definition,
+   `datagen`'s scores and the trainer don't change how the engine plays, so they can start
+   before the engine's inference, and before v1.0 is tagged. The first SPRT needs both.
