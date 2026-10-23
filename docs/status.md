@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-23, 15:37 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-23, 16:30 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -82,7 +82,9 @@ NNUE trainer, about 2.4 million records a second on the M1 Max, #182; the engine
 an NNUE network when one is loaded (`EvalFile`), #185; the trainer trains on the GPU through
 wgpu on Metal, 1.2× the CPU at a hidden layer of 256 and 2.8× at 1,024 on the M1 Max, #186;
 measuring it on the M3 Max is Carlos's, #187; the GPU backend prepares batches on all the
-trainer's threads, 5.3 million records a second at 256 instead of 2.7, the same network, #188.*
+trainer's threads, 5.3 million records a second at 256 instead of 2.7, the same network, #188;
+`scripts/mac-nnue-data.sh` makes the first net's data on the M3 in resumable chunks and trains
+on it, #189; the run itself is Carlos's, #190.*
 
 ## Stages
 
@@ -614,5 +616,17 @@ Run the full test suite on every commit you replay, not only at the tip: each be
      cores, GPU and bandwidth all differ from the M1 Max's, so the GPU's lead may differ there;
      its table picks the backend for the long runs. Record it in chapter 21 ("Other Macs"), the
      PRD and here.
-   - Then the first ~100M-position run on the M3 (about 12 hours, Carlos's to start), training
-     (minutes), and the SPRT, net against HCE.
+   - Done: **the data run's script** (#189), `scripts/mac-nnue-data.sh`: HCE self-play to 100M
+     positions in chunks of 56,000 games (about half an hour each), each its own file in
+     `~/nnue-data/gen1`, so a rerun after a stop keeps the finished chunks; chunk k's seeds start
+     at 1 + k × 56,000, so no chunk repeats a game. Then it checks every record, trains nets of
+     256 and 512 on the GPU, benches each, and posts a report. Tested at a tiny size on the M1
+     Max, including an interrupted chunk redone with the same records.
+   - Next: **#190 (Carlos)**, the run itself on the M3 Max, about 12 hours; it doesn't need #187
+     first. Then copy the two nets to the M1 Max.
+   - Then (Claude): sanity checks on the nets (bench nodes near the HCE's, evaluations of known
+     positions, mirrored positions), a way for `mac-sprt.sh` to give one side a net
+     (`EvalFile`, through the match tool's `--first-option`), and the SPRT, net against HCE,
+     which stage 21 is judged by. If it passes: the net as a release asset, embedded in release
+     builds, the levels recalibrated. If not: more data, the eval scale and result weight, or a
+     second generation from the net's own games.
