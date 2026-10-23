@@ -36,7 +36,8 @@ Optional extras for stronger play:
 
 - **Syzygy tablebases:** `scripts/download-syzygy.sh <dir> 3-4-5` fetches the 3–5 piece tables
   (about 1 GB). Pass the directory as `SyzygyPath` below.
-- **Opening book:** any Polyglot `.bin` book, through lichess-bot's own book support or
+- **Opening book:** any Polyglot `.bin` book, such as one made from Lichess's own games by
+  `scripts/lichess-book.sh` (book chapter 18), through lichess-bot's own book support or
   cb2026's `OwnBook` + `BookFile` options (use one, not both).
 
 ## 3. Install and configure lichess-bot

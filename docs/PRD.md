@@ -257,7 +257,7 @@ teaching value, and the trainer uses the Mac's GPU through Metal.
 | Feature | Priority | Notes |
 | --- | --- | --- |
 | Syzygy endgame tablebases | Must | WDL probes in search, DTZ at the root; `SyzygyPath`, `SyzygyProbeDepth`, `SyzygyProbeLimit`. Probed through `shakmaty-syzygy`, see below |
-| Polyglot opening book | Must | Our own `.bin` reader; `OwnBook` and `BookFile` options; off by default so testing isn't affected |
+| Polyglot opening book | Must | Our own `.bin` reader; `OwnBook` and `BookFile` options; off by default so testing isn't affected. The `make-book` tool makes a book from people's games, such as Lichess's (`scripts/lichess-book.sh`) |
 | MultiPV | Must | Up to 256 lines |
 | Strength limiting | Must | `UCI_LimitStrength`, `UCI_Elo`, `Skill Level` (see "Levels") |
 | Win/draw/loss output | Should | `UCI_ShowWDL`, from a model fitted to our self-play results |
@@ -710,6 +710,8 @@ The repository becoming public (planned, cjus/chessgui#71) makes its CI free.
   release assets, not committed (see "Evaluation (NNUE, M6)").
 - Test books, EPD suites and reference engines are downloaded by scripts, with their source and
   licence noted, and are not committed unless their licence allows it.
+- Opening books for play are made from Lichess's games, which are CC0, by
+  `scripts/lichess-book.sh`, and are not committed (cjus/chessengine#173).
 - Name: a web search on 2026-10-10 found no chess engine called cb2026. Check the CCRL and CPW
   engine lists and trademarks again before the repo goes public.
 
