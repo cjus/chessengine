@@ -215,6 +215,15 @@
 //! `lmr_cutoff_all_node_plies` (1) larger again, and a fail high by a doubly extended move adds
 //! `cutoff_count_double_extended` (0) to the count instead of 1.
 //!
+//! ## Reductions when the hash move is a capture
+//!
+//! When the hash move is a capture (or a promotion to a queen), late quiet moves are reduced
+//! `lmr_tt_capture` (1) more. As in Stockfish 16 and 17 (GPL-3.0), whose comment rates it "~3
+//! Elo" without saying why; the code here is cb2026's own. A plausible reason: the node's best
+//! move is probably that capture, and a quiet move searched late seldom does better. It failed:
+//! −6.5 ± 7.7 Elo after 3,668 games at 8+0.08 (cjus/chessengine#171), so it is off by default;
+//! see chapter 14.1.
+//!
 //! ## History pruning
 //!
 //! Late move pruning skips quiet moves by how late they come; **history pruning** skips them by
@@ -436,6 +445,9 @@ pub struct SearchParams {
     /// What a fail high by a doubly extended move adds to its ply's count of fail highs, besides
     /// the one more for a node without a hash move (any other move adds 1).
     pub cutoff_count_double_extended: u32,
+    /// Late move reductions are this many plies larger when the hash move is a capture (see
+    /// [`Techniques::tt_capture_reductions`]).
+    pub lmr_tt_capture: i32,
     /// Late move pruning applies up to this depth...
     pub lmp_max_depth: u32,
     /// ...once `lmp_base + depth²` quiet moves have been tried...
@@ -542,6 +554,8 @@ impl Default for SearchParams {
             // (cjus/chessengine#167); 0 and 1 give Stockfish 16's (cjus/chessengine#165).
             lmr_cutoff_all_node_plies: 1,
             cutoff_count_double_extended: 0,
+            // As in Stockfish 16 and 17 (GPL-3.0); it failed at 1 (cjus/chessengine#171).
+            lmr_tt_capture: 1,
             lmp_max_depth: 3,
             lmp_base: 3,
             // Doubling it when improving was part of both failed versions (#60, #63).
@@ -662,6 +676,9 @@ pub struct Techniques {
     /// Reduce late moves more when the next ply has had many fail highs: the moves here are
     /// being refuted (needs LMR).
     pub cutoff_reductions: bool,
+    /// Reduce late moves more when the hash move is a capture (needs LMR and the
+    /// transposition table; off by default).
+    pub tt_capture_reductions: bool,
     /// Late move pruning: skip late quiet moves near the leaves.
     pub late_move_pruning: bool,
     /// History pruning: skip quiet moves with a bad history near the leaves (off by default).
@@ -749,6 +766,9 @@ impl Default for Techniques {
             // Passed its SPRT: +12.8 ± 8.2 Elo after 3,144 games at 8+0.08
             // (cjus/chessengine#165); see chapter 14.1.
             cutoff_reductions: true,
+            // Off by default: it failed its SPRT, −6.5 ± 7.7 Elo after 3,668 games at 8+0.08
+            // (cjus/chessengine#171); see chapter 14.1.
+            tt_capture_reductions: false,
             late_move_pruning: true,
             // Off by default: it measured weaker, −5.3 ± 7.1 Elo after 4,548 games at 8+0.08
             // (cjus/chessengine#140); see chapter 13.1.
@@ -799,6 +819,7 @@ impl Techniques {
             all_node_reductions: false,
             tt_pv: false,
             cutoff_reductions: false,
+            tt_capture_reductions: false,
             late_move_pruning: false,
             history_pruning: false,
             reverse_futility: false,
@@ -1643,6 +1664,13 @@ impl<'a> Searcher<'a> {
                     }
                 }
                 // ANCHOR_END: cutoff_reduction
+                // ANCHOR: tt_capture_reduction
+                // Reduce more when the hash move is a capture: it is probably the best move,
+                // and a quiet move this late seldom beats it.
+                if self.techniques.tt_capture_reductions && tt_move.is_some_and(is_noisy) {
+                    reduction += p.lmr_tt_capture;
+                }
+                // ANCHOR_END: tt_capture_reduction
                 // ANCHOR: all_node_reduction
                 // Reduce less at an expected all-node: every move has to fail low for its
                 // score to hold, so a late move that is wrongly reduced into failing low
@@ -2629,6 +2657,21 @@ mod tests {
         let nodes = |cutoff_reductions, lmr| {
             let techniques = Techniques {
                 cutoff_reductions,
+                lmr,
+                ..Techniques::default()
+            };
+            search(fen, 7, techniques).nodes
+        };
+        assert_ne!(nodes(true, true), nodes(false, true));
+        assert_eq!(nodes(true, false), nodes(false, false));
+    }
+
+    #[test]
+    fn tt_capture_reductions_change_the_tree_only_through_late_move_reductions() {
+        let fen = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
+        let nodes = |tt_capture_reductions, lmr| {
+            let techniques = Techniques {
+                tt_capture_reductions,
                 lmr,
                 ..Techniques::default()
             };

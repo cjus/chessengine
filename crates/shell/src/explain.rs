@@ -145,6 +145,11 @@ pub const SWITCHES: &[Switch] = &[
         flag: |e| &mut e.techniques.cutoff_reductions,
     },
     Switch {
+        name: "ttcapture",
+        description: "TT capture: late moves reduced more when the hash move is a capture (off by default)",
+        flag: |e| &mut e.techniques.tt_capture_reductions,
+    },
+    Switch {
         name: "lmp",
         description: "Late move pruning",
         flag: |e| &mut e.techniques.late_move_pruning,
