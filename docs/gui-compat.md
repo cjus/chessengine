@@ -42,19 +42,72 @@ How to run each check:
 
 `✓` works, `✗` fails (link the issue), `–` not applicable, blank: not checked yet.
 
-### Release 1.0 (stage 20)
+### Release 1.0
 
-| GUI | Platform | Load | Options | Analysis + MultiPV | Timed game | Chess960 | Pondering | Add / remove |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| En Croissant | macOS | | | | | | | |
-| Cute Chess | macOS | | | – | | | | |
-| Scid vs. PC | macOS | | | | | | | |
-| XBoard (CECP mode, `cb2026 --xboard`) | macOS | | | | | | | |
-| HIARCS Chess Explorer | macOS | | | | | | | |
-| ChessBase | Windows | | | | | | | |
-| lichess-bot (`docs/lichess.md`) | macOS | | – | – | | | | – |
+Checked by Carlos on the M1 Max by 2026-10-23 (cjus/chessengine#37), with
+`cb2026 1.0.0` built from the version branch (cjus/chessengine#154). The branch was rebuilt as
+fixes landed; its last build, at `cb2170b` (bench 749,181), had both fixes below and
+Stockfish 17's cutoff reductions (#167), a search change only. Earlier rows were checked on
+builds without some of these, and only the cells a fix touched were checked again.
 
-Notes from the checks go here, with the GUI's version.
+| GUI | Version | Platform | Load | Options | Analysis + MultiPV | Timed game | Chess960 | Pondering | Add / remove |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| En Croissant | 0.15.1 | macOS | ✓ | ✓ | ✓ | ✓ | ✓ | – | ✓ |
+| Cute Chess | 1.5.1 (built from source, Qt 6.12.0) | macOS | ✓ | ✓ | – | ✓ | ✓ | ✓ | ✓ |
+| Scid vs. PC | | macOS | | | | | | | |
+| XBoard (CECP mode, `cb2026 --xboard`) | 4.9.1 (Homebrew, XQuartz) | macOS | ✓ | ✓ | ✓ (after #170) | ✓ | ✓ | ✓ | ✓ |
+| HIARCS Chess Explorer Pro | 1.5.2 | macOS | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| ChessBase | | Windows | | | | | | | |
+| lichess-bot (`docs/lichess.md`) | | macOS | | – | – | | | | – |
+
+The timed games were 3+2, with no illegal moves or time losses. Not checked for 1.0: Scid vs.
+PC; ChessBase, which waits for the Windows build (cjus/chessengine#11); and lichess-bot, whose
+games follow the release (cjus/chessengine#191; Carlos, 2026-10-23).
+
+`EvalFile`, the option for an NNUE network, came after these checks (#185). It is a string
+option like `BookFile` and `SyzygyPath`, which every GUI here showed, and the protocol tests
+cover it.
+
+**Found and fixed during the checks:**
+- **An empty string option** (`setoption name BookFile value`, which is how GUIs clear a path)
+  was taken for an unknown option, so the old book or tablebases stayed in use. Found in En
+  Croissant; fixed in #169.
+- **MultiPV in XBoard mode** showed one line per depth, because the XBoard adapter sent only
+  the first. Since #170 it sends every line, with each depth's best last: XBoard sorts the lines
+  by score to show them, but takes the last one as the engine's score and PV for the PGN, the
+  evaluation graph and adjudication.
+
+**Notes by GUI, from these checks:**
+
+- **En Croissant** (0.15.1):
+  - The version is in the engine's name. Its Version field stays empty for an engine added from
+    a file: it is filled only for engines from its own download list, and UCI has no version
+    field.
+  - It never sends `go ponder`, so pondering is "–".
+  - It plays Chess960 only from a Chess960 starting position, and sets `UCI_Chess960` itself.
+    Set one up with the board's Edit position button and the "Enter FEN" box before starting.
+    It was checked from `rnbkqbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBKQBNR w KQkq - 0 1`, which En
+    Croissant names Fischer Random 534.
+  - Its engine page lists every option except the button (Clear Hash). SyzygyPath gets a folder
+    picker and BookFile a file box.
+- **Cute Chess** (1.5.1):
+  - It has no release for macOS, so it was built from its v1.5.1 tag.
+  - It names an engine after its file (`cb2026`), not its `id name`.
+  - It has no analysis mode, so that is "–". Chess960 is its variant `fischerandom`, and
+    pondering is "Thinking on opponent's time" in the game settings.
+  - In dark mode its Add (+) button is nearly invisible.
+- **XBoard** (4.9.1):
+  - Its title shows `cb2026 1.0.0`.
+  - Only Skill Level and MultiPV are engine options in its protocol. Hash, CPUs and the
+    tablebase path are under Engine → Common Settings.
+  - Pondering is Options → General Options → Ponder Next Move.
+  - An engine started with `-fcp` isn't added to Engine → Engine List. It is added through
+    Engine → Load New 1st Engine, with "Add this engine to the list" ticked.
+- **HIARCS Chess Explorer Pro** (1.5.2):
+  - It shows `cb2026 1.0.0`.
+  - Analysis is View → Analysis Explorer, with a "lines" field for MultiPV.
+  - Games are under Play → New game…, with the time control, "Think on player's time" and
+    Chess960 (Starting Position).
 
 ## GUI notes
 

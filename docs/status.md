@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-23, 16:33 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-23, 16:44 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -84,7 +84,10 @@ wgpu on Metal, 1.2× the CPU at a hidden layer of 256 and 2.8× at 1,024 on the 
 measuring it on the M3 Max is Carlos's, #187; the GPU backend prepares batches on all the
 trainer's threads, 5.3 million records a second at 256 instead of 2.7, the same network, #188;
 `scripts/mac-nnue-data.sh` makes the first net's data on the M3 in resumable chunks and trains
-on it, #189; the run itself is Carlos's, #190.*
+on it, #189; the run itself is Carlos's, #190; `ci.yml` loads again after #186 broke it (a
+command ending in a colon), #192; **the GUI matrix passed**, so M4 passed, in En Croissant,
+Cute Chess, XBoard and HIARCS Chess Explorer, #37, and M1 with it, #24; the Lichess bot's games
+follow v1.0, #191; the first Lichess book goes into the v1.0.0 release, #183.*
 
 ## Stages
 
@@ -162,13 +165,19 @@ on it, #189; the run itself is Carlos's, #190.*
 speed (#187, a few minutes) and stage 21's data run, the first net's records and its training
 (#190, about 12 hours; it doesn't need #187 first). No SPRT candidate is chosen yet.
 
-v1.0's last gate is the GUI matrix (#37), on Carlos's Mac. En
-Croissant, Cute Chess and XBoard are done, with two fixes found on the way (#169, #170); HIARCS
-Chess Explorer (installed 2026-10-23) is done but for adding and removing the engine; ChessX is
-optional; then the Lichess bot. The results so far are in
-a comment on #37. Once the matrix is recorded, the version PR (#154) merges and Carlos tags
-`v1.0.0`. `main` has changed since the robustness run (#146) in search only through reductions
-(#155, #165, #167), and in those two protocol fixes: no change to time handling.
+**v1.0's gates have all passed.** The GUI matrix, the last, passed on 2026-10-23 (#37, recorded
+in `docs/gui-compat.md` and the PRD): En Croissant, Cute Chess, XBoard and HIARCS Chess Explorer
+on the M1 Max, with two fixes found on the way (#169, #170). The Lichess bot's two games follow
+the release (Carlos, 2026-10-23, #191), and Scid vs. PC and ChessBase weren't checked. Next:
+1. the version PR (#154) is rebased onto `main`, checked and merged;
+2. Carlos tags `v1.0.0`, and the Release workflow makes a draft release;
+3. the book is uploaded to the draft (`docs/releasing.md`; #183);
+4. Carlos checks the draft and publishes it.
+
+`main` has changed since the robustness run (#146) in search only through reductions (#155,
+#165, #167), and in the two protocol fixes. Since the GUI matrix it has gained NNUE inference
+(#185), which plays only when a net is loaded with the new `EvalFile` option: the bench is
+unchanged. There is no change to time handling.
 
 **Opening books (#173, merged).** Carlos asked for a book from the Lichess database. The
 `make-book` tool (`crates/tools/src/book_maker.rs`) reads games in PGN from standard input and
@@ -180,8 +189,9 @@ nearly all of it the download (about 8.4 MB/s): of 89,616,462 games, 1,499,615 p
 of 8,036,080 different moves counted, 97,432 were kept, 1.6 MB. From the starting position: e4
 47%, d4 33%, Nf3 9%, c4 6%, b3, g3 and f4 1% each, and 13 more under half a percent each. It is
 at `~/books/cb2026-lichess-2026-09.bin` on the M3 and on the M1 Max, where cb2026 1.0.0 loads it
-(97,432 entries) and answers 1.e4 with c5 most often. Books are never committed; whether to
-attach this one to the v1.0.0 release is Carlos's call (#183).
+(97,432 entries) and answers 1.e4 with c5 most often. Books are never committed; this one goes
+into the v1.0.0 release (Carlos, 2026-10-23, #183), uploaded to the draft before it is
+published.
 
 The SPRT of the second version of larger reductions when the hash move is a capture, off the
 principal variation (#179), finished on 2026-10-23 at 16:23 MDT. It started at about 14:00 and
@@ -348,19 +358,23 @@ passed; the rest wait on GUI checks, level calibration or the v1.0 work.
 | Milestone | Scope | State |
 | --- | --- | --- |
 | M0 Foundations | stages 1–3 | **Passed** 2026-10-11: perft suites exact, 278.8 Mnps on the M1 Max (#20); 369.6 on the M3 Max |
-| M1 Playable | stages 4–7 | Merged; GUI check still open (#24) |
+| M1 Playable | stages 4–7 | **Passed** 2026-10-23: complete 3+2 games in En Croissant and HIARCS during the GUI matrix (#24, #37) |
 | M2 Classical search | stages 8–14 | **Passed** 2026-10-18: stage 14 rated 2442 ± 11 by gauntlet at 8+0.08 (gate ~2200 CCRL), #36 |
 | M3 Evaluation | stages 15–16 | **Passed** 2026-10-18: stage 16 rated 2669 ± 10 by gauntlet at 8+0.08 (gate ≥2400 CCRL), #36 |
-| M4 Complete engine | stages 17–20 | Merged (#46–#55); levels calibrated at 40+0.4 on 2026-10-19, 629–2483 (#106); GUI matrix (#37) open |
-| M5 v1.0 | strength work, release | Started (the M5 branches above); release workflow merged (#40); `main` rated 2782 ± 11 by gauntlet on 2026-10-21 (#131; 2714 ± 10 on 2026-10-18, #36), above the gate (≥2400, goal 2600+); the robustness run clean on 2026-10-22 (#146); the GUI matrix (#37) is the last gate |
+| M4 Complete engine | stages 17–20 | **Passed** 2026-10-23: levels calibrated at 40+0.4 on 2026-10-19, 629–2483 (#106); the GUI matrix passed (#37); the Lichess bot's games follow v1.0 (#191) |
+| M5 v1.0 | strength work, release | Started (the M5 branches above); release workflow merged (#40); `main` rated 2782 ± 11 by gauntlet on 2026-10-21 (#131; 2714 ± 10 on 2026-10-18, #36), above the gate (≥2400, goal 2600+); the robustness run clean on 2026-10-22 (#146); the GUI matrix passed on 2026-10-23 (#37); the version PR (#154) and the tag are next |
 | M6 NNUE | stage 21 | Started 2026-10-23: the net's definition (#177), training records (#178) |
 
 ## Waiting on Carlos
 
 The open [`needs-carlos` issues](https://github.com/cjus/chessengine/issues?q=is%3Aopen+label%3Aneeds-carlos):
 
-- #37: GUI compatibility matrix; Lichess bot account. The last v1.0 gate.
-- #24 (M1 GUI games).
+- After #154 merges: the `v1.0.0` tag (the commands are in #154), then publishing the draft
+  release with the book on it (#183).
+- #187: the NNUE trainer's speed on the M3 Max (a few minutes).
+- #190: the first net's data and training on the M3 Max (about 12 hours).
+- #191: the Lichess bot's two games, after v1.0.
+- #88: whether macOS honours the search threads' QoS outside Claude Code.
 
 On hold: #61, running long tests on AWS Batch (closed 2026-10-12; reopen it if the M3 can't keep
 up with the test queue).
@@ -565,8 +579,8 @@ Run the full test suite on every commit you replay, not only at the tip: each be
 4. The v1.0 release (`docs/releasing.md`), then stage 21 (NNUE). Carlos asked to move to v1.0
    on 2026-10-21, after the run of failed M5 tries. The steps:
    - The gates: the gauntlet passed (2782 ± 11, #131), and the robustness run was clean
-     (2026-10-22, #146: 10,000 games, `scripts/mac-robustness.sh`). The GUI matrix is #37,
-     Carlos's, in the GUIs on his Mac.
+     (2026-10-22, #146: 10,000 games, `scripts/mac-robustness.sh`). The GUI matrix passed on
+     2026-10-23 (#37).
    - Then a version PR: `[workspace.package] version` 1.0.0 in `Cargo.toml`, with the ledger,
      the PRD's milestones and the book up to date. The book has a chapter for every stage from
      1 to 20; NNUE (stage 21) is still to come.

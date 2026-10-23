@@ -404,7 +404,7 @@ Status as of 2026-10-10 (details and sources in the Research log):
 | Nibbler | macOS (community package) | Open source (GPL-3.0) | Analysis GUI built for Lc0, works with UCI engines | Optional |
 | ChessX | macOS (Intel build, runs under Rosetta 2) | Open source (GPL-2.0) | Database with engine analysis | Optional |
 | Banksia | macOS | Free, closed source | Tournament GUI | Optional |
-| HIARCS Chess Explorer (Pro) | macOS | Commercial | **Carlos's commercial Mac GUI** (cjus/chessengine#10) | Carlos. The 2026 Mac release runs natively on Apple Silicon; check that it loads cb2026 as an external UCI engine at the first GUI check |
+| HIARCS Chess Explorer (Pro) | macOS | Commercial | **Carlos's commercial Mac GUI** (cjus/chessengine#10) | Carlos. The 2026 Mac release runs natively on Apple Silicon; Pro 1.5.2 loads cb2026 as an external UCI engine (checked 2026-10-23, cjus/chessengine#37) |
 | ChessBase for Mac | macOS | Commercial | Not planned | Carlos uses ChessBase on Windows instead (cjus/chessengine#10) |
 | Shredder 13 | macOS | Commercial | Not planned | Accepts UCI engines, but the last major release was 2016 |
 | ChessBase (Windows) | Windows | Commercial | **Carlos's commercial Windows GUI** (cjus/chessengine#10) | Carlos, on his Windows machine, once the Windows build runs well (cjus/chessengine#11); until then UCI conformance tests and the Cross-platform CI job stand in |
@@ -748,7 +748,9 @@ The repository becoming public (planned, cjus/chessgui#71) makes its CI free.
 - Test books, EPD suites and reference engines are downloaded by scripts, with their source and
   licence noted, and are not committed unless their licence allows it.
 - Opening books for play are made from Lichess's games, which are CC0, by
-  `scripts/lichess-book.sh`, and are not committed (cjus/chessengine#173).
+  `scripts/lichess-book.sh`, and are not committed (cjus/chessengine#173). The first, from
+  September 2026's games, is a v1.0.0 release asset (Carlos, 2026-10-23,
+  cjus/chessengine#183).
 - Name: a web search on 2026-10-10 found no chess engine called cb2026. Check the CCRL and CPW
   engine lists and trademarks again before the repo goes public.
 
@@ -766,6 +768,10 @@ The repository becoming public (planned, cjus/chessgui#71) makes its CI free.
 
 **Gate results.** M0 passed on 2026-10-11: every perft suite exact (665,777,044 nodes, 0
 failures) at 278.8 million nodes/s on the M1 Max (cjus/chessengine#20).
+
+M1 passed on 2026-10-23: during the GUI matrix, cb2026 played complete 3+2 games in En
+Croissant and HIARCS Chess Explorer with no illegal moves or time losses, and analysed in both
+(cjus/chessengine#24, #37).
 
 M2 passed on 2026-10-18: `stage-14-pruning` rated **2442 ± 11** against the seven reference
 engines, 800 games each (5,600 in all, +2058 −2746 =796) at 8+0.08 on the M3 Max
@@ -803,7 +809,8 @@ played itself 10,000 times on the M3 Max, 9 games at a time with the default `Mo
 6,000 games at 1+0.01, 3,000 at 10+0.1 and 1,000 at 40/60. None had a time loss, an illegal
 move, a failure or an aborted game. `main` has changed since only in the weaker levels
 (cjus/chessengine#151); full strength searches the same tree (the bench is unchanged). With the
-gauntlet passed, the GUI compatibility matrix (cjus/chessengine#37) is v1.0's last gate.
+gauntlet passed, the GUI compatibility matrix (cjus/chessengine#37) was v1.0's last gate, and it
+passed on 2026-10-23 (below).
 
 M4's levels are calibrated (2026-10-19, cjus/chessengine#106): Skill Levels 0–19 rate **629 to
 2483** at 40+0.4 (± 23 to 55), and `UCI_Elo` maps onto those ratings
@@ -812,8 +819,16 @@ four reference engines nearest it, 8,800 games in all, and the odd levels are in
 The first calibration, at 8+0.08 on 2026-10-18 (cjus/chessengine#103), rated the levels 752 to
 2599. Levels limit nodes, so against opponents given more time they rate lower: 74 to 272
 lower at 40+0.4, which is closer to CCRL's 2'+1". `UCI_Elo` now runs from level 0's rating to
-level 19's, rounded inward to 50: 650–2450 (Carlos, cjus/chessengine#106). M4 still needs the
-GUI compatibility matrix (cjus/chessengine#37).
+level 19's, rounded inward to 50: 650–2450 (Carlos, cjus/chessengine#106).
+
+M4 passed on 2026-10-23, when the GUI compatibility matrix passed (cjus/chessengine#37,
+`docs/gui-compat.md`). Carlos checked `cb2026 1.0.0` on the M1 Max in En Croissant, Cute Chess,
+XBoard (CECP mode) and HIARCS Chess Explorer Pro. Every check passed, and the "–" cells are ones
+a GUI doesn't offer: En Croissant has no pondering and Cute Chess no analysis mode. Two fixes
+were found on the way: an empty string option clearing the path (cjus/chessengine#169), and
+every MultiPV line in XBoard mode (cjus/chessengine#170). The Lichess bot's first games follow
+v1.0 and don't gate it (Carlos, 2026-10-23, cjus/chessengine#191); its setup is documented in
+`docs/lichess.md`.
 
 ## Risks
 
@@ -839,7 +854,7 @@ dated entry whenever a decision rests on outside facts.
 
 | Product | Finding | Confidence | To confirm |
 | --- | --- | --- | --- |
-| HIARCS Chess Explorer (Pro) | 2026 Mac release; macOS 10.14 or later including macOS 26; native on Intel and Apple Silicon (vendor page). A third-party listing says it supports external UCI engines | Vendor claim for the platform; UCI support from a third party | External UCI engine support in the current version (ask HIARCS or try the demo) |
+| HIARCS Chess Explorer (Pro) | 2026 Mac release; macOS 10.14 or later including macOS 26; native on Intel and Apple Silicon (vendor page). A third-party listing says it supports external UCI engines | Vendor claim for the platform; UCI support from a third party | Confirmed 2026-10-23: Pro 1.5.2 loads cb2026 as an external UCI engine and analyses, plays timed and Chess960 games and ponders with it (cjus/chessengine#37) |
 | ChessBase for Mac | Native Mac version announced, built from the ground up, release November 2026. The announcement lists Fritz, Stockfish from the Engine Cloud and remote engines | From search summaries; fetching the article failed | Whether it can load a local UCI engine, once it ships |
 | Shredder 13 | Last major release October 2016, Mac and Linux builds November 2016. Users report its GUI accepts any Mac UCI engine | Old and anecdotal; no native Apple Silicon build confirmed | Whether it still runs on current macOS (likely through Rosetta 2) |
 | ChessBase/Fritz on Windows | Not native on Mac before the new version; workarounds were Boot Camp, a VM or Wine/CrossOver | Forum reports | Carlos has a Windows machine for this once the Windows build runs well |
@@ -915,7 +930,8 @@ about 26 s, and the M1 Max played about 970 games an hour.
 - [x] NNUE training records (M6): 32 bytes each, the whole position (castling as rooks that can
       still castle, for Chess960), score and result from White's side, best move and a version
       byte; no file header. Written by `datagen --format records` (Carlos, 2026-10-23).
-- [x] Protocols: UCI, XBoard/CECP, Chess960, Lichess bot setup (2026-10-10).
+- [x] Protocols: UCI, XBoard/CECP, Chess960, Lichess bot setup (2026-10-10). The bot's first
+      games follow v1.0 and don't gate it (Carlos, 2026-10-23, cjus/chessengine#191).
 - [x] Shell: rich line-based REPL. No full-screen TUI at all: cb2026 is an engine used under
       chess GUIs (cjus/chessengine#9, 2026-10-10).
 - [x] Learning features: book, milestone tags, explain commands, technique switches (2026-10-10).
