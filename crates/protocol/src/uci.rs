@@ -240,14 +240,15 @@ impl Session {
         true
     }
 
-    /// `setoption name <name> [value <value>]`.
+    /// `setoption name <name> [value <value>]`. The value may be empty (`value` with nothing
+    /// after it): that's how GUIs clear a string option such as `BookFile`.
     fn set_option(&mut self, args: &[&str]) {
-        let text = args.join(" ");
-        let rest = text.strip_prefix("name ").unwrap_or(&text);
-        let (name, value) = match rest.split_once(" value ") {
-            Some((name, value)) => (name.trim(), value.trim()),
-            None => (rest.trim(), ""),
+        let words = args.strip_prefix(&["name"]).unwrap_or(args);
+        let (name, value) = match words.iter().position(|&w| w == "value") {
+            Some(i) => (words[..i].join(" "), words[i + 1..].join(" ")),
+            None => (words.join(" "), String::new()),
         };
+        let (name, value) = (name.as_str(), value.as_str());
         // Option names are case-insensitive in UCI.
         match name.to_ascii_lowercase().as_str() {
             "uci_chess960" => self.options.chess960 = value.eq_ignore_ascii_case("true"),
@@ -851,6 +852,38 @@ mod tests {
         // No book loaded: it searches as usual.
         assert!(lines.iter().any(|l| l.starts_with("info depth 2")));
         assert!(lines.iter().any(|l| l.starts_with("bestmove ")));
+    }
+
+    #[test]
+    fn an_empty_value_clears_a_string_option() {
+        // A one-entry book, 1. a3 from the start: a move the search wouldn't choose.
+        let mut bytes = cb2026_engine::book::polyglot_key(&Position::startpos())
+            .to_be_bytes()
+            .to_vec();
+        let a3 = (cb2026_chess::Square::A2.index() << 6 | cb2026_chess::Square::A3.index()) as u16;
+        bytes.extend(a3.to_be_bytes());
+        bytes.extend(1u16.to_be_bytes());
+        bytes.extend([0; 4]);
+        let path = std::env::temp_dir().join(format!("cb2026-uci-{}.bin", std::process::id()));
+        std::fs::write(&path, bytes).unwrap();
+        // Cleared with `value` and nothing after it, then with a trailing space, as GUIs send
+        // an empty string; `<empty>` worked before.
+        for clear in ["value", "value ", "value <empty>"] {
+            let lines = session(&format!(
+                "setoption name OwnBook value true\nsetoption name BookFile value {}\nposition startpos\ngo depth 4\nisready\nsetoption name BookFile {clear}\ngo depth 4\nisready\n",
+                path.display()
+            ));
+            assert!(
+                !lines.iter().any(|l| l.contains("unknown option")),
+                "{lines:?}"
+            );
+            assert!(lines.iter().any(|l| l == "info string no opening book"));
+            let moves: Vec<&String> = lines.iter().filter(|l| l.starts_with("bestmove")).collect();
+            assert_eq!(moves.len(), 2, "{lines:?}");
+            assert!(moves[0].starts_with("bestmove a2a3"), "{lines:?}");
+            assert!(!moves[1].starts_with("bestmove a2a3"), "{lines:?}");
+        }
+        std::fs::remove_file(&path).unwrap();
     }
 
     #[test]
