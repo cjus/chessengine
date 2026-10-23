@@ -316,19 +316,20 @@ second adds up the chunks.
 input is on. On the CPU, each thread adds its examples' terms into its own copy of the
 gradients. On the GPU, thousands of invocations would be adding into the same weights at once,
 which needs atomic addition, and WGSL has none for floats. So the CPU sorts each batch's rows by
-input first, with a counting sort, and each weight adds up its own list with nobody else writing
-to it. The lists turned out to be very uneven: in a batch the average input is on in about 700
-of the 32,768 rows, but a king on its first square is on in over 11,000. A kernel is as slow as
-its slowest invocation, so one invocation per weight, looping over its list, made this kernel as
-slow as its longest list, whatever the network's size: a network of 512 trained no faster than
-one of 1,024. So the lists are also cut into segments of up to 256 rows:
+input first, and each weight adds up its own list with nobody else writing to it. The sort is a
+counting sort: count each input's rows, turn the counts into starting places, then put each row
+in its place:
 
 ```rust,ignore
-{{#include ../../crates/trainer/src/gpu.rs:group_by_input}}
+{{#include ../../crates/trainer/src/gpu.rs:count_sort}}
 ```
 
-One kernel sums each segment for every hidden value, and a second adds up each input's
-segments:
+The lists turned out to be very uneven: in a batch the average input is on in about 700 of the
+32,768 rows, but a king on its first square is on in over 11,000. A kernel is as slow as its
+slowest invocation, so one invocation per weight, looping over its list, made this kernel as
+slow as its longest list, whatever the network's size: a network of 512 trained no faster than
+one of 1,024. So the lists are also cut into segments of up to 256 rows. One kernel sums each
+segment for every hidden value, and a second adds up each input's segments:
 
 ```wgsl
 {{#include ../../crates/trainer/src/gpu/input_partials.wgsl}}
@@ -343,15 +344,24 @@ Measured on the M1 Max (32 GPU cores) on 2.8 million records, in records a secon
 
 | Hidden layer | CPU, 8 threads | GPU |
 | --- | --- | --- |
-| 256 | 2.2 million | 2.7 million |
-| 512 | 1.1 million | 2.6 million |
-| 1,024 | 0.46 million | 1.3 million |
+| 256 | 2.3 million | 5.3 million |
+| 512 | 1.1 million | 3.0 million |
+| 1,024 | 0.54 million | 1.4 million |
 
 The training losses were the same to six decimals. The CPU's time grows with the network, since
-it does every multiplication itself. The GPU's grows more slowly, and at 256 it isn't the limit
-at all: the CPU prepares each batch (decoding the records and sorting the rows) on one thread in
-about 4.7 milliseconds, while the GPU's work takes 3.5. At 1,024 the GPU's work, 11.6
-milliseconds a batch, is the limit.
+it does every multiplication itself. The GPU's grows more slowly. At first it didn't even set
+the pace at 256: the CPU prepared each batch, decoding the records and sorting the rows, on one
+thread in about 4 milliseconds, while the GPU's work took 3.5, so the GPU waited. Now each of the
+trainer's threads prepares a share of the batch, and the shares are joined input by input, in
+order, so the lists come out exactly as one thread would make them:
+
+```rust,ignore
+{{#include ../../crates/trainer/src/gpu.rs:group_by_input}}
+```
+
+On 8 threads the preparation takes 0.8 milliseconds, and training at 256 went from 2.7 to 5.3
+million records a second, with the same losses. The GPU's own work is now the limit at every
+size.
 
 Measuring had a trap of its own. On a file of 141,000 records the GPU seemed no faster than the
 CPU at 256. An epoch was only nine batches there, and the trainer reads the loss back 20 times
@@ -363,13 +373,13 @@ benchmark must look like the run it stands for.
 
 The numbers belong to one Mac. The M3 Max, where cb2026's long runs go, differs from the M1 Max
 in each of the things that set them. Its performance cores are faster, and it has 10 or 12 of
-them rather than 8, so the CPU trainer and the GPU backend's batch preparation both speed up.
+them rather than 8, so the CPU trainer speeds up.
 Its GPU is a newer design, with 30 or 40 cores rather than 24 or 32, that gives each running
 kernel only the on-chip memory it uses rather than the most it might need, so more invocations
 fit at once (Apple calls this Dynamic Caching). Its memory bandwidth is 300 or 400 GB/s,
 depending on the model, against the M1 Max's 400, and the sparse gradient's kernels do little
-arithmetic for each number they read, so memory is likely to bound them. So the CPU might win
-at 256 there, and the GPU's lead at 1,024 could grow or shrink. `scripts/mac-trainer-speed.sh` measures both backends on the Mac it runs
+arithmetic for each number they read, so memory is likely to bound them. So the GPU's lead,
+2.3 to 2.8 times on the M1 Max, could grow or shrink there. `scripts/mac-trainer-speed.sh` measures both backends on the Mac it runs
 on, and its numbers, not these, should pick the backend for a long run. A GPU of another design
 may also round a little differently, so a network is only repeated exactly on the same machine,
 backend and thread count.

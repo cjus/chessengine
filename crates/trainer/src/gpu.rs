@@ -25,7 +25,8 @@
 //! but many examples touch the same rows at once, and WGSL has no atomic addition for floats.
 //! So the CPU sorts each batch's rows by input first (a counting sort: `offsets` and
 //! `entries`), and then each weight adds up its own list with nobody else writing to it. The
-//! lists are in a fixed order, so the GPU gives the same result every time.
+//! lists are in a fixed order, so the GPU gives the same result every time. The sorting, with
+//! the decoding of the records, is shared among the trainer's threads (see [`prepare`]).
 //!
 //! The lists are very uneven. In a batch of 16,384 the average input is on in about 700 of the
 //! 32,768 rows, but a king on its first square is on in over 11,000. With one invocation per
@@ -52,12 +53,12 @@
 //!
 //! ## Speed
 //!
-//! On the M1 Max (32 GPU cores), on 2.8 million records, in records a second: 2.7 million at a
-//! hidden layer of 256 (the CPU on 8 threads: 2.2 million), 2.6 million at 512 (1.1 million) and
-//! 1.3 million at 1,024 (0.46 million). At 256 the limit is the batch preparation
-//! (`upload_batch`), on one CPU thread; at 1,024 it is the GPU. Other Macs differ in cores, GPU
-//! and memory bandwidth: `scripts/mac-trainer-speed.sh` measures both backends on the Mac it
-//! runs on.
+//! On the M1 Max (32 GPU cores), on 2.8 million records, in records a second: 5.3 million at a
+//! hidden layer of 256 (the CPU trainer on 8 threads: 2.3 million), 3.0 million at 512 (1.1
+//! million) and 1.4 million at 1,024 (0.54 million). The GPU's work is the limit at every size:
+//! the batch preparation on 8 threads takes 0.8 milliseconds, against 3.1 for a whole batch at
+//! 256. Other Macs differ in cores, GPU and memory bandwidth: `scripts/mac-trainer-speed.sh`
+//! measures both backends on the Mac it runs on.
 //!
 //! ## Testing
 //!
@@ -66,6 +67,7 @@
 //! agree to rounding rather than bit for bit. Without a GPU the tests say so and pass.
 
 use std::borrow::Cow;
+use std::thread;
 
 use cb2026_nnue::float::WEIGHT_LIMIT;
 use cb2026_nnue::{Activation, FloatNetwork, INPUTS};
@@ -143,6 +145,8 @@ pub struct GpuBackend {
     weight_decay: f32,
     steps: u64,
     max_batch: usize,
+    /// Threads that prepare each batch on the CPU.
+    threads: usize,
     buffers: Buffers,
     kernels: Kernels,
 }
@@ -190,6 +194,131 @@ fn bytes(n: usize) -> u64 {
 /// ⌈n / SEGMENT⌉, which is at most n / SEGMENT + 1.
 fn max_segments(batch: usize) -> usize {
     (2 * batch * MAX_ACTIVE).div_ceil(SEGMENT) + INPUTS
+}
+
+/// A batch made ready for the GPU (see [`prepare`]).
+#[derive(Debug, PartialEq)]
+struct Prepared {
+    /// Per row (example × 2 + view): up to `MAX_ACTIVE` inputs, then `NONE`.
+    inputs: Vec<u32>,
+    /// Per example: what `σ(output)` should be.
+    targets: Vec<f32>,
+    /// The rows, grouped by input and in row order within each input.
+    entries: Vec<u32>,
+    /// Segment s is `entries[segments[2s]..segments[2s + 1]]`, up to `SEGMENT` rows.
+    segments: Vec<u32>,
+    /// Input i's segments are `first_segment[i]..first_segment[i + 1]`.
+    first_segment: Vec<u32>,
+}
+
+/// One thread's share of a batch, its rows grouped by input: input i's are
+/// `entries[offsets[i]..offsets[i + 1]]`.
+struct Share {
+    offsets: Vec<u32>,
+    entries: Vec<u32>,
+}
+
+/// Turns the records `batch` of `data` into what the GPU trains on, on `threads` threads.
+///
+/// Each thread decodes a share of the examples and groups its own rows by input; the shares are
+/// then joined input by input, in order. So any number of threads gives the same lists, and the
+/// GPU the same network. On one thread this took about 4 milliseconds a batch on the M1 Max,
+/// more than the GPU's own work at a hidden layer of 256 (3.5), so the GPU waited for it; on 8
+/// threads it takes 0.8, and training at 256 went from 2.7 to 5.3 million records a second.
+fn prepare(data: &Dataset, batch: &[u32], targets: Targets, threads: usize) -> Prepared {
+    let mut inputs = vec![NONE; 2 * batch.len() * MAX_ACTIVE];
+    let mut target_values = vec![0.0; batch.len()];
+    let share = batch.len().div_ceil(threads.max(1)).max(1);
+    let shares: Vec<Share> = thread::scope(|scope| {
+        let handles: Vec<_> = batch
+            .chunks(share)
+            .zip(inputs.chunks_mut(2 * share * MAX_ACTIVE))
+            .zip(target_values.chunks_mut(share))
+            .enumerate()
+            .map(|(n, ((examples, inputs), values))| {
+                let first_row = 2 * n * share;
+                scope.spawn(move || {
+                    prepare_share(data, examples, targets, first_row, inputs, values)
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .map(|handle| handle.join().expect("a thread preparing a batch panicked"))
+            .collect()
+    });
+    // ANCHOR: group_by_input
+    // Input i's rows are each share's rows for input i, the shares in order: the same lists, in
+    // the same row order, whatever the number of threads.
+    let mut offsets = Vec::with_capacity(INPUTS + 1);
+    let mut entries = Vec::with_capacity(shares.iter().map(|share| share.entries.len()).sum());
+    for i in 0..INPUTS {
+        offsets.push(entries.len() as u32);
+        for share in &shares {
+            let rows = share.offsets[i] as usize..share.offsets[i + 1] as usize;
+            entries.extend_from_slice(&share.entries[rows]);
+        }
+    }
+    offsets.push(entries.len() as u32);
+    // Each input's list cut into segments of up to SEGMENT rows.
+    let mut segments = Vec::new();
+    let mut first_segment = Vec::with_capacity(INPUTS + 1);
+    for i in 0..INPUTS {
+        first_segment.push((segments.len() / 2) as u32);
+        for start in (offsets[i]..offsets[i + 1]).step_by(SEGMENT) {
+            segments.extend([start, offsets[i + 1].min(start + SEGMENT as u32)]);
+        }
+    }
+    first_segment.push((segments.len() / 2) as u32);
+    // ANCHOR_END: group_by_input
+    Prepared {
+        inputs,
+        targets: target_values,
+        entries,
+        segments,
+        first_segment,
+    }
+}
+
+/// Decodes `examples` into `inputs` (their rows, the first being row `first_row` of the batch)
+/// and `values` (their targets), and groups their rows by input.
+fn prepare_share(
+    data: &Dataset,
+    examples: &[u32],
+    targets: Targets,
+    first_row: usize,
+    inputs: &mut [u32],
+    values: &mut [f32],
+) -> Share {
+    // How many rows each input is on in, shifted by one for the prefix sums below.
+    let mut offsets = vec![0u32; INPUTS + 1];
+    for (e, &i) in examples.iter().enumerate() {
+        let example = Example::from_record(&data.record(i as usize), targets);
+        for view in 0..2 {
+            let row = &mut inputs[(2 * e + view) * MAX_ACTIVE..][..MAX_ACTIVE];
+            for (slot, &input) in row.iter_mut().zip(example.inputs(view)) {
+                *slot = u32::from(input);
+                offsets[usize::from(input) + 1] += 1;
+            }
+        }
+        values[e] = example.target;
+    }
+    // ANCHOR: count_sort
+    // A counting sort: input i's rows will be entries[offsets[i]..offsets[i + 1]], in row
+    // order.
+    for i in 1..=INPUTS {
+        offsets[i] += offsets[i - 1];
+    }
+    let mut next = offsets.clone();
+    let mut entries = vec![0u32; offsets[INPUTS] as usize];
+    for (row, inputs) in inputs.chunks_exact(MAX_ACTIVE).enumerate() {
+        for &input in inputs.iter().take_while(|&&input| input != NONE) {
+            entries[next[input as usize] as usize] = (first_row + row) as u32;
+            next[input as usize] += 1;
+        }
+    }
+    // ANCHOR_END: count_sort
+    Share { offsets, entries }
 }
 
 impl GpuBackend {
@@ -362,6 +491,7 @@ impl GpuBackend {
             weight_decay: adam.weight_decay,
             steps: adam.steps,
             max_batch,
+            threads: settings.threads.max(1),
             device,
             queue,
             buffers,
@@ -404,59 +534,17 @@ impl GpuBackend {
             batch.len() <= self.max_batch,
             "a batch larger than the GPU's buffers"
         );
-        let rows = 2 * batch.len();
-        let mut inputs = vec![NONE; rows * MAX_ACTIVE];
-        let mut targets = Vec::with_capacity(batch.len());
-        // How many rows each input is on in, shifted by one for the prefix sums below.
-        let mut offsets = vec![0u32; INPUTS + 1];
-        for (e, &i) in batch.iter().enumerate() {
-            let example = Example::from_record(&data.record(i as usize), self.targets);
-            for view in 0..2 {
-                let row = &mut inputs[(2 * e + view) * MAX_ACTIVE..][..MAX_ACTIVE];
-                for (slot, &input) in row.iter_mut().zip(example.inputs(view)) {
-                    *slot = u32::from(input);
-                    offsets[usize::from(input) + 1] += 1;
-                }
-            }
-            targets.push(example.target);
+        let batch = prepare(data, batch, self.targets, self.threads);
+        let (queue, buffers) = (&self.queue, &self.buffers);
+        queue.write_buffer(&buffers.inputs, 0, bytemuck::cast_slice(&batch.inputs));
+        queue.write_buffer(&buffers.targets, 0, bytemuck::cast_slice(&batch.targets));
+        if !batch.entries.is_empty() {
+            queue.write_buffer(&buffers.entries, 0, bytemuck::cast_slice(&batch.entries));
+            queue.write_buffer(&buffers.segments, 0, bytemuck::cast_slice(&batch.segments));
         }
-        // ANCHOR: group_by_input
-        // A counting sort: input i's rows will be entries[offsets[i]..offsets[i + 1]], in
-        // row order.
-        for i in 1..=INPUTS {
-            offsets[i] += offsets[i - 1];
-        }
-        let mut next = offsets.clone();
-        let mut entries = vec![0u32; offsets[INPUTS] as usize];
-        for (row, inputs) in inputs.chunks_exact(MAX_ACTIVE).enumerate() {
-            for &input in inputs.iter().take_while(|&&input| input != NONE) {
-                entries[next[input as usize] as usize] = row as u32;
-                next[input as usize] += 1;
-            }
-        }
-        // Each input's list cut into segments of up to SEGMENT rows: segment s is
-        // entries[segments[2s]..segments[2s + 1]], and input i's segments are
-        // first_segment[i]..first_segment[i + 1].
-        let mut segments = Vec::new();
-        let mut first_segment = Vec::with_capacity(INPUTS + 1);
-        for i in 0..INPUTS {
-            first_segment.push((segments.len() / 2) as u32);
-            for start in (offsets[i]..offsets[i + 1]).step_by(SEGMENT) {
-                segments.extend([start, offsets[i + 1].min(start + SEGMENT as u32)]);
-            }
-        }
-        first_segment.push((segments.len() / 2) as u32);
-        // ANCHOR_END: group_by_input
-        let queue = &self.queue;
-        queue.write_buffer(&self.buffers.inputs, 0, bytemuck::cast_slice(&inputs));
-        queue.write_buffer(&self.buffers.targets, 0, bytemuck::cast_slice(&targets));
-        if !entries.is_empty() {
-            queue.write_buffer(&self.buffers.entries, 0, bytemuck::cast_slice(&entries));
-            queue.write_buffer(&self.buffers.segments, 0, bytemuck::cast_slice(&segments));
-        }
-        let buffer = &self.buffers.first_segment;
-        queue.write_buffer(buffer, 0, bytemuck::cast_slice(&first_segment));
-        segments.len() / 2
+        let first_segment = bytemuck::cast_slice(&batch.first_segment);
+        queue.write_buffer(&buffers.first_segment, 0, first_segment);
+        batch.segments.len() / 2
     }
 
     /// Sets the `Sizes` uniform for a batch of `batch` cut into `segments` segments, at
@@ -814,5 +902,55 @@ mod tests {
             (gpu[11] - cpu[11]).abs() <= 0.25 * cpu[11],
             "GPU {gpu:?}, CPU {cpu:?}"
         );
+    }
+
+    #[test]
+    fn any_number_of_threads_prepares_the_same_batch() {
+        let data = Dataset::from_records(&random_records(3, 20));
+        // Every other record, last first, as a shuffle would mix them.
+        let batch: Vec<u32> = (0..data.len() as u32).rev().step_by(2).collect();
+        let targets = Targets {
+            eval_scale: 146.0,
+            result_weight: 0.25,
+        };
+        let one = prepare(&data, &batch, targets, 1);
+        for threads in [2, 3, 8, batch.len() + 5] {
+            assert_eq!(
+                prepare(&data, &batch, targets, threads),
+                one,
+                "{threads} threads"
+            );
+        }
+        // The rows and targets are the examples', in order.
+        for (e, &i) in batch.iter().enumerate() {
+            let example = Example::from_record(&data.record(i as usize), targets);
+            assert_eq!(one.targets[e], example.target);
+            for view in 0..2 {
+                let row = &one.inputs[(2 * e + view) * MAX_ACTIVE..][..MAX_ACTIVE];
+                let on: Vec<u32> = example.inputs(view).iter().map(|&n| u32::from(n)).collect();
+                assert_eq!(&row[..on.len()], on.as_slice());
+                assert!(row[on.len()..].iter().all(|&n| n == NONE));
+            }
+        }
+        // Each input's segments hold exactly the rows it is on in, in order.
+        let mut cut = 0;
+        for input in 0..INPUTS {
+            let mut rows = Vec::new();
+            let own = one.first_segment[input]..one.first_segment[input + 1];
+            cut += usize::from(own.len() > 1);
+            for s in own.map(|s| s as usize) {
+                let (start, end) = (one.segments[2 * s], one.segments[2 * s + 1]);
+                assert!(start < end && end - start <= SEGMENT as u32);
+                rows.extend_from_slice(&one.entries[start as usize..end as usize]);
+            }
+            let expected: Vec<u32> = (0..2 * batch.len())
+                .filter(|&row| {
+                    one.inputs[row * MAX_ACTIVE..][..MAX_ACTIVE].contains(&(input as u32))
+                })
+                .map(|row| row as u32)
+                .collect();
+            assert_eq!(rows, expected, "input {input}");
+        }
+        assert!(cut > 0, "no input's list was long enough to be cut");
     }
 }
