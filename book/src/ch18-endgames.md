@@ -158,7 +158,9 @@ Book moves:
 The engine ignores the book (set ownbook on to use it).
 ```
 
-cb2026 ships no book. Any Polyglot book works with it, and it can make one.
+The repository has no book, but the v1.0.0 release comes with one: September 2026's, made
+from Lichess's games as below (`cb2026-lichess-2026-09.bin`). Any Polyglot book works with
+cb2026, and it can make its own.
 
 ### Making a book from people's games
 

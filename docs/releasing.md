@@ -24,7 +24,16 @@ The workflow builds `cb2026` for Linux (x86-64), macOS (Apple Silicon and Intel)
 and `LICENSE-GPL-3.0`, since the release binaries include Syzygy probing) and the
 third-party notices (`THIRD-PARTY-NOTICES.txt`, below), adds
 `SHA256SUMS.txt`, and creates a **draft** release with notes generated from the merged PRs. Check the draft on GitHub
-(Releases), edit the notes if needed, and publish it. The `Cross-platform` workflow also runs
+(Releases), edit the notes if needed, and publish it.
+
+A release can also carry an opening book, which is made on a Mac, not by the workflow (book
+chapter 18, `scripts/lichess-book.sh`). v1.0.0 carries September 2026's (cjus/chessengine#183).
+Upload it to the draft before publishing, and say in the notes what it is: Polyglot, from
+Lichess's games (CC0), for `OwnBook` and `BookFile`.
+
+```sh
+gh release upload v1.0.0 ~/books/cb2026-lichess-2026-09.bin
+``` The `Cross-platform` workflow also runs
 the tests on macOS and Windows for the tag.
 
 The binaries are built for each platform's baseline CPU, so they run everywhere; building from
