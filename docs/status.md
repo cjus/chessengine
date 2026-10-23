@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-23, 07:27 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-23, 08:33 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -66,7 +66,8 @@ ruleset requires no check, and CI runs nightly only if `main` changed (Carlos). 
 larger reductions after many fail highs merged on, +12.8 ± 8.2, #165; Stockfish 17's version of
 them running on the M3, #167; a string option cleared with an empty value (`setoption name BookFile
 value`, as GUIs clear one) is set to empty, no longer taken for an unknown option, found during
-the GUI matrix, #169.*
+the GUI matrix, #169; with MultiPV in XBoard mode every line is sent, each depth's best last as
+XBoard expects, no longer the best line only, also found during the GUI matrix, #170.*
 
 ## Stages
 

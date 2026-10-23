@@ -52,6 +52,13 @@ With `post`, every completed iteration prints a line in the format XBoard expect
 Scores are in centipawns from the engine's side. Mates use a convention: 100000 plus the
 number of moves to mate, negative when being mated, so a GUI can show "#3".
 
+With MultiPV, each depth has several lines, and the order matters. XBoard sorts a depth's lines
+by score to show them. But it keeps the last line it reads as the engine's score and PV, which
+go into the saved game, the evaluation graph and adjudication. So cb2026 holds a depth's lines
+until the last one arrives, then sends them best last: that's the `expected` count and `flush`
+in the search thread below. Before 1.0.0 it sent only the best line, which the GUI matrix found
+(#170).
+
 ### Feature negotiation
 
 XBoard learns what an engine supports from `feature` lines sent in answer to `protover 2`.
