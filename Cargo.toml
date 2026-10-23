@@ -6,6 +6,20 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
+# Everything but the NNUE trainer, which `cargo build` and `cargo run` skip unless asked for
+# (`-p cb2026-trainer`): its GPU backend will bring a large dependency the engine doesn't need.
+# `cargo test --workspace` and `scripts/check.sh` still cover it.
+default-members = [
+    "crates/chess",
+    "crates/cli",
+    "crates/cnp",
+    "crates/engine",
+    "crates/nnue",
+    "crates/protocol",
+    "crates/shell",
+    "crates/syzygy",
+    "crates/tools",
+]
 
 [workspace.package]
 version = "0.1.0"
@@ -24,6 +38,7 @@ cb2026-protocol = { path = "crates/protocol" }
 cb2026-shell = { path = "crates/shell" }
 cb2026-syzygy = { path = "crates/syzygy" }
 cb2026-tools = { path = "crates/tools" }
+cb2026-trainer = { path = "crates/trainer" }
 # The Chess Node Protocol, how Solrac talks to cb2026 (`crates/cnp`), and its conformance
 # sessions (cjus/chessgui#98). Pinned to a commit; bump both together.
 cnp = { git = "https://github.com/cjus/chess-node-protocol", rev = "bafda928d0298267ebd86d753bda78f54138770c" }

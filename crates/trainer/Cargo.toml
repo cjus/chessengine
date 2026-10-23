@@ -1,0 +1,20 @@
+[package]
+name = "cb2026-trainer"
+description = "cb2026's NNUE trainer: learns a network's weights from self-play records, with every gradient written by hand."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+cb2026-chess.workspace = true
+cb2026-nnue.workspace = true
+
+[[bin]]
+name = "trainer"
+path = "src/main.rs"
+
+[lints]
+workspace = true
