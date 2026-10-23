@@ -99,7 +99,10 @@ crates/
   protocol/   UCI and XBoard/CECP adapters over the Engine API.
   shell/      the interactive REPL: commands, board views, live thinking display.
   tools/      tuner (Texel), self-play data generation, bench, test helpers.
-  nnue/       (M6) NNUE inference and trainer.
+  nnue/       (M6) NNUE inference: the net's inputs, layers and integer
+              weights, used by the engine. No I/O.
+  trainer/    (M6) our own NNUE trainer: a CPU reference and a GPU backend
+              (wgpu, Metal on the Mac). Not a dependency of the engine.
   cli/        the single `cb2026` binary: picks UCI, XBoard or shell mode.
 book/         mdBook: "Building a chess engine in Rust".
 docs/         PRD, Elo ledger, testing guide, GUI compatibility matrix.
@@ -164,6 +167,43 @@ Each technique below is a separate function or clearly marked block, has its own
   The data comes from the engine's own self-play games (see "License and IP" for public datasets).
 - **Explainable:** evaluation is written once and can record a *trace*: a per-term, per-side
   breakdown for the shell's `eval` command and for tuning, at no cost when tracing is off.
+
+### Evaluation (NNUE, M6)
+
+**Decided 2026-10-23 (Carlos):** cb2026 trains its nets with a trainer of its own, for its
+teaching value, and the trainer uses the Mac's GPU through Metal.
+
+- **Inference** (`crates/nnue`, no I/O): the first net takes 768 inputs (piece, colour and
+  square, seen from each side) into one hidden layer, kept up to date move by move (the
+  accumulator) rather than recomputed. Integer weights, with SIMD (NEON, AVX2) in a marked
+  `unsafe` module. The HCE stays as a switchable mode; `EvalFile` loads another net.
+- **Data:** `datagen` self-play, with the HCE for the first net and each net's own games for the
+  next, stores the search score as well as the game result, in a compact binary file. A first
+  net needs about 100 million positions. `datagen` made about 190 a second per thread on the M1
+  Max (2026-10-23), so the M3 at 9 threads makes about 8 million an hour: about 12 hours for the
+  first net's data, a long run for the M3.
+- **Trainer** (`crates/trainer`, a binary): forward and backward passes written by hand, with no
+  machine-learning framework, so the book can walk through every gradient. Two backends compute
+  the same thing:
+  - a **CPU reference**, the version the book explains, its gradients checked against finite
+    differences;
+  - a **GPU backend** on `wgpu` (MIT OR Apache-2.0), which runs on Metal on the Mac (and Vulkan
+    or DirectX 12 elsewhere), with WGSL compute kernels, each tested against the CPU reference on
+    the same batch. wgpu's API is safe Rust, so the trainer needs no `unsafe`.
+
+  bullet (MIT), the trainer many engines use, would be allowed by "License and IP", but its
+  training code wouldn't be ours to explain, so it isn't used.
+- **Build and tests:** the trainer is not among the workspace's default members, so `cargo
+  build` and the `cb2026` binary never compile wgpu. `scripts/check.sh` checks it with the rest;
+  its GPU tests sit behind a cargo feature and run on the Mac, since the nightly Linux CI has no
+  GPU.
+- **Nets** are not committed: they are published as release assets and fetched by a script, as
+  opening books are. A release build embeds the default net.
+- **Order:** the net's definition (inputs, layers, the integer format) comes first, in
+  `crates/nnue`, since the trainer and the engine must agree on it. Then `datagen`'s scores and
+  file format, the CPU trainer and the GPU backend, alongside the engine's inference; none of
+  these change the engine's play until a net is switched on. The first SPRT, net against HCE,
+  needs both halves.
 
 ### Extras
 
@@ -619,7 +659,8 @@ The repository becoming public (planned, cjus/chessgui#71) makes its CI free.
   exception is `shakmaty-syzygy` for tablebase probing, kept behind an adapter (see
   "Tablebase probing").
 - **Data and nets:** tuning data and any NNUE nets are generated from our own engine's self-play,
-  so we own them outright. No Stockfish or Leela nets or training data.
+  so we own them outright. No Stockfish or Leela nets or training data. Nets are published as
+  release assets, not committed (see "Evaluation (NNUE, M6)").
 - Test books, EPD suites and reference engines are downloaded by scripts, with their source and
   licence noted, and are not committed unless their licence allows it.
 - Name: a web search on 2026-10-10 found no chess engine called cb2026. Check the CCRL and CPW
@@ -635,7 +676,7 @@ The repository becoming public (planned, cjus/chessgui#71) makes its CI free.
 | M3 · Evaluation | Full HCE, eval trace, Texel tuner, self-play data generation, `eval`/`explain`/`tree`/`stats` (stages 15–16) | ≥2400 CCRL by gauntlet |
 | M4 · Complete engine | Lazy SMP, Syzygy, Polyglot, Chess960, MultiPV, pondering, levels, XBoard, Lichess bot, shell `match` command (stages 17–20) | GUI compatibility matrix passes; levels calibrated |
 | M5 · v1.0 release | Strength work towards 2600–2700, book finished, release binaries, robustness run | ≥2400 CCRL Blitz (goal 2600+); 10,000-game robustness run clean; book complete for stages 1–20 |
-| M6 · NNUE (stretch) | NNUE inference with SIMD, our own trainer, self-play data, HCE kept as a mode (stage 21) | Beats the HCE version by SPRT; book chapter done |
+| M6 · NNUE (stretch) | NNUE inference with SIMD, our own trainer (CPU reference and GPU via Metal), self-play data, HCE kept as a mode (stage 21; "Evaluation (NNUE, M6)") | Beats the HCE version by SPRT; book chapter done |
 
 **Gate results.** M0 passed on 2026-10-11: every perft suite exact (665,777,044 nodes, 0
 failures) at 278.8 million nodes/s on the M1 Max (cjus/chessengine#20).
@@ -700,6 +741,7 @@ GUI compatibility matrix (cjus/chessengine#37).
 | Strength limiting feels unnatural | Players don't enjoy low levels | MultiPV-based move choice; calibration; Carlos playtests the levels |
 | Tablebase crate changes or is abandoned | Tablebase support breaks | Behind a `Tablebase` trait and a cargo feature; Fathom or our own port can replace it |
 | CI minutes on a private repo | CI throttled or costly | PRs checked locally; Linux nightly and macOS/Windows weekly, only if `main` changed; macOS/Windows also on tags |
+| GPU training code is hard to debug | Wrong nets, or a trainer that stalls stage 21 | Every GPU kernel tested against the CPU reference on the same batch; the CPU trainer can train the first net on its own |
 | Windows GUIs tested late | Windows-only GUI problems (ChessBase/Fritz, Arena) found late | Strict UCI conformance tests and Windows CI builds throughout; Carlos tests on a Windows machine once the Windows build runs well, before going public |
 
 ## Research log
@@ -775,6 +817,10 @@ about 26 s, and the M1 Max played about 970 games an hour.
       cb2026; GPL only in a binary built with the `syzygy` feature; code adapted only from
       permissive sources; the repo private at first (cjus/chessgui#71, 2026-10-20; done in
       cjus/chessgui#98's first step, 2026-10-21).
+- [x] NNUE training (M6): our own trainer for its teaching value, not bullet: gradients written
+      by hand, a CPU reference and a GPU backend through `wgpu` (Metal on the Mac). Inference in
+      `crates/nnue`, the trainer in `crates/trainer`, outside the default build; nets published
+      as release assets, not committed (Carlos, 2026-10-23).
 - [x] Protocols: UCI, XBoard/CECP, Chess960, Lichess bot setup (2026-10-10).
 - [x] Shell: rich line-based REPL. No full-screen TUI at all: cb2026 is an engine used under
       chess GUIs (cjus/chessengine#9, 2026-10-10).
