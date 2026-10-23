@@ -4,7 +4,7 @@
 //!
 //! ```text
 //! > uci
-//! < id name cb2026 0.1.0
+//! < id name cb2026 1.0.0
 //! < id author the cb2026 authors
 //! < option name Hash type spin default 16 min 1 max 65536
 //! < option name Clear Hash type button

@@ -81,7 +81,7 @@ input and output. A session:
 
 ```text
 > uci
-< id name cb2026 0.1.0
+< id name cb2026 1.0.0
 < id author the cb2026 authors
 < option name UCI_Chess960 type check default false
 < uciok

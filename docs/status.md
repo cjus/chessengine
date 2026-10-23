@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-23, 16:44 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-23, 16:48 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -87,7 +87,8 @@ trainer's threads, 5.3 million records a second at 256 instead of 2.7, the same 
 on it, #189; the run itself is Carlos's, #190; `ci.yml` loads again after #186 broke it (a
 command ending in a colon), #192; **the GUI matrix passed**, so M4 passed, in En Croissant,
 Cute Chess, XBoard and HIARCS Chess Explorer, #37, and M1 with it, #24; the Lichess bot's games
-follow v1.0, #191; the first Lichess book goes into the v1.0.0 release, #183.*
+follow v1.0, #191; the first Lichess book goes into the v1.0.0 release, #183; **version 1.0.0**, #154, so the
+`v1.0.0` tag is next (Carlos).*
 
 ## Stages
 
@@ -169,7 +170,7 @@ speed (#187, a few minutes) and stage 21's data run, the first net's records and
 in `docs/gui-compat.md` and the PRD): En Croissant, Cute Chess, XBoard and HIARCS Chess Explorer
 on the M1 Max, with two fixes found on the way (#169, #170). The Lichess bot's two games follow
 the release (Carlos, 2026-10-23, #191), and Scid vs. PC and ChessBase weren't checked. Next:
-1. the version PR (#154) is rebased onto `main`, checked and merged;
+1. the version is 1.0.0 (#154, merged on 2026-10-23);
 2. Carlos tags `v1.0.0`, and the Release workflow makes a draft release;
 3. the book is uploaded to the draft (`docs/releasing.md`; #183);
 4. Carlos checks the draft and publishes it.
@@ -362,15 +363,15 @@ passed; the rest wait on GUI checks, level calibration or the v1.0 work.
 | M2 Classical search | stages 8–14 | **Passed** 2026-10-18: stage 14 rated 2442 ± 11 by gauntlet at 8+0.08 (gate ~2200 CCRL), #36 |
 | M3 Evaluation | stages 15–16 | **Passed** 2026-10-18: stage 16 rated 2669 ± 10 by gauntlet at 8+0.08 (gate ≥2400 CCRL), #36 |
 | M4 Complete engine | stages 17–20 | **Passed** 2026-10-23: levels calibrated at 40+0.4 on 2026-10-19, 629–2483 (#106); the GUI matrix passed (#37); the Lichess bot's games follow v1.0 (#191) |
-| M5 v1.0 | strength work, release | Started (the M5 branches above); release workflow merged (#40); `main` rated 2782 ± 11 by gauntlet on 2026-10-21 (#131; 2714 ± 10 on 2026-10-18, #36), above the gate (≥2400, goal 2600+); the robustness run clean on 2026-10-22 (#146); the GUI matrix passed on 2026-10-23 (#37); the version PR (#154) and the tag are next |
+| M5 v1.0 | strength work, release | Started (the M5 branches above); release workflow merged (#40); `main` rated 2782 ± 11 by gauntlet on 2026-10-21 (#131; 2714 ± 10 on 2026-10-18, #36), above the gate (≥2400, goal 2600+); the robustness run clean on 2026-10-22 (#146); the GUI matrix passed on 2026-10-23 (#37); version 1.0.0 merged (#154); the `v1.0.0` tag is next |
 | M6 NNUE | stage 21 | Started 2026-10-23: the net's definition (#177), training records (#178) |
 
 ## Waiting on Carlos
 
 The open [`needs-carlos` issues](https://github.com/cjus/chessengine/issues?q=is%3Aopen+label%3Aneeds-carlos):
 
-- After #154 merges: the `v1.0.0` tag (the commands are in #154), then publishing the draft
-  release with the book on it (#183).
+- The `v1.0.0` tag (the commands are in #154 and `docs/releasing.md`), then publishing the
+  draft release with the book on it (#183).
 - #187: the NNUE trainer's speed on the M3 Max (a few minutes).
 - #190: the first net's data and training on the M3 Max (about 12 hours).
 - #191: the Lichess bot's two games, after v1.0.

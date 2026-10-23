@@ -86,7 +86,7 @@ default settings, which is a quick way to see what switching a technique off cos
 > set nullmove off
 > selfplay 6 nodes=20000
 ...
-Match over: cb2026 0.1.0 (shell) scored 1.5/6 against cb2026 0.1.0 (default) (+1 -4 =1).
+Match over: cb2026 1.0.0 (shell) scored 1.5/6 against cb2026 1.0.0 (default) (+1 -4 =1).
 Elo difference: -191 ± 1219 (95%). A few games say little: the margin shows how little.
 ```
 

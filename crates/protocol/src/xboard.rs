@@ -13,7 +13,7 @@
 //! > xboard
 //! > protover 2
 //! < feature done=0
-//! < feature myname="cb2026 0.1.0" setboard=1 usermove=1 ping=1 san=0 ...
+//! < feature myname="cb2026 1.0.0" setboard=1 usermove=1 ping=1 san=0 ...
 //! < feature done=1
 //! > new
 //! > level 0 5 3
