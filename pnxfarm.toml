@@ -1,0 +1,4 @@
+# What pnxfarm builds: release builds on the farm's Macs, for now the M3 (PNXStudios/pnxfarm,
+# docs/using-pnxfarm.md). `pnxfarm build --wait` puts the binaries in target/pnxfarm/release/.
+[build.default]
+packages = ["cb2026", "cb2026-tools"]

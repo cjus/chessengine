@@ -67,11 +67,15 @@ ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/cb2026-levels.XXXXXX")"
 cleanup() {
+  farm_resume
   git worktree remove --force "$WORK/tree" 2>/dev/null || true
   git worktree remove --force "$WORK/tools" 2>/dev/null || true
   rm -rf "$WORK"
 }
 trap cleanup EXIT
+# No pnxfarm build shares the Mac during the run (scripts/pnxfarm-pause.sh).
+source "$(dirname "${BASH_SOURCE[0]}")/pnxfarm-pause.sh"
+farm_pause "level calibration"
 
 echo "Fetching origin..."
 git fetch -q --tags origin

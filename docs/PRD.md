@@ -645,7 +645,11 @@ efficiency), 64 GB RAM. This gives:
   hw.perflevel0.physicalcpu` reports 10) and 7 on the M1 Max. Efficiency cores run at a different speed and would skew results
   at a fixed time control.
 - **Steady conditions:** `caffeinate -i` so the Mac doesn't sleep, on mains power, other heavy
-  apps closed. A laptop may throttle under hours of full load; a Mac mini or Studio is steadier.
+  apps closed. The M3 is also a pnxfarm worker (PNXStudios/pnxfarm, from 2026-10-22), so each
+  `scripts/mac-*.sh` pauses its worker for the run and resumes it at the end
+  (`scripts/pnxfarm-pause.sh`): the pause waits for a build in hand to finish, so no build
+  shares the cores with a test. While the M3 is the farm's only worker, a build asked for during
+  a run waits for it to end. A laptop may throttle under hours of full load; a Mac mini or Studio is steadier.
 - **Throughput:** at 8+0.08 a game takes about 26 s whatever the CPU, because the clock sets
   its length. 7 games at once on the M1 Max gave about 970 games an hour (measured); 9 on the
   M3 Max should give about 1,250. Early stages gain tens of Elo and their SPRTs finish in minutes, so they run
