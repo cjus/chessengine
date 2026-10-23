@@ -10,8 +10,10 @@
 //!   [`Accumulator`] (the first layer, updated move by move), and its file format.
 //! - [`float`]: the same network with floating-point weights, as the trainer learns it, and the
 //!   conversion to whole numbers.
+//! - [`record`]: training records, one self-play position with its search score, game result
+//!   and best move in 32 bytes, as `datagen` writes them and the trainer reads them.
 //!
-//! It does no I/O: networks are read from and written to byte slices.
+//! It does no I/O: networks and records are read from and written to bytes.
 //!
 //! ## The network
 //!
@@ -59,10 +61,12 @@
 pub mod features;
 pub mod float;
 pub mod network;
+pub mod record;
 
 pub use features::{Changes, INPUTS};
 pub use float::FloatNetwork;
 pub use network::{Accumulator, Activation, NetError, Network};
+pub use record::{GameResult, RECORD_LEN, Record, RecordError};
 
 #[cfg(test)]
 pub(crate) mod test_support;

@@ -203,6 +203,17 @@ teaching value, and the trainer uses the Mac's GPU through Metal.
   net needs about 100 million positions. `datagen` made about 190 a second per thread on the M1
   Max (2026-10-23), so the M3 at 9 threads makes about 8 million an hour: about 12 hours for the
   first net's data, a long run for the M3.
+  - **Records** (`cb2026_nnue::record`, decided 2026-10-23): 32 bytes per position, so 100
+    million take 3.2 GB. Each keeps the whole position (pieces, side to move, castling rights
+    as "rooks that can still castle", so Chess960 works, the en passant square and the
+    halfmove clock; not the fullmove number), the search score and the result from White's
+    side, the best move, and a version byte. No file header, so files can be joined and
+    shuffled. The layout follows marlinformat (marlinflow, no licence stated; the idea only).
+    The inputs are computed from the position at training time, so a net with other inputs
+    trains on the same records.
+  - `datagen --format records` writes them (`--format text`, the default, still writes the
+    Texel tuner's `FEN;result` lines), and the `records` tool checks a file and shows what it
+    holds.
 - **Trainer** (`crates/trainer`, a binary): forward and backward passes written by hand, with no
   machine-learning framework, so the book can walk through every gradient. Two backends compute
   the same thing:
@@ -847,6 +858,9 @@ about 26 s, and the M1 Max played about 970 games an hour.
       to cb2026's centipawns (about 146, not 400), a self-describing file with a checksum.
       Inference in safe, compiler-vectorised Rust; hand-written SIMD only if measured (Carlos,
       2026-10-23).
+- [x] NNUE training records (M6): 32 bytes each, the whole position (castling as rooks that can
+      still castle, for Chess960), score and result from White's side, best move and a version
+      byte; no file header. Written by `datagen --format records` (Carlos, 2026-10-23).
 - [x] Protocols: UCI, XBoard/CECP, Chess960, Lichess bot setup (2026-10-10).
 - [x] Shell: rich line-based REPL. No full-screen TUI at all: cb2026 is an engine used under
       chess GUIs (cjus/chessengine#9, 2026-10-10).

@@ -1,11 +1,11 @@
 # NNUE
 
-*Stage 21 · in progress · code in `crates/nnue`*
+*Stage 21 · in progress · code in `crates/nnue`, `crates/tools/src/selfplay.rs`*
 
 > This chapter is being written as stage 21 is built. So far it covers the network's
-> definition: its inputs, its layers and its whole-number weights. The training data, the
-> trainer and the engine's use of the network come in the next sections, with what it's worth
-> once it can be measured.
+> definition (its inputs, its layers and its whole-number weights) and the format of its
+> training data. The trainer and the engine's use of the network come in the next sections,
+> with what it's worth once it can be measured.
 
 Chapters 15 and 16 built an evaluation from terms a person designed and tuned their weights on
 cb2026's own games. An **NNUE** ("efficiently updatable neural network") replaces those terms
@@ -134,6 +134,47 @@ damaged or foreign file is refused before it is used. Each input's weights are o
 switching an input on or off adds one row to the accumulator. Networks aren't committed to the
 repository: they are published with the releases.
 
+## The training data
+
+The network learns from positions of cb2026's own games, the same self-play games as chapter
+16's tuner, played at a fixed number of nodes per move. The tuner only needed each position and
+its game's result. The trainer also wants the search's score, and since producing data takes the
+test Mac about 12 hours per 100 million positions, the format should keep anything a later
+network might want. Each position becomes a **record** of 32 bytes:
+
+| Bytes | Field |
+| --- | --- |
+| 0–7 | which squares are occupied (a bitboard) |
+| 8–23 | a 4-bit code for each occupied square's piece, in square order |
+| 24 | the side to move and the en passant square |
+| 25 | the halfmove clock |
+| 26–27 | the search's score, in centipawns from White's side |
+| 28 | the game's result |
+| 29–30 | the best move |
+| 31 | the format's version |
+
+A position has at most 32 pieces, so 32 four-bit codes, 16 bytes, hold them all. The codes are
+the piece types plus 8 for Black, and one more: code 6 is a rook that can still castle. That is
+how a record keeps castling rights, and it works for Chess960, where a right belongs to one
+particular rook. The layout follows marlinformat, the format of the trainer of the engine
+Marlin.
+
+```rust,ignore
+{{#include ../../crates/nnue/src/record.rs:from_position}}
+```
+
+The record keeps the position itself, not the network's inputs. The trainer turns the pieces
+into inputs as it reads them, so a later network with different inputs, such as king buckets,
+can learn from the same records without generating them again:
+
+```rust,ignore
+{{#include ../../crates/nnue/src/record.rs:pieces}}
+```
+
+`datagen --format records` writes records, and `records` checks a file and shows what is in
+it. Sixty games make about 4,100 records, 132 KB; 100 million records take 3.2 GB. Records have
+no file header, so files from separate runs can simply be joined.
+
 ## Pitfalls
 
 - **Trainer and engine must agree** on the numbering, the layers and the scales. They share
@@ -143,6 +184,9 @@ repository: they are published with the releases.
 - **An eval scale that doesn't match** quietly changes every margin in the search.
 - **Overflow** in the integer arithmetic gives silently wrong scores. The weight limit and the
   bounds above rule it out, and a test runs the largest possible weights.
+- **Scores from the wrong side.** The search scores for the side to move; records keep White's
+  side, like the result, and the trainer turns both to the side to move's view. Mixing the two
+  up teaches the network nonsense for every position with Black to move.
 
 ## Further reading
 
