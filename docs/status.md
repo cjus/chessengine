@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-23, 09:18 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-23, 09:47 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -67,7 +67,8 @@ larger reductions after many fail highs merged on, +12.8 ± 8.2, #165; Stockfish
 them merged, +13.7 ± 8.5, #167; a string option cleared with an empty value (`setoption name BookFile
 value`, as GUIs clear one) is set to empty, no longer taken for an unknown option, found during
 the GUI matrix, #169; with MultiPV in XBoard mode every line is sent, each depth's best last as
-XBoard expects, no longer the best line only, also found during the GUI matrix, #170.*
+XBoard expects, no longer the best line only, also found during the GUI matrix, #170; larger
+reductions when the hash move is a capture running on the M3, #171.*
 
 ## Stages
 
@@ -137,10 +138,22 @@ XBoard expects, no longer the best line only, also found during the GUI matrix, 
 | M5: smaller reductions where the principal variation was, Stockfish's `ttPv` (chapter 14.1) | #160 | 1072184 (1198340 with them on) | Merged, off by default: +0.3 ± 5.2, 8,100 games, [0, 5] no verdict (LLR −1.57), stopped (M3 Max) |
 | M5: larger reductions after many fail highs, as in Stockfish (chapter 14.1) | #165 | 767859 | Merged: +12.8 ± 8.2, 3,144 games, [0, 5] passed (M3 Max) |
 | M5: larger reductions after many fail highs in Stockfish 17's version (chapter 14.1) | #167 | 749181 | Merged: +13.7 ± 8.5, 2,953 games, [0, 5] passed (M3 Max) |
+| M5: larger reductions when the hash move is a capture, as in Stockfish (chapter 14.1) | #171, `claude/tt-capture-reductions` | 719329 | Draft, its SPRT running on the M3 Max: [0, 5] at 8+0.08 |
 
-**Nothing is running on the M3.** v1.0's last gate is the GUI matrix (#37), on Carlos's Mac. En
-Croissant, Cute Chess and XBoard are done, with two fixes found on the way (#169, #170); ChessX
-stands in for HIARCS until its download arrives, then the Lichess bot. The results so far are in
+**Running now: #171** (larger reductions when the hash move is a capture, as in Stockfish 16 and
+17; chapter 14.1), started on the M3 on 2026-10-23 at about 09:45 MDT. A clear result should take
+1–3 hours, a small difference 5–8; Stockfish rates it about 3 Elo, so it may take long. A new
+session should restart the watcher, `scripts/watch-sprt.sh 171`, or just read #171's comments if
+the result is already there. Then rebase #171 onto `main` (in `docs/status.md` take `main`'s side
+and edit it), record the result in chapter 14.1 (and its "What it's worth" table), the search
+module docs, the switch's and the parameter's comments, the PRD, the ledger and this file, run
+`scripts/check.sh`, and merge. If it fails or has no verdict, switch it off by default
+(`Techniques::tt_capture_reductions`) and merge as a record. If it passes before the GUI matrix
+is done, rebase #154 onto it too.
+
+v1.0's last gate is the GUI matrix (#37), on Carlos's Mac. En
+Croissant, Cute Chess and XBoard are done, with two fixes found on the way (#169, #170); HIARCS
+Chess Explorer (installed 2026-10-23) and ChessX are next, then the Lichess bot. The results so far are in
 a comment on #37. Once the matrix is recorded, the version PR (#154) merges and Carlos tags
 `v1.0.0`. `main` has changed since the robustness run (#146) in search only through reductions
 (#155, #165, #167), and in those two protocol fixes: no change to time handling.
@@ -487,8 +500,9 @@ Run the full test suite on every commit you replay, not only at the tip: each be
      Stockfish (`ttPv`, which it rates about 7 Elo), had no verdict (#160, +0.3 ± 5.2); chapter
      14.1 lists Stockfish's larger, graded version for another try. Larger reductions after many fail highs,
      as in Stockfish 16 (GPL-3.0, about 5 Elo by its own comment), passed (#165, +12.8 ± 8.2).
-     Stockfish 17's version of #165 passed too (#167, +13.7 ± 8.5). Untested from Stockfish 17:
-     a ply more of reduction when the hash move is a capture (about 3 Elo by its comment).
+     Stockfish 17's version of #165 passed too (#167, +13.7 ± 8.5). Next from Stockfish 16 and
+     17: a ply more of reduction when the hash move is a capture (about 3 Elo by its comment;
+     #171, running).
    - **Tuning singular extensions, continued**: depth 6 passed (#78) and depth 4 too (#80),
      which is about where Stockfish starts; `singular_margin` 3 passed too (#82), and 4
      failed (#84); `singular_tt_depth_margin` 4 failed against 3 (#123, −7.4 ± 8.0). That
