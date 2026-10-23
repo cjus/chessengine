@@ -171,6 +171,32 @@ can learn from the same records without generating them again:
 {{#include ../../crates/nnue/src/record.rs:pieces}}
 ```
 
+### Balanced starts
+
+Each game starts from one of 50 balanced openings plus 8 random moves, so that no two games are
+alike. Random moves are often bad ones, though, and many games began with one side already far
+ahead. In 600 games, only 18.5% of the recorded positions were within a pawn of level and 37.5%
+were more than five pawns from it; White won 54% of the games.
+
+So when writing records, `datagen` searches each start like a move of the game and draws the
+random moves again while the start scores beyond 200 centipawns:
+
+```rust,ignore
+{{#include ../../crates/tools/src/selfplay.rs:balanced_start}}
+```
+
+| Largest start score | Within ±100 cp | Beyond ±500 cp | White / draw / Black |
+| --- | --- | --- | --- |
+| no limit | 18.5% | 37.5% | 54 / 17 / 29% |
+| 300 cp | 24.4% | 27.9% | 45 / 21 / 34% |
+| 200 cp | 30.0% | 25.3% | 41 / 23 / 37% |
+
+A quarter of the positions are still far from level, because games at a few thousand nodes a
+move do get decided, and a network has to judge won positions too. What the limit removes is
+games that were lopsided from their first move. It costs nothing: balanced games last longer
+and give more positions each, which pays for the extra search. The tuner's text output keeps
+every start, so chapter 16's runs can still be repeated.
+
 `datagen --format records` writes records, and `records` checks a file and shows what is in
 it. Sixty games make about 4,100 records, 132 KB; 100 million records take 3.2 GB. Records have
 no file header, so files from separate runs can simply be joined.

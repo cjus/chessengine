@@ -214,6 +214,10 @@ teaching value, and the trainer uses the Mac's GPU through Metal.
   - `datagen --format records` writes them (`--format text`, the default, still writes the
     Texel tuner's `FEN;result` lines), and the `records` tool checks a file and shows what it
     holds.
+  - **Balanced starts** (2026-10-23): for records, a start (opening plus 8 random moves) that
+    scores beyond 200 cp is drawn again, up to 20 times (`--max-start-score`, `off` for none).
+    On 600 games the records within ±100 cp went from 18.5% to 30.0%, those beyond ±500 from
+    37.5% to 25.3%, and White's wins from 54% to 41%, at the same speed.
 - **Trainer** (`crates/trainer`, a binary): forward and backward passes written by hand, with no
   machine-learning framework, so the book can walk through every gradient. Two backends compute
   the same thing:
