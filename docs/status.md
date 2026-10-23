@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-23, 12:56 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-23, 13:15 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -74,7 +74,9 @@ our own NNUE trainer, with a CPU reference and a GPU backend through wgpu on Met
 the tablebase tests run again, the download script following the mirror's new directories,
 #176; stage 21 started: the net's definition in `crates/nnue`, with chapter 21's first
 sections, #177; NNUE training records, 32 bytes each, written by `datagen --format records`
-and shown by `records`, #178.*
+and shown by `records`, #178; the first Lichess opening book building on the M3, #174, with
+the second version of larger reductions when the hash move is a capture, off the principal
+variation, next, #179.*
 
 ## Stages
 
@@ -145,10 +147,14 @@ and shown by `records`, #178.*
 | M5: larger reductions after many fail highs, as in Stockfish (chapter 14.1) | #165 | 767859 | Merged: +12.8 ± 8.2, 3,144 games, [0, 5] passed (M3 Max) |
 | M5: larger reductions after many fail highs in Stockfish 17's version (chapter 14.1) | #167 | 749181 | Merged: +13.7 ± 8.5, 2,953 games, [0, 5] passed (M3 Max) |
 | M5: larger reductions when the hash move is a capture, as in Stockfish (chapter 14.1) | #171 | 749181 (719329 with them on) | Merged, off by default: −6.5 ± 7.7, 3,668 games, [0, 5] failed (M3 Max) |
+| M5: larger reductions when the hash move is a capture, off the principal variation (chapter 14.1) | #179, `claude/tt-capture-non-pv` | 754886 | Draft, its SPRT next on the M3 Max, after the book (#174): [0, 5] at 8+0.08 |
 
-**Nothing is running on the M3 now** (2026-10-23, 12:41 MDT). Next for it, when Carlos has
-time: the first full Lichess opening book (#173, a draft until it is built), about half an
-hour; then the next SPRT candidate, not chosen yet.
+**Running now on the M3: the first full Lichess opening book** (#174, for #173), started by
+Carlos by 13:15 MDT on 2026-10-23; it takes about half an hour, mostly the download. When he
+pastes its summary in #174, record the numbers in chapter 18 and #173 (rebase it onto `main`
+first), then mark #173 ready and merge it. Next on the M3: #179's SPRT, the second version of
+larger reductions when the hash move is a capture, off the principal variation (chapter 14.1;
+its command is in #179).
 
 v1.0's last gate is the GUI matrix (#37), on Carlos's Mac. En
 Croissant, Cute Chess and XBoard are done, with two fixes found on the way (#169, #170); HIARCS
