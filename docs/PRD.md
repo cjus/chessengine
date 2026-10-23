@@ -214,6 +214,12 @@ teaching value, and the trainer uses the Mac's GPU through Metal.
   net needs about 100 million positions. `datagen` made about 190 a second per thread on the M1
   Max (2026-10-23), so the M3 at 9 threads makes about 8 million an hour: about 12 hours for the
   first net's data, a long run for the M3.
+  - **The run** (`scripts/mac-nnue-data.sh <issue>`, 2026-10-23): chunks of 56,000 games, each
+    its own file in `~/nnue-data/gen1`, so a stopped run keeps its finished chunks; chunk k's
+    seeds start at 1 + k × 56,000, so chunks never repeat a game. Then it checks every record,
+    trains networks of 256 and 512, runs `cb2026 bench` with each, and posts a report, with a
+    progress comment after each chunk. It refuses to mix chunks from two commits or to start
+    during a match.
   - **Records** (`cb2026_nnue::record`, decided 2026-10-23): 32 bytes per position, so 100
     million take 3.2 GB. Each keeps the whole position (pieces, side to move, castling rights
     as "rooks that can still castle", so Chess960 works, the en passant square and the
