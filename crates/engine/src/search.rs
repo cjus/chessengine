@@ -221,8 +221,12 @@
 //! `lmr_tt_capture` (1) more. As in Stockfish 16 and 17 (GPL-3.0), whose comment rates it "~3
 //! Elo" without saying why; the code here is cb2026's own. A plausible reason: the node's best
 //! move is probably that capture, and a quiet move searched late seldom does better. It failed:
-//! −6.5 ± 7.7 Elo after 3,668 games at 8+0.08 (cjus/chessengine#171), so it is off by default;
-//! see chapter 14.1.
+//! −6.5 ± 7.7 Elo after 3,668 games at 8+0.08 (cjus/chessengine#171). Most of the tree it saved
+//! was on the principal variation, where cb2026 otherwise reduces a ply less because the exact
+//! score matters, so the second version leaves the principal variation alone: at a PV node the
+//! extra reduction is `lmr_tt_capture_pv` (0), and 1 gives the first version. It failed too:
+//! −7.5 ± 8.0 Elo after 3,031 games at 8+0.08 (cjus/chessengine#179), so both versions are off
+//! by default; see chapter 14.1.
 //!
 //! ## History pruning
 //!
@@ -450,8 +454,10 @@ pub struct SearchParams {
     /// the one more for a node without a hash move (any other move adds 1).
     pub cutoff_count_double_extended: u32,
     /// Late move reductions are this many plies larger when the hash move is a capture (see
-    /// [`Techniques::tt_capture_reductions`]).
+    /// [`Techniques::tt_capture_reductions`])...
     pub lmr_tt_capture: i32,
+    /// ...but this many at a PV node.
+    pub lmr_tt_capture_pv: i32,
     /// Late move pruning applies up to this depth...
     pub lmp_max_depth: u32,
     /// ...once `lmp_base + depth²` quiet moves have been tried...
@@ -558,8 +564,11 @@ impl Default for SearchParams {
             // (cjus/chessengine#167); 0 and 1 give Stockfish 16's (cjus/chessengine#165).
             lmr_cutoff_all_node_plies: 1,
             cutoff_count_double_extended: 0,
-            // As in Stockfish 16 and 17 (GPL-3.0); it failed at 1 (cjus/chessengine#171).
+            // As in Stockfish 16 and 17 (GPL-3.0), which apply it at every node. With 1 at PV
+            // nodes too it failed (cjus/chessengine#171), and with 0 there too
+            // (cjus/chessengine#179).
             lmr_tt_capture: 1,
+            lmr_tt_capture_pv: 0,
             lmp_max_depth: 3,
             lmp_base: 3,
             // Doubling it when improving was part of both failed versions (#60, #63).
@@ -773,8 +782,10 @@ impl Default for Techniques {
             // Passed its SPRT: +12.8 ± 8.2 Elo after 3,144 games at 8+0.08
             // (cjus/chessengine#165); see chapter 14.1.
             cutoff_reductions: true,
-            // Off by default: it failed its SPRT, −6.5 ± 7.7 Elo after 3,668 games at 8+0.08
-            // (cjus/chessengine#171); see chapter 14.1.
+            // Off by default: both versions failed their SPRTs at 8+0.08. At every node,
+            // −6.5 ± 7.7 Elo after 3,668 games (cjus/chessengine#171); off the principal
+            // variation, −7.5 ± 8.0 Elo after 3,031 games (cjus/chessengine#179). See chapter
+            // 14.1.
             tt_capture_reductions: false,
             late_move_pruning: true,
             // Off by default: it measured weaker, −5.3 ± 7.1 Elo after 4,548 games at 8+0.08
@@ -1736,9 +1747,14 @@ impl<'a> Searcher<'a> {
                 // ANCHOR_END: cutoff_reduction
                 // ANCHOR: tt_capture_reduction
                 // Reduce more when the hash move is a capture: it is probably the best move,
-                // and a quiet move this late seldom beats it.
+                // and a quiet move this late seldom beats it. Less (by default not at all) on
+                // the principal variation, whose exact score matters.
                 if self.techniques.tt_capture_reductions && tt_move.is_some_and(is_noisy) {
-                    reduction += p.lmr_tt_capture;
+                    reduction += if pv_node {
+                        p.lmr_tt_capture_pv
+                    } else {
+                        p.lmr_tt_capture
+                    };
                 }
                 // ANCHOR_END: tt_capture_reduction
                 // ANCHOR: all_node_reduction
@@ -2299,6 +2315,18 @@ mod tests {
         techniques: Techniques,
         previous: Option<i32>,
     ) -> RootResult {
+        search_with_params(fen, depth, techniques, SearchParams::default(), previous)
+    }
+
+    /// Searches to `depth` with `search_params`, with an aspiration window around `previous`
+    /// if given.
+    fn search_with_params(
+        fen: &str,
+        depth: u32,
+        techniques: Techniques,
+        search_params: SearchParams,
+        previous: Option<i32>,
+    ) -> RootResult {
         let pos = Position::from_fen(fen).unwrap();
         // Material only, so the expected scores can be worked out by hand.
         let params = EvalParams::material_only();
@@ -2307,7 +2335,7 @@ mod tests {
         let mut ordering = OrderingTables::default();
         let mut searcher = Searcher::new(
             &params,
-            SearchParams::default(),
+            search_params,
             &tt,
             &mut ordering,
             techniques,
@@ -2749,10 +2777,35 @@ mod tests {
                 lmr,
                 ..Techniques::default()
             };
-            search(fen, 7, techniques).nodes
+            // The first version, on the principal variation too: with the material-only
+            // evaluation, this position's tree changes only there.
+            let params = SearchParams {
+                lmr_tt_capture_pv: 1,
+                ..SearchParams::default()
+            };
+            search_with_params(fen, 7, techniques, params, None).nodes
         };
         assert_ne!(nodes(true, true), nodes(false, true));
         assert_eq!(nodes(true, false), nodes(false, false));
+    }
+
+    #[test]
+    fn tt_capture_reductions_leave_the_principal_variation_alone_by_default() {
+        let fen = "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1";
+        let nodes = |lmr_tt_capture_pv| {
+            let params = SearchParams {
+                lmr_tt_capture_pv,
+                ..SearchParams::default()
+            };
+            let techniques = Techniques {
+                tt_capture_reductions: true,
+                ..Techniques::default()
+            };
+            search_with_params(fen, 7, techniques, params, None).nodes
+        };
+        assert_eq!(SearchParams::default().lmr_tt_capture_pv, 0);
+        // 1 is the first version (cjus/chessengine#171), which reduced the PV more too.
+        assert_ne!(nodes(0), nodes(1));
     }
 
     #[test]
