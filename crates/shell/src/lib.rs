@@ -52,6 +52,7 @@
 //! | `set allnode on\|off` | All-node reductions: reduce late moves less at expected all-nodes (off by default) |
 //! | `set ttpv on\|off` | TT PV: reduce late moves less at nodes that are or have been on the principal variation (off by default) |
 //! | `set cutoffs on\|off` | Cutoff reductions: reduce late moves more when the next ply has had many fail highs |
+//! | `set ttcapture on\|off` | TT capture: reduce late moves more when the hash move is a capture |
 //! | `set histprune on\|off` | History pruning: skip quiet moves with a bad history near the leaves (off by default) |
 //! | `set rfp\|razoring\|futility\|seeprune\|delta\|seeorder on\|off` | Stage 14's pruning and SEE ordering |
 //! | `eval` | The static evaluation, term by term |
@@ -172,6 +173,7 @@ Commands:
   set allnode on|off   Reduce late moves less at expected all-nodes (default off)
   set ttpv on|off      Reduce late moves less at nodes once on the PV (default off)
   set cutoffs on|off   Reduce late moves more when the next ply has had many fail highs
+  set ttcapture on|off Reduce late moves more when the hash move is a capture
   set histprune on|off History pruning: skip quiet moves with a bad history near the
                        leaves (default off)
   set rfp|razoring|futility|seeprune|delta on|off
@@ -1046,7 +1048,7 @@ impl Shell {
             _ => return Response::text(SET_USAGE),
         }
         Response::text(format!(
-            "Sliding attacks: {}\nEngine moves: {}\nAlpha-beta pruning: {}\nQuiescence search: {}\nMVV-LVA ordering: {}\nTransposition table: {} ({} MB, buckets {})\nThreads: {}\nPiece-square tables: {}\nTapered evaluation: {}\nMobility, pawns, pieces, king safety, tempo: {}, {}, {}, {}, {}\nKillers, countermoves, history, continuation history: {}, {}, {}, {}\nPVS, aspiration windows: {}, {}\nNull-move pruning: {}\nLate move reductions, adjusted by history, at cut nodes, at all-nodes, at nodes once on the PV, after many fail highs, pruning, history pruning: {}, {}, {}, {}, {}, {}, {}, {}\nReverse futility, razoring, futility: {}, {}, {}\nSEE pruning, delta pruning, SEE ordering: {}, {}, {}",
+            "Sliding attacks: {}\nEngine moves: {}\nAlpha-beta pruning: {}\nQuiescence search: {}\nMVV-LVA ordering: {}\nTransposition table: {} ({} MB, buckets {})\nThreads: {}\nPiece-square tables: {}\nTapered evaluation: {}\nMobility, pawns, pieces, king safety, tempo: {}, {}, {}, {}, {}\nKillers, countermoves, history, continuation history: {}, {}, {}, {}\nPVS, aspiration windows: {}, {}\nNull-move pruning: {}\nLate move reductions, adjusted by history, at cut nodes, at all-nodes, at nodes once on the PV, after many fail highs, when the hash move is a capture, pruning, history pruning: {}, {}, {}, {}, {}, {}, {}, {}, {}\nReverse futility, razoring, futility: {}, {}, {}\nSEE pruning, delta pruning, SEE ordering: {}, {}, {}",
             match slider_method() {
                 SliderMethod::Rays => "walking rays",
                 SliderMethod::Magics => "magic bitboards",
@@ -1086,6 +1088,7 @@ impl Shell {
             on_off_text(self.engine.techniques.all_node_reductions),
             on_off_text(self.engine.techniques.tt_pv),
             on_off_text(self.engine.techniques.cutoff_reductions),
+            on_off_text(self.engine.techniques.tt_capture_reductions),
             on_off_text(self.engine.techniques.late_move_pruning),
             on_off_text(self.engine.techniques.history_pruning),
             on_off_text(self.engine.techniques.reverse_futility),
@@ -1147,7 +1150,7 @@ impl Shell {
 }
 
 /// Usage for the `set` command.
-const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set threads <N> | set eval hand|tuned | set alphabeta|quiescence|mvvlva|tt|ttbuckets|killers|countermoves|history|conthist|capthist|capthistq|pvs|aspiration|nullmove|lmr|histlmr|cutnode|allnode|ttpv|cutoffs|lmp|histprune|rfp|razoring|futility|seeprune|delta|seeorder|checkext|singular|doubleext|multicut|negext|iir|improving|probcut|correction|corrpieces|tmstability|tmscore|pst|tapered|mobility|pawns|pieces|kingsafety|tempo on|off";
+const SET_USAGE: &str = "Usage: set sliders rays|magics | set depth <N> | set movetime <MS> | set hash <MB> | set threads <N> | set eval hand|tuned | set alphabeta|quiescence|mvvlva|tt|ttbuckets|killers|countermoves|history|conthist|capthist|capthistq|pvs|aspiration|nullmove|lmr|histlmr|cutnode|allnode|ttpv|cutoffs|ttcapture|lmp|histprune|rfp|razoring|futility|seeprune|delta|seeorder|checkext|singular|doubleext|multicut|negext|iir|improving|probcut|correction|corrpieces|tmstability|tmscore|pst|tapered|mobility|pawns|pieces|kingsafety|tempo on|off";
 
 /// How long the engine thinks per move by default in the shell.
 const DEFAULT_MOVETIME_MS: u64 = 1000;

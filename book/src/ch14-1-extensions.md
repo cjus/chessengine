@@ -578,6 +578,29 @@ of both: the extra all-node ply alone gives a bench of 741,257 and the game +9.1
 alone, 757,332 and +3.9%. The games decided, as with cut-node reductions: a bigger tree in the
 game positions, and still a gain.
 
+## Reductions when the hash move is a capture
+
+One more signal comes from the transposition table. Stockfish 16 and 17 (GPL-3.0) reduce late
+moves a ply more when the move the table remembers as best here is a capture (or a promotion to
+a queen). Their comment rates it about 3 Elo and doesn't say why (cjus/chessengine#171). A
+plausible reason: the node's best move is probably that capture, and a quiet move searched this
+late seldom does better. cb2026 does the same, with code of its own:
+
+```rust,ignore
+{{#include ../../crates/engine/src/search.rs:tt_capture_reduction}}
+```
+
+`lmr_tt_capture` is 1, as in Stockfish, and `set ttcapture off` gives the search without it
+exactly. It applies less often than the reductions above: over the game's positions at depth
+10, the hash move was a capture for 12.5% of the moves late move reductions reduced. The trees
+still shrink:
+- The bench shrinks by 4.0%, from 749,181 to 719,329 nodes.
+- The six positions of chapters 10 to 14 shrink by 8.5%, 5.0% and 8.5% at depths 9 to 11
+  (292,044, 450,207 and 698,814 nodes, against 319,002, 473,898 and 764,000).
+- The game's 58 positions at depth 10 shrink by 14.7% in all, and 30 of them get smaller.
+
+It is being tested (cjus/chessengine#171).
+
 ## What it saves
 
 The six positions of chapters 10 to 14 (bench positions 2 to 7) at depth 8, measured
