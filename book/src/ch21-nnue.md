@@ -437,6 +437,48 @@ Each node costs about 5% more with a 256-wide network than with the hand-crafted
 1.50 million nodes a second against 1.57 million on the M1 Max, in plain Rust that the
 compiler vectorises.
 
+## The first network
+
+The first network's data took the M3 Max 12.4 hours: 1,344,000 games of the hand-crafted
+evaluation against itself, on 9 threads, gave 104 million positions, 3.3 GB. White won 40.5% of
+the games, 23.8% were drawn and Black won 35.6%, and 30% of the scores were within a pawn of
+level, thanks to the balanced starts. Training took 7 minutes on the M3 Max's GPU for a network
+of 256 and 13 minutes for one of 512.
+
+The losses tell how it went. The 256 network's validation loss fell from 0.0103 after the first
+epoch to 0.0094 after the twentieth, with a visible step at the sixteenth, where the learning
+rate drops. Its training loss ended at 0.0090, close to the validation loss: it learnt chess, not
+the positions. (The 134,000-position sample above ended at 0.047.) The 512 network did a little
+better on unseen games, 0.0093, but its training loss pulled further away, 0.0086: with 100
+million positions, a wider network starts to learn the positions by heart.
+
+Then the checks that a network is sane before it plays a game:
+
+| Position (side to move) | Hand-crafted | 256 | 512 |
+| --- | --- | --- | --- |
+| The starting position | +10 | +24 | +15 |
+| White without its queen | −931 | −819 | −785 |
+| White without a knight | −269 | −227 | −236 |
+| White without a pawn | −52 | −19 | −44 |
+| A pawn on the 7th, kings far away | +290 | +752 | +745 |
+| King and bishop against king, a dead draw | +269 | +148 | +149 |
+
+The material is roughly where the hand-crafted evaluation puts it, the pawn about to promote is
+worth far more to the networks than to the hand-crafted evaluation, and every position mirrored
+(the colours swapped and the board turned round) scores exactly the same. The bench, the other
+side of the lesson above: with the 256 network the search needs 716,942 nodes, fewer than the
+hand-crafted evaluation's 749,181, where the weak networks needed several times as many. A good
+evaluation prunes well.
+
+The first games: 200 at one second each plus 0.01 a move, the 256 network against the
+hand-crafted evaluation, ended 172 wins, 4 losses and 24 draws, about +424 Elo ± 71. Games that
+fast exaggerate any difference in evaluation, so that is a first sign rather than a measurement;
+the SPRT at the usual 8 seconds plus 0.08 is what counts. It passed after 14 games, all of them
+won: the log-likelihood ratio reached 3.21, beyond the 2.94 that accepts the gain. A result that
+lopsided proves the network stronger but not by how much: with no losses or draws there is
+nothing to measure a difference from, and that takes a fixed number of games. Stage 9's
+piece-square tables passed the same way, 14 to 0.
+
 ## Pitfalls
 
 - **Trainer and engine must agree** on the numbering, the layers and the scales. They share
