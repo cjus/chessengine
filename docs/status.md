@@ -96,7 +96,7 @@ net against the HCE's 749,181, and +172 −4 =24 against the HCE in 200 games at
 #195; **the net is the default** (Carlos: committed in `nets/`, on the v1.0.0 release),
 built into every build, with the HCE kept at strength levels and for a lone king (the net alone
 drew K+Q and K+R against a lone king at 3,000 nodes a move), bench 749181 → 715674, #196; the
-robustness run again before v1.0.0 is tagged, #NEXTISSUE.*
+robustness run again before v1.0.0 is tagged, #197.*
 
 ## Stages
 
@@ -675,7 +675,7 @@ Run the full test suite on every commit you replay, not only at the tip: each be
      with the rule it wins them as the HCE does). Bench 749181 → 715674. `datagen` and
      `mac-nnue-data.sh` now play with the net (gen2's data, in `~/nnue-data/gen2`) unless given
      `none`; `mac-sprt.sh`'s `NET`/`BASE_NET` take `builtin` and `none` too.
-   - Next: **the robustness run again (Carlos, M3, #NEXTISSUE)**, about 10–11 hours, since v1.0's
+   - Next: **the robustness run again (Carlos, M3, #197)**, about 10–11 hours, since v1.0's
      was with the HCE; then the `v1.0.0` tag, whose release carries the net and the Lichess
      book (#183). Later: an Elo figure for the net (a fixed number of games, or a gauntlet
      against the reference engines beside main's 2714 ± 10), the levels recalibrated with the
