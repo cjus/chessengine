@@ -55,6 +55,7 @@ fn run() -> Result<(), String> {
         seed: 1,
         openings: Vec::new(),
         max_start_score: None,
+        network: None,
     };
     let mut openings_path = "tests/data/openings.epd".to_string();
     let mut args = std::env::args().skip(1);

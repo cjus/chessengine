@@ -13,7 +13,7 @@ use std::io::{self, BufRead, IsTerminal, Read};
 use std::process::ExitCode;
 
 use args::{Command, Mode, USAGE};
-use cb2026_engine::{Engine, Network};
+use cb2026_engine::{BUILTIN_NETWORK_NAME, Engine, EvalChoice, Network, builtin_network};
 use cb2026_protocol::Protocol;
 use cb2026_shell::{Shell, Style};
 
@@ -33,21 +33,27 @@ fn main() -> ExitCode {
         }
         Ok(Command::Bench(net)) => {
             let mut engine = Engine::new();
-            if let Some(path) = net {
-                match std::fs::read(&path)
+            match EvalChoice::parse(net.as_deref().unwrap_or(BUILTIN_NETWORK_NAME)) {
+                EvalChoice::BuiltIn => {}
+                EvalChoice::HandCrafted => engine.network = None,
+                EvalChoice::File(path) => match std::fs::read(path)
                     .map_err(|e| e.to_string())
                     .and_then(|bytes| Network::from_bytes(&bytes).map_err(|e| e.to_string()))
                 {
-                    Ok(net) => {
-                        // On stderr, so the three lines below stay as tools expect them.
-                        eprintln!("NNUE network {}", net.summary());
-                        engine.network = Some(std::sync::Arc::new(net));
-                    }
+                    Ok(net) => engine.network = Some(std::sync::Arc::new(net)),
                     Err(e) => {
                         eprintln!("cb2026: {path}: {e}");
                         return ExitCode::from(EXIT_USAGE);
                     }
+                },
+            }
+            // What it evaluates with, on stderr so the three lines below stay as tools expect.
+            match &engine.network {
+                Some(net) if std::sync::Arc::ptr_eq(net, &builtin_network()) => {
+                    eprintln!("The built-in NNUE network, {}", net.summary());
                 }
+                Some(net) => eprintln!("NNUE network {}", net.summary()),
+                None => eprintln!("The hand-crafted evaluation"),
             }
             let (nodes, time) =
                 cb2026_engine::bench::bench(&mut engine, cb2026_engine::bench::BENCH_DEPTH);

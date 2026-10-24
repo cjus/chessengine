@@ -66,7 +66,8 @@ games follow the release (cjus/chessengine#191; Carlos, 2026-10-23).
 
 `EvalFile`, the option for an NNUE network, came after these checks (#185). It is a string
 option like `BookFile` and `SyzygyPath`, which every GUI here showed, and the protocol tests
-cover it.
+cover it. Its default is `<built-in>`, the network built into the engine (#196); a GUI that
+clears the field (an empty value) gets the hand-crafted evaluation.
 
 **Found and fixed during the checks:**
 - **An empty string option** (`setoption name BookFile value`, which is how GUIs clear a path)

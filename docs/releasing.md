@@ -10,6 +10,8 @@ tag. Claude's cloud sessions can't push tags, so the tag is Carlos's step.
    `docs/testing.md`, "Robustness runs") and the GUI compatibility matrix (`docs/gui-compat.md`).
 2. The version in the root `Cargo.toml` (`[workspace.package] version`) is the new version, and
    `docs/elo-ledger.md` and the book are up to date. Claude prepares this in a PR.
+3. For v1.0.0: the robustness run again, since the engine now evaluates with the built-in NNUE
+   network (#196) and the first run was with the hand-crafted evaluation.
 
 ## Making the release
 
@@ -22,8 +24,8 @@ git push origin v1.0.0
 The workflow builds `cb2026` for Linux (x86-64), macOS (Apple Silicon and Intel) and Windows
 (x86-64), packages each with the README, the licences (`LICENSE-MIT`, `LICENSE-APACHE`,
 and `LICENSE-GPL-3.0`, since the release binaries include Syzygy probing) and the
-third-party notices (`THIRD-PARTY-NOTICES.txt`, below), adds
-`SHA256SUMS.txt`, and creates a **draft** release with notes generated from the merged PRs. Check the draft on GitHub
+third-party notices (`THIRD-PARTY-NOTICES.txt`, below), attaches the default NNUE network
+(`nets/*.nnue`, which the binaries also have built in), adds `SHA256SUMS.txt`, and creates a **draft** release with notes generated from the merged PRs. Check the draft on GitHub
 (Releases), edit the notes if needed, and publish it.
 
 A release can also carry an opening book, which is made on a Mac, not by the workflow (book

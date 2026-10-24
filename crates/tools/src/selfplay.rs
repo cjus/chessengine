@@ -24,13 +24,13 @@
 //!
 //! Only cb2026's own games are used: no other engine's games or data (`CLAUDE.md` rule 6).
 
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use std::thread;
 
 use cb2026_chess::game::Game;
 use cb2026_chess::{Color, Move, Position};
-use cb2026_engine::{Engine, Limits, Score};
+use cb2026_engine::{Engine, Limits, Network, Score};
 use cb2026_nnue::{GameResult, Record};
 
 /// A small, fast pseudo-random number generator (xorshift64*). Seeded per game, so a run can
@@ -76,6 +76,10 @@ pub struct DatagenSettings {
     /// If set, a start (opening plus random moves) whose search score is beyond this many
     /// centipawns is drawn again, so games start roughly balanced. `None` keeps every start.
     pub max_start_score: Option<i32>,
+    /// The NNUE network the games are played with: the built-in one by default, so that the
+    /// next network learns from the current one's games; `None` for the hand-crafted
+    /// evaluation, which played the first network's data and chapter 16's.
+    pub network: Option<Arc<Network>>,
 }
 
 /// A recorded position: its FEN and the game's result from White's side (1, 0.5 or 0).
@@ -340,6 +344,7 @@ pub fn generate(settings: &DatagenSettings, on_game: &(dyn Fn(usize, PlayedGame)
         for _ in 0..settings.threads.max(1) {
             scope.spawn(|| {
                 let mut engine = Engine::new();
+                engine.network = settings.network.clone();
                 // A small table: games at a few thousand nodes per move barely fill 1 MB.
                 engine.set_hash_size(4);
                 loop {
@@ -429,6 +434,7 @@ mod tests {
             seed: 3,
             openings: vec![opening.to_string()],
             max_start_score,
+            network: None,
         }
     }
 
@@ -480,6 +486,7 @@ mod tests {
             seed: 1,
             openings: vec![cb2026_chess::STARTING_FEN.to_string()],
             max_start_score: None,
+            network: None,
         };
         let a = starting_position(&settings, 0);
         let b = starting_position(&settings, 1);

@@ -42,7 +42,7 @@
 //! | `level <0-20>`, `elo <n>\|off`, `set multipv <N>` | Strength level; limit to an Elo; show several lines |
 //! | `set syzygy <path>`, `tb` | Load Syzygy tablebases; show the tablebase result for the position |
 //! | `set book <path>`, `set ownbook on\|off`, `book` | Load a Polyglot opening book; play from it; show its moves here |
-//! | `set evalfile <path>`, `set nnue on\|off` | Load an NNUE network and evaluate with it; switch back to the hand-crafted evaluation |
+//! | `set evalfile <path>\|builtin\|none`, `set nnue on\|off` | Evaluate with another NNUE network, the built-in one (the default) or none (the hand-crafted evaluation); switch the network off |
 //! | `set killers\|countermoves\|history\|conthist on\|off` | Switch a quiet-move ordering heuristic off |
 //! | `set capthist on\|off`, `set capthistq on\|off` | Capture history: order captures by what they win and their cutoffs, instead of by MVV-LVA; in the quiescence search too (both off by default) |
 //! | `set pvs on\|off`, `set aspiration on\|off` | Principal variation search; aspiration windows |
@@ -102,7 +102,10 @@ use cb2026_engine::levels;
 use cb2026_engine::stats::SearchStats;
 use cb2026_engine::tablebase::{self, TbWdl};
 use cb2026_engine::tt::MAX_HASH_MB;
-use cb2026_engine::{Engine, Limits, MAX_THREADS, NAME, Score, SearchInfo, bench, eval, search};
+use cb2026_engine::{
+    Engine, EvalChoice, Limits, MAX_THREADS, NAME, Score, SearchInfo, bench, builtin_network, eval,
+    search,
+};
 pub use cb2026_protocol::Protocol;
 pub use explain::{SWITCHES, Switch};
 use game::Clock;
@@ -158,7 +161,8 @@ Commands:
   tb                   The tablebase result and best move for this position
   set book <path>      Load a Polyglot opening book (.bin; none: unload)
   set ownbook on|off   Play book moves when the book has any (default off)
-  set evalfile <path>  Evaluate with an NNUE network (.nnue; none: the hand-crafted one)
+  set evalfile <path>  Evaluate with an NNUE network (.nnue; builtin: the default one;
+                       none: the hand-crafted evaluation)
   book                 The book's moves for this position, with their weights
   set killers|countermoves|history|conthist on|off
                        Quiet-move ordering heuristics (conthist: continuation history)
@@ -920,6 +924,22 @@ impl Shell {
             pawns(t.total),
             pawns(eval::evaluate(self.game.position(), params)),
         ));
+        // The table is the hand-crafted evaluation's; at full strength the search uses the
+        // network, if there is one and it is switched on.
+        if let Some(net) = self
+            .engine
+            .network
+            .as_deref()
+            .filter(|_| self.engine.techniques.nnue)
+        {
+            out.push_str(&format!(
+                "\nThe search evaluates with the NNUE network instead ({}): {} for {side} to move.\n\
+                 It keeps the hand-crafted evaluation at strength levels and when one side has only \
+                 its king.",
+                net.summary(),
+                pawns(net.evaluate_position(self.game.position())),
+            ));
+        }
         Response::text(out)
     }
 
@@ -1026,12 +1046,20 @@ impl Shell {
                     },
                 );
             }
-            (Some("evalfile"), path) => {
-                let path = path.unwrap_or("");
-                if path.is_empty() {
-                    self.engine.network = None;
-                    return Response::text("No NNUE network: the hand-crafted evaluation.");
-                }
+            (Some("evalfile"), value) => {
+                let path = match EvalChoice::parse(value.unwrap_or("")) {
+                    EvalChoice::HandCrafted => {
+                        self.engine.network = None;
+                        return Response::text("No NNUE network: the hand-crafted evaluation.");
+                    }
+                    EvalChoice::BuiltIn => {
+                        let net = builtin_network();
+                        let message = format!("The built-in NNUE network, {}.", net.summary());
+                        self.engine.network = Some(net);
+                        return Response::text(message);
+                    }
+                    EvalChoice::File(path) => path,
+                };
                 return Response::text(
                     match std::fs::read(path)
                         .map_err(|e| format!("{path}: {e}"))
@@ -1780,12 +1808,17 @@ mod tests {
         assert!(out.contains("Phase 24/24: 100% middlegame"), "{out}");
         // Only the tempo bonus separates the sides at the start.
         let tempo = pawns(shell.engine.params.value(eval::Param::Tempo).0);
+        let total = format!("Total: {tempo} for White, so {tempo} for White to move");
+        assert!(out.contains(&total), "{out}");
+        // The search uses the built-in network, so `eval` says what it thinks too.
         assert!(
-            out.ends_with(&format!(
-                "Total: {tempo} for White, so {tempo} for White to move"
-            )),
+            out.contains("The search evaluates with the NNUE network instead"),
             "{out}"
         );
+        assert!(out.contains(&builtin_network().summary()), "{out}");
+        // Without one, the table is the whole story.
+        shell.execute("set evalfile none");
+        assert!(shell.execute("eval").output.ends_with(&total));
         shell.execute("fen 4k3/8/8/4N3/8/8/8/4K3 b - - 0 1");
         let out = shell.execute("eval").output;
         assert!(out.contains("Phase 1/24"), "{out}");

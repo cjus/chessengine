@@ -1,5 +1,6 @@
-# Builds release binaries when a version tag (v1.0.0, ...) is pushed and attaches them to a
-# draft GitHub release, which Carlos reviews and publishes. See docs/releasing.md.
+# Builds release binaries when a version tag (v1.0.0, ...) is pushed and attaches them, with the
+# default NNUE network, to a draft GitHub release, which Carlos reviews and publishes. See
+# docs/releasing.md.
 name: Release
 
 on:
@@ -111,10 +112,17 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      # The default NNUE network goes on the release as a file of its own as well, for anyone
+      # who wants it (the binaries have it built in). See nets/README.md.
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: nets
       - uses: actions/download-artifact@v4
         with:
           path: assets
           merge-multiple: true
+      - name: The default network
+        run: cp nets/*.nnue assets/
       - name: Checksums
         run: cd assets && sha256sum * > SHA256SUMS.txt
       - uses: softprops/action-gh-release@v2

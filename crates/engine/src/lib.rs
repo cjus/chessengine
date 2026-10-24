@@ -59,8 +59,10 @@
 //! - **Evaluation (stages 9, 15–16):** a tapered, hand-crafted evaluation with a per-term trace
 //!   for the shell's `eval` command, and a Texel tuner that fits its weights to self-play games
 //!   (the tuned values are available, but haven't yet measured stronger than the hand-set ones).
-//!   From stage 21 the search can evaluate with an NNUE network instead ([`Engine::network`],
-//!   defined in `cb2026_nnue`), keeping one accumulator per ply ([`Techniques::nnue`]).
+//!   From stage 21 the search evaluates with an NNUE network ([`Engine::network`], defined in
+//!   `cb2026_nnue`), keeping one accumulator per ply ([`Techniques::nnue`]). The default
+//!   network is built into the binary ([`builtin_network`]); the strength levels keep the
+//!   hand-crafted evaluation, which they were calibrated with.
 //! - **Everything else a real engine needs (stages 6, 17–19):** time management, Lazy SMP,
 //!   Syzygy tablebases, a Polyglot opening book, and strength limiting.
 //!
@@ -90,8 +92,8 @@ pub mod tuned;
 pub mod tuning;
 
 use std::fmt;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -120,6 +122,55 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// The engine's authors, as reported to GUIs (`id author` in UCI).
 pub const AUTHOR: &str = "the cb2026 authors";
+
+// ANCHOR: builtin
+/// The default NNUE network, built into the binary: gen1, 256 wide, trained on 104 million
+/// positions of the hand-crafted evaluation's self-play. It passed its SPRT against the
+/// hand-crafted evaluation 14–0 (cjus/chessengine#195). `nets/README.md` says how it was made.
+const BUILTIN_NETWORK: &[u8] = include_bytes!("../../../nets/cb2026-gen1-256.nnue");
+
+/// What `EvalFile` shows when the built-in network is in use, and accepts to choose it.
+pub const BUILTIN_NETWORK_NAME: &str = "<built-in>";
+
+/// The built-in network, read the first time it is asked for and shared from then on.
+pub fn builtin_network() -> Arc<Network> {
+    static NETWORK: OnceLock<Arc<Network>> = OnceLock::new();
+    NETWORK
+        .get_or_init(|| {
+            Arc::new(
+                Network::from_bytes(BUILTIN_NETWORK)
+                    .expect("the built-in network is a valid network file (tested)"),
+            )
+        })
+        .clone()
+}
+// ANCHOR_END: builtin
+
+/// What an evaluation setting asks for: UCI's `EvalFile`, the shell's `set evalfile`, or a
+/// tool's `--evalfile`. The front ends read files (this crate does no I/O); this decides what
+/// the words mean, so that they all mean the same.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EvalChoice<'a> {
+    /// The built-in network: [`BUILTIN_NETWORK_NAME`], `builtin` or `built-in`.
+    BuiltIn,
+    /// No network, so the hand-crafted evaluation: empty, `<empty>`, `none` or `hce`. Empty is
+    /// what a GUI sends when someone clears the field.
+    HandCrafted,
+    /// A network file to read: anything else.
+    File(&'a str),
+}
+
+impl EvalChoice<'_> {
+    /// Reads a setting's value.
+    pub fn parse(value: &str) -> EvalChoice<'_> {
+        let value = value.trim();
+        match value.to_ascii_lowercase().as_str() {
+            "<built-in>" | "builtin" | "built-in" => EvalChoice::BuiltIn,
+            "" | "<empty>" | "none" | "hce" => EvalChoice::HandCrafted,
+            _ => EvalChoice::File(value),
+        }
+    }
+}
 
 /// The full engine identification, for example `cb2026 1.0.0`.
 ///
@@ -257,8 +308,9 @@ pub struct Engine {
     pub limit_strength: bool,
     /// The strength to play at when limited (the UCI `UCI_Elo`).
     pub elo: u32,
-    /// The NNUE network to evaluate with, if one is loaded (the UCI `EvalFile`; stage 21).
-    /// With none, or with [`Techniques::nnue`] off, the hand-crafted evaluation is used.
+    /// The NNUE network to evaluate with (the UCI `EvalFile`; stage 21): the built-in one
+    /// unless another is loaded. With none, with [`Techniques::nnue`] off, or at a strength level
+    /// below full strength, the hand-crafted evaluation is used.
     pub network: Option<Arc<Network>>,
 }
 
@@ -282,7 +334,7 @@ impl Default for Engine {
             skill_level: levels::FULL_STRENGTH,
             limit_strength: false,
             elo: levels::ELO_RANGE.1,
-            network: None,
+            network: Some(builtin_network()),
         }
     }
 }
@@ -428,6 +480,10 @@ impl Engine {
         }
         let limits = &level_limits;
         let lines = self.multipv.max(level.candidates).max(1);
+        // The levels were calibrated with the hand-crafted evaluation (chapter 19), so below
+        // full strength the search keeps it: their ratings stay true. Calibrating them again
+        // with a network is for later.
+        let full_strength = self.level() >= f64::from(levels::FULL_STRENGTH);
         // ANCHOR_END: level_limits
 
         let budget = time::budget(limits, position.side_to_move(), &self.time);
@@ -468,7 +524,9 @@ impl Engine {
         } = self;
         let tablebase = tablebase.as_deref();
         // The network, if the search is to evaluate with one.
-        let network = network.as_deref().filter(|_| techniques.nnue);
+        let network = network
+            .as_deref()
+            .filter(|_| techniques.nnue && full_strength);
         let self_multipv = (*multipv).max(1);
         let tablebase_params = *tablebase_params;
         // ANCHOR: horizon_search
@@ -957,7 +1015,9 @@ mod tests {
     #[test]
     fn with_no_network_or_the_switch_off_the_search_is_the_hand_crafted_one() {
         let nodes = |engine: &mut Engine| search_with(engine, KIWIPETE, 5).nodes;
-        let hand_crafted = nodes(&mut Engine::new());
+        let mut no_network = Engine::new();
+        no_network.network = None;
+        let hand_crafted = nodes(&mut no_network);
         let mut engine = Engine::new();
         engine.network = Some(Arc::new(material_network()));
         engine.techniques.nnue = false;
@@ -965,6 +1025,87 @@ mod tests {
         // Switched on, the network changes the search.
         engine.techniques.nnue = true;
         assert_ne!(nodes(&mut engine), hand_crafted);
+    }
+
+    #[test]
+    fn the_built_in_network_is_the_default() {
+        let engine = Engine::new();
+        let net = engine.network.as_ref().expect("a network by default");
+        assert!(Arc::ptr_eq(net, &builtin_network()));
+        assert_eq!(net.hidden(), 256);
+        // Read once and shared, not read again for every engine.
+        assert!(Arc::ptr_eq(&builtin_network(), &builtin_network()));
+    }
+
+    #[test]
+    fn eval_choices_read_the_same_for_every_front_end() {
+        for value in ["<built-in>", "builtin", "Built-In", " builtin "] {
+            assert_eq!(EvalChoice::parse(value), EvalChoice::BuiltIn, "{value:?}");
+        }
+        for value in ["", "  ", "<empty>", "none", "HCE"] {
+            assert_eq!(
+                EvalChoice::parse(value),
+                EvalChoice::HandCrafted,
+                "{value:?}"
+            );
+        }
+        assert_eq!(
+            EvalChoice::parse(" nets/x.nnue "),
+            EvalChoice::File("nets/x.nnue")
+        );
+        assert_eq!(EvalChoice::parse(BUILTIN_NETWORK_NAME), EvalChoice::BuiltIn);
+    }
+
+    #[test]
+    fn below_full_strength_the_search_keeps_the_hand_crafted_evaluation() {
+        let search = |skill_level: u32, network: bool| {
+            let mut engine = Engine::new();
+            engine.skill_level = skill_level;
+            if !network {
+                engine.network = None;
+            }
+            // Analysing, so the level never stops at a person's horizon, which it decides with
+            // the clock: the same search every time.
+            let limits = Limits {
+                infinite: true,
+                ..Limits::depth(4)
+            };
+            let stop = AtomicBool::new(false);
+            let mut last = None;
+            let position = Position::from_fen(KIWIPETE).unwrap();
+            engine.search(&position, &[], &limits, &stop, &mut |info| {
+                last = Some(info.clone())
+            });
+            let info = last.unwrap();
+            (info.nodes, info.score, info.pv)
+        };
+        // A level plays exactly as it did with the hand-crafted evaluation it was calibrated
+        // with, network or not...
+        assert_eq!(search(10, true), search(10, false));
+        // ...and only full strength uses the network.
+        assert_ne!(
+            search(levels::FULL_STRENGTH, true),
+            search(levels::FULL_STRENGTH, false)
+        );
+    }
+
+    #[test]
+    fn with_a_network_a_lone_king_gets_the_hand_crafted_evaluation() {
+        // King and queen against king, with nothing to capture: every position the search
+        // meets has a lone king.
+        let fen = "8/8/8/4k3/8/8/8/3QK3 w - - 0 1";
+        let search = |network: bool, lone_king: bool| {
+            let mut engine = Engine::new();
+            engine.techniques.lone_king = lone_king;
+            if !network {
+                engine.network = None;
+            }
+            let info = search_with(&mut engine, fen, 3);
+            (info.nodes, info.score)
+        };
+        assert_eq!(search(true, true), search(false, true));
+        // Switched off, the network evaluates it, and differently.
+        assert_ne!(search(true, false), search(false, true));
     }
 
     #[test]

@@ -375,7 +375,7 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Instant;
 
-use cb2026_chess::{Move, PieceType, Position};
+use cb2026_chess::{Color, Move, PieceType, Position};
 use cb2026_nnue::{Accumulator, Changes, Network};
 
 use crate::Score;
@@ -738,6 +738,11 @@ pub struct Techniques {
     /// Evaluate with the NNUE network when one is loaded ([`crate::Engine::network`], stage
     /// 21). Off, or with none loaded, the hand-crafted evaluation.
     pub nnue: bool,
+    /// With a network: evaluate positions where one side has only its king with the
+    /// hand-crafted evaluation, which knows how to drive that king to the edge and mate it.
+    /// The first network, which saw few such positions, drew K+Q and K+R against a lone king at
+    /// 3,000 nodes a move where the hand-crafted evaluation won all five tried.
+    pub lone_king: bool,
 }
 
 impl Default for Techniques {
@@ -818,8 +823,9 @@ impl Default for Techniques {
             // Off by default: it measured weaker, −10.2 ± 9.1 Elo after 2,593 games at 8+0.08
             // (cjus/chessengine#117), though it took 9.6% off the bench; see chapter 12.1.
             probcut: false,
-            // The network is used only when one is loaded, and none is by default.
+            // The network is used whenever one is loaded: the built-in one by default.
             nnue: true,
+            lone_king: true,
         }
     }
 }
@@ -1007,6 +1013,13 @@ enum MoveSearch {
     },
 }
 
+/// Whether exactly one side has only its king: an ending the side ahead wins by driving that
+/// king to the edge (see [`Techniques::lone_king`]).
+fn lone_king(pos: &Position) -> bool {
+    let bare = |color| pos.pieces_of_color(color).count() == 1;
+    bare(Color::White) != bare(Color::Black)
+}
+
 /// The network a search evaluates with, and an accumulator for each ply: the one at ply `p`
 /// belongs to the position the search is at `p` plies from the root.
 struct NnueStack<'a> {
@@ -1093,10 +1106,11 @@ impl<'a> Searcher<'a> {
     }
 
     /// The static evaluation of `pos`, at `ply`: the network's, from the accumulator the
-    /// search has kept up to date, or the hand-crafted evaluation's.
+    /// search has kept up to date, or the hand-crafted evaluation's (also with a network when
+    /// one side has only its king, see [`Techniques::lone_king`]).
     fn evaluate(&self, pos: &Position, ply: u32) -> i32 {
         match &self.nnue {
-            Some(nnue) => {
+            Some(nnue) if !(self.techniques.lone_king && lone_king(pos)) => {
                 let acc = &nnue.accumulators[ply as usize];
                 // Debug builds check every incremental update against a fresh computation.
                 debug_assert!(
@@ -1106,7 +1120,7 @@ impl<'a> Searcher<'a> {
                 let value = nnue.net.evaluate(acc, pos.side_to_move());
                 value.clamp(-NNUE_EVAL_LIMIT, NNUE_EVAL_LIMIT)
             }
-            None => evaluate(pos, self.params),
+            _ => evaluate(pos, self.params),
         }
     }
     // ANCHOR_END: nnue_search
