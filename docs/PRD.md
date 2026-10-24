@@ -834,6 +834,13 @@ move, a failure or an aborted game. `main` has changed since only in the weaker 
 gauntlet passed, the GUI compatibility matrix (cjus/chessengine#37) was v1.0's last gate, and it
 passed on 2026-10-23 (below).
 
+The robustness run was played again with the built-in NNUE network as the default
+(cjus/chessengine#196), since v1.0.0 ships that evaluation path, and it was **clean** too
+(2026-10-24, cjus/chessengine#197). `main` at `72f50f1` played itself 10,000 times on the M3 Max,
+as before: 6,000 games at 1+0.01, 3,000 at 10+0.1 and 1,000 at 40/60, with no time losses,
+illegal moves, failures or aborted games. The network's slower nodes (about 6%) cost no flag at
+1+0.01, the time control with the least to spare.
+
 M4's levels are calibrated (2026-10-19, cjus/chessengine#106): Skill Levels 0–19 rate **629 to
 2483** at 40+0.4 (± 23 to 55), and `UCI_Elo` maps onto those ratings
 (`crates/engine/src/levels.rs`, chapter 19). Every other level played 800 games against the

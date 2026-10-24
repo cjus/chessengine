@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-24, 06:12 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-24, 16:45 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -95,8 +95,9 @@ net against the HCE's 749,181, and +172 −4 =24 against the HCE in 200 games at
 **the 256 net passed its SPRT against the HCE**, +14 −0 =0 at 8+0.08 on the M3 Max (LLR 3.21),
 #195; **the net is the default** (Carlos: committed in `nets/`, on the v1.0.0 release),
 built into every build, with the HCE kept at strength levels and for a lone king (the net alone
-drew K+Q and K+R against a lone king at 3,000 nodes a move), bench 749181 → 715674, #196; the
-robustness run again before v1.0.0 is tagged, #197.*
+drew K+Q and K+R against a lone king at 3,000 nodes a move), bench 749181 → 715674, #196; **the
+robustness run again with the net clean**, 10,000 games at `72f50f1` with no time losses,
+illegal moves, failures or aborted games, #197, so the `v1.0.0` tag is next (Carlos, #199).*
 
 ## Stages
 
@@ -179,14 +180,19 @@ in `docs/gui-compat.md` and the PRD): En Croissant, Cute Chess, XBoard and HIARC
 on the M1 Max, with two fixes found on the way (#169, #170). The Lichess bot's two games follow
 the release (Carlos, 2026-10-23, #191), and Scid vs. PC and ChessBase weren't checked. Next:
 1. the version is 1.0.0 (#154, merged on 2026-10-23);
-2. Carlos tags `v1.0.0`, and the Release workflow makes a draft release;
-3. the book is uploaded to the draft (`docs/releasing.md`; #183);
-4. Carlos checks the draft and publishes it.
+2. the robustness run again with the network as the default (#197): clean on 2026-10-24;
+3. Carlos tags `v1.0.0`, and the Release workflow makes a draft release (#199);
+4. the book is uploaded to the draft (`docs/releasing.md`; #183);
+5. Carlos checks the draft and publishes it.
 
-`main` has changed since the robustness run (#146) in search only through reductions (#155,
-#165, #167), and in the two protocol fixes. Since the GUI matrix it has gained NNUE inference
-(#185), which plays only when a net is loaded with the new `EvalFile` option: the bench is
-unchanged. There is no change to time handling.
+The robustness run was played again (#197) because #196 made the built-in network the default,
+and v1.0's first run (#146) was with the hand-crafted evaluation. It finished on 2026-10-24 at
+16:31 MDT, about 10 hours after it started at 06:22: **clean**. `main` at `72f50f1` played
+itself 6,000 games at 1+0.01 (36 minutes), 3,000 at 10+0.1 (3 hours) and 1,000 at 40/60 (6.6
+hours), 9 at a time with the default Move Overhead, with no time losses, illegal moves, failures
+or aborted games. Its scores, +2.8 ± 6.1, +2.2 ± 7.6 and +1.4 ± 11.2, are noise, as they should
+be. The network's slower nodes (about 6%) cost no flag even at 1+0.01. Since `72f50f1`, `main`
+has changed only in its docs.
 
 **Opening books (#173, merged).** Carlos asked for a book from the Lichess database. The
 `make-book` tool (`crates/tools/src/book_maker.rs`) reads games in PGN from standard input and
@@ -371,17 +377,16 @@ passed; the rest wait on GUI checks, level calibration or the v1.0 work.
 | M2 Classical search | stages 8–14 | **Passed** 2026-10-18: stage 14 rated 2442 ± 11 by gauntlet at 8+0.08 (gate ~2200 CCRL), #36 |
 | M3 Evaluation | stages 15–16 | **Passed** 2026-10-18: stage 16 rated 2669 ± 10 by gauntlet at 8+0.08 (gate ≥2400 CCRL), #36 |
 | M4 Complete engine | stages 17–20 | **Passed** 2026-10-23: levels calibrated at 40+0.4 on 2026-10-19, 629–2483 (#106); the GUI matrix passed (#37); the Lichess bot's games follow v1.0 (#191) |
-| M5 v1.0 | strength work, release | Started (the M5 branches above); release workflow merged (#40); `main` rated 2782 ± 11 by gauntlet on 2026-10-21 (#131; 2714 ± 10 on 2026-10-18, #36), above the gate (≥2400, goal 2600+); the robustness run clean on 2026-10-22 (#146); the GUI matrix passed on 2026-10-23 (#37); version 1.0.0 merged (#154); the `v1.0.0` tag is next |
+| M5 v1.0 | strength work, release | Started (the M5 branches above); release workflow merged (#40); `main` rated 2782 ± 11 by gauntlet on 2026-10-21 (#131; 2714 ± 10 on 2026-10-18, #36), above the gate (≥2400, goal 2600+); the robustness run clean on 2026-10-22 (#146), and again with the network as the default on 2026-10-24 (#197); the GUI matrix passed on 2026-10-23 (#37); version 1.0.0 merged (#154); the `v1.0.0` tag is next (#199) |
 | M6 NNUE | stage 21 | Started 2026-10-23: the net's definition (#177), training records (#178) |
 
 ## Waiting on Carlos
 
 The open [`needs-carlos` issues](https://github.com/cjus/chessengine/issues?q=is%3Aopen+label%3Aneeds-carlos):
 
-- The `v1.0.0` tag (the commands are in #154 and `docs/releasing.md`), then publishing the
-  draft release with the book on it (#183).
+- #199: the `v1.0.0` tag (every gate passed), then publishing the draft release with the book
+  on it (#183).
 - #187: the NNUE trainer's speed on the M3 Max (a few minutes).
-- #190: the first net's data and training on the M3 Max (about 12 hours).
 - #191: the Lichess bot's two games, after v1.0.
 - #88: whether macOS honours the search threads' QoS outside Claude Code.
 
@@ -675,8 +680,10 @@ Run the full test suite on every commit you replay, not only at the tip: each be
      with the rule it wins them as the HCE does). Bench 749181 → 715674. `datagen` and
      `mac-nnue-data.sh` now play with the net (gen2's data, in `~/nnue-data/gen2`) unless given
      `none`; `mac-sprt.sh`'s `NET`/`BASE_NET` take `builtin` and `none` too.
-   - Next: **the robustness run again (Carlos, M3, #197)**, about 10–11 hours, since v1.0's
-     was with the HCE; then the `v1.0.0` tag, whose release carries the net and the Lichess
+   - Done: **the robustness run again** (#197), since v1.0's was with the HCE: clean on
+     2026-10-24, 10,000 games at `72f50f1` from 1+0.01 to 40/60, no time losses, illegal moves,
+     failures or aborted games.
+   - Next: **the `v1.0.0` tag (Carlos, #199)**, whose release carries the net and the Lichess
      book (#183). Later: an Elo figure for the net (a fixed number of games, or a gauntlet
      against the reference engines beside main's 2714 ± 10), the levels recalibrated with the
      net, 512 against 256 (`NET=… BASE_NET=…`), and gen2 from the net's own games.
