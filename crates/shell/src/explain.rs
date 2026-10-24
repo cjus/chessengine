@@ -235,6 +235,11 @@ pub const SWITCHES: &[Switch] = &[
         flag: |e| &mut e.techniques.nnue,
     },
     Switch {
+        name: "loneking",
+        description: "With a network, the hand-crafted evaluation when one side has only its king (it mates)",
+        flag: |e| &mut e.techniques.lone_king,
+    },
+    Switch {
         name: "correction",
         description: "Correction history (static evaluation corrected by pawn structure)",
         flag: |e| &mut e.techniques.correction_history,

@@ -96,9 +96,12 @@ against a sign or factor error in hand-derived gradients.
 
 ## Running it
 
+The games were the hand-crafted evaluation's. Since stage 21 `datagen` plays with the built-in
+network unless told otherwise, so to repeat them, ask for no network (`--evalfile none`):
+
 ```text
-cargo run --release -p cb2026-tools --bin datagen -- --out data.txt --games 8000 --seed 2026
-cargo run --release -p cb2026-tools --bin datagen -- --out data2.txt --games 16000 --seed 3033
+cargo run --release -p cb2026-tools --bin datagen -- --out data.txt --games 8000 --seed 2026 --evalfile none
+cargo run --release -p cb2026-tools --bin datagen -- --out data2.txt --games 16000 --seed 3033 --evalfile none
 cat data.txt data2.txt > data-all.txt
 cargo run --release -p cb2026-tools --bin tune -- --data data-all.txt --from hand \
     --epochs 1500 --lambda 3e-9 --min-count 500

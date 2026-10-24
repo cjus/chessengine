@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-# Generates the first NNUE network's training data on this Mac, trains networks on it, and
+# Generates an NNUE network's training data on this Mac, trains networks on it, and
 # reports to a GitHub issue.
 #
 #   scripts/mac-nnue-data.sh <issue number, or - to print the reports instead>
 #
-# Self-play with the hand-written evaluation (`datagen --format records`: balanced starts, 6,000
-# nodes a move) until there are POSITIONS records (default 100,000,000, about 3.2 GB), one game
-# per performance core minus one. About 12 hours on the M3 Max, so the work is split into chunks
-# of CHUNK_GAMES games (default 56,000, about 4.4 million records and half an hour), each its own
-# file in OUT (default ~/nnue-data/gen1). Run the same command again after a stop: it keeps the
+# Self-play (`datagen --format records`: balanced starts, 6,000 nodes a move) with EVALFILE
+# (default builtin: the built-in network, gen1, so the data is for gen2; `none` repeats gen1's,
+# which the hand-crafted evaluation played) until there are POSITIONS records (default
+# 100,000,000, about 3.2 GB), one game per performance core minus one. About 12 hours on the M3
+# Max, so the work is split into chunks of CHUNK_GAMES games (default 56,000, about 4.4 million
+# records and half an hour), each its own file in OUT (default ~/nnue-data/gen2). Run the same
+# command again after a stop: it keeps the
 # finished chunks and redoes only the unfinished one. Chunk k holds the games a single long run
 # would number from k × CHUNK_GAMES, so no two chunks share a game.
 #
@@ -20,13 +22,15 @@
 set -euo pipefail
 
 if [[ $# -ne 1 || "$1" == "-h" || "$1" == "--help" ]]; then
-  sed -n '2,19p' "$0"
+  sed -n '2,21p' "$0"
   exit 2
 fi
 TARGET="$1"
 POSITIONS="${POSITIONS:-100000000}"
 CHUNK_GAMES="${CHUNK_GAMES:-56000}"
-OUT="${OUT:-$HOME/nnue-data/gen1}"
+EVALFILE="${EVALFILE:-builtin}"
+# The built-in network is gen1, so its games make gen2's data.
+OUT="${OUT:-$HOME/nnue-data/gen2}"
 WIDTHS="${WIDTHS-256 512}"
 BACKEND="${BACKEND:-gpu}"
 EPOCHS="${EPOCHS:-20}"
@@ -84,7 +88,7 @@ if [[ "$TARGET" != "-" ]]; then
 fi
 progress() {
   local body="$MARKER
-**NNUE data progress** (\`scripts/mac-nnue-data.sh\` on $MACHINE at \`$COMMIT\`, $THREADS threads, into \`$OUT\`; updated after each chunk)
+**NNUE data progress** (\`scripts/mac-nnue-data.sh\` on $MACHINE at \`$COMMIT\`, $THREADS threads, \`--evalfile $EVALFILE\`, into \`$OUT\`; updated after each chunk)
 
 $1
 
@@ -126,7 +130,7 @@ while (( total < POSITIONS )); do
     echo "Chunk $k: $CHUNK_GAMES games, numbered from $(( k * CHUNK_GAMES ))..."
     rm -f "$chunk.part"
     if ! target/release/datagen --out "$chunk.part" --format records --games "$CHUNK_GAMES" \
-      --threads "$THREADS" --seed $(( 1 + k * CHUNK_GAMES )); then
+      --threads "$THREADS" --seed $(( 1 + k * CHUNK_GAMES )) --evalfile "$EVALFILE"; then
       progress "**Stopped:** datagen failed in chunk $k, after $(millions "$total") positions. The end of the log says why; run the same command again to carry on."
       exit 1
     fi
@@ -173,7 +177,7 @@ echo "Benchmarking..."
 bench() {
   target/release/cb2026 bench "$@" 2>&1 | awk '/^Nodes searched/ { n = $NF } /^Nodes\/second/ { s = $NF } END { print n, s }'
 }
-read -r hce_nodes hce_speed <<< "$(bench)"
+read -r hce_nodes hce_speed <<< "$(bench none)"
 BENCH="| Evaluation | Bench nodes | Nodes a second |"$'\n'"| --- | --- | --- |"$'\n'"| HCE | $hce_nodes | $hce_speed |"
 for width in ${NETS[@]+"${NETS[@]}"}; do
   net="$OUT/net-$width/epoch-$(printf %02d "$EPOCHS").nnue"
@@ -185,7 +189,7 @@ REPORT="$OUT/report.md"
 {
   echo "### NNUE data and networks on $MACHINE"
   echo
-  echo "Commit \`$COMMIT\`; $THREADS threads; files in \`$OUT\`."
+  echo "Commit \`$COMMIT\`; $THREADS threads; games played with \`--evalfile $EVALFILE\`; files in \`$OUT\`."
   echo
   echo "**Data:** $(millions "$total") positions in $k chunks of $CHUNK_GAMES games; $DATA_HOURS hours for the $(millions "$made") made in this run."
   echo

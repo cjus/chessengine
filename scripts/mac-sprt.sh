@@ -18,16 +18,18 @@
 # the log instead, so a broken run is never mistaken for a quiet one. See docs/PRD.md, "Test
 # machine".
 #
-# NNUE networks: NET=<file> gives the PR's engine that network (UCI EvalFile), so the SPRT
-# measures it against main's evaluation, the hand-crafted one; with BASE_NET=<file> as well,
-# main's engine gets that network, to compare two. Before the match the script checks that each
-# network loads (an engine that can't load one says so and plays on without it, which would
-# quietly test the hand-crafted evaluation instead), names it with the start of its SHA-256 in
-# the comments, and puts it in the PGN file's name.
+# NNUE networks: NET gives the PR's engine an evaluation through UCI EvalFile (a .nnue file,
+# `builtin` for its built-in network, or `none` for the hand-crafted evaluation), so the SPRT
+# measures it against main's default (its built-in network, or the hand-crafted evaluation if
+# it has none); BASE_NET as well gives main's engine one, to compare any two. Before the match
+# the script checks that each engine takes its setting (one that can't load a network says so
+# and plays on without it, which would quietly test something else), names each side's
+# evaluation in the comments (a file by the start of its SHA-256), and puts it in the PGN
+# file's name.
 set -euo pipefail
 
 if [[ $# -lt 1 || "$1" == "-h" || "$1" == "--help" ]]; then
-  sed -n '2,26p' "$0"
+  sed -n '2,28p' "$0"
   exit 2
 fi
 PR="$1"
@@ -35,21 +37,28 @@ ELO0="${2:-0}"
 ELO1="${3:-5}"
 TC="${4:-8+0.08}"
 
-# The networks as absolute paths, resolved before changing directory.
+# The networks: files as absolute paths, resolved before changing directory, or the words
+# `builtin` and `none`.
 absolute() {
   (cd "$(dirname "$1")" && echo "$PWD/$(basename "$1")")
+}
+is_word() {
+  [[ "$1" == builtin || "$1" == none ]]
 }
 NET="${NET:-}"
 BASE_NET="${BASE_NET:-}"
 if [[ -n "$BASE_NET" && -z "$NET" ]]; then
-  echo "mac-sprt: BASE_NET needs NET too (the PR's engine plays one network, main's the other)" >&2
+  echo "mac-sprt: BASE_NET needs NET too (NET=builtin keeps the PR's own built-in network)" >&2
   exit 2
 fi
 for net in ${NET:+"$NET"} ${BASE_NET:+"$BASE_NET"}; do
-  [[ -f "$net" ]] || { echo "mac-sprt: no network file '$net'" >&2; exit 2; }
+  if ! is_word "$net" && [[ ! -f "$net" ]]; then
+    echo "mac-sprt: no network file '$net' (or the words builtin and none)" >&2
+    exit 2
+  fi
 done
-[[ -n "$NET" ]] && NET="$(absolute "$NET")"
-[[ -n "$BASE_NET" ]] && BASE_NET="$(absolute "$BASE_NET")"
+if [[ -n "$NET" ]] && ! is_word "$NET"; then NET="$(absolute "$NET")"; fi
+if [[ -n "$BASE_NET" ]] && ! is_word "$BASE_NET"; then BASE_NET="$(absolute "$BASE_NET")"; fi
 
 for tool in git cargo gh; do
   command -v "$tool" >/dev/null || { echo "mac-sprt: '$tool' is not installed" >&2; exit 2; }
@@ -83,32 +92,56 @@ NEW_LABEL="PR #$PR"
 BASE_LABEL="main"
 NET_TAG=""
 MATCH_OPTIONS=()
-# "`name.nnue` (start of its SHA-256)".
-net_label() {
-  echo "network \`$(basename "$1")\` ($(shasum -a 256 "$1" | cut -c1-12))"
+# A side's evaluation in words, and in the PGN file's name.
+eval_label() {
+  case "$1" in
+    builtin) echo "its built-in network" ;;
+    none) echo "the hand-crafted evaluation" ;;
+    *) echo "network \`$(basename "$1")\` ($(shasum -a 256 "$1" | cut -c1-12))" ;;
+  esac
 }
-# Exits unless the engine $1 loads the network $2 through UCI, as the match will ask it to.
-check_net() {
-  local reply loaded
+eval_tag() {
+  case "$1" in
+    builtin) echo builtin ;;
+    none) echo hce ;;
+    *) echo "net-$(shasum -a 256 "$1" | cut -c1-8)" ;;
+  esac
+}
+# What the engine $1 evaluates with when not told: its built-in network, if it has one.
+default_label() {
+  if printf 'uci\nquit\n' | "$1" 2>/dev/null |
+    grep -q '^option name EvalFile type string default <built-in>'; then
+    echo "its built-in network"
+  else
+    echo "the hand-crafted evaluation"
+  fi
+}
+# Exits unless the engine $1 takes EvalFile $2 through UCI, as the match will ask it to.
+check_eval() {
+  local reply taken
   reply="$(printf 'uci\nsetoption name EvalFile value %s\nisready\nquit\n' "$2" | "$1" 2>&1)" || true
-  loaded="$(grep -E '^info string NNUE network ' <<< "$reply" | grep -v 'not loaded' || true)"
-  if [[ -z "$loaded" ]]; then
-    echo "mac-sprt: the engine didn't load the network $2:" >&2
+  if [[ "$2" == none ]]; then
+    taken="$(grep -E '^info string no NNUE network' <<< "$reply" || true)"
+  else
+    taken="$(grep -E '^info string NNUE network ' <<< "$reply" | grep -v 'not loaded' || true)"
+  fi
+  if [[ -z "$taken" ]]; then
+    echo "mac-sprt: the engine didn't take EvalFile $2:" >&2
     grep '^info string' <<< "$reply" >&2 || true
     exit 2
   fi
-  echo "Network: ${loaded#info string }"
+  echo "Evaluation: ${taken#info string }"
 }
 if [[ -n "$NET" ]]; then
-  check_net "$WORK/new/target/release/cb2026" "$NET"
-  NEW_LABEL="PR #$PR with $(net_label "$NET")"
-  BASE_LABEL="main with the hand-crafted evaluation"
-  NET_TAG="-net-$(shasum -a 256 "$NET" | cut -c1-8)"
+  check_eval "$WORK/new/target/release/cb2026" "$NET"
+  NEW_LABEL="PR #$PR with $(eval_label "$NET")"
+  BASE_LABEL="main with $(default_label "$WORK/base/target/release/cb2026")"
+  NET_TAG="-$(eval_tag "$NET")"
 fi
 if [[ -n "$BASE_NET" ]]; then
-  check_net "$WORK/base/target/release/cb2026" "$BASE_NET"
-  BASE_LABEL="main with $(net_label "$BASE_NET")"
-  NET_TAG="$NET_TAG-vs-$(shasum -a 256 "$BASE_NET" | cut -c1-8)"
+  check_eval "$WORK/base/target/release/cb2026" "$BASE_NET"
+  BASE_LABEL="main with $(eval_label "$BASE_NET")"
+  NET_TAG="$NET_TAG-vs-$(eval_tag "$BASE_NET")"
   # Sent to both engines, then the PR's own NET after it, which replaces it.
   MATCH_OPTIONS+=(--option "EvalFile=$BASE_NET")
 fi

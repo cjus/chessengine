@@ -132,8 +132,9 @@ scale of 400 / (1.19 × ln 10) ≈ 146. Many engines use 400; cb2026's centipawn
 A network is stored as a 48-byte header followed by the numbers. The header says everything
 about the network's shape (inputs, hidden size, activation, scales) and carries a checksum, so a
 damaged or foreign file is refused before it is used. Each input's weights are one row, so
-switching an input on or off adds one row to the accumulator. Networks aren't committed to the
-repository: they are published with the releases.
+switching an input on or off adds one row to the accumulator. The default network is part of
+the source, in `nets/`, and each release carries it as a download too; other networks aren't
+kept in the repository.
 
 ## The training data
 
@@ -419,9 +420,10 @@ The network's score is clamped to ±20,000 centipawns, so that nothing it comput
 taken for a tablebase win or a mate. Correction history (chapter 14.2) corrects it just as it
 corrects the hand-crafted evaluation.
 
-A network is loaded with the UCI option `EvalFile`, the shell's `set evalfile`, or
-`cb2026 bench NET`; the `nnue` switch turns it off again. With no network loaded nothing
-changes: the bench is the same to the node.
+Since the first network passed its test (below), it is built in and used by default. The UCI
+option `EvalFile`, the shell's `set evalfile` and `cb2026 bench NET` load another; `none`, or
+the `nnue` switch, goes back to the hand-crafted evaluation, and then the bench is what it was
+before networks, to the node.
 
 ### A lesson from a random network
 
@@ -479,6 +481,51 @@ lopsided proves the network stronger but not by how much: with no losses or draw
 nothing to measure a difference from, and that takes a fixed number of games. Stage 9's
 piece-square tables passed the same way, 14 to 0.
 
+## The network by default
+
+Passing made the network the default. Its file is part of the source (395 KB, in `nets/`, with
+a note of how it was made), and the build puts its bytes into the binary, where the engine reads
+them the first time it needs them:
+
+```rust,ignore
+{{#include ../../crates/engine/src/lib.rs:builtin}}
+```
+
+`EvalFile` now shows `<built-in>`. Empty, or `none`, means the hand-crafted evaluation, and a
+path another network; the shell's `set evalfile`, `cb2026 bench` and `datagen --evalfile` read
+the same words, decided in one place (`EvalChoice`). Two kinds of position keep the
+hand-crafted evaluation even so.
+
+**The strength levels.** Chapter 19 calibrated them with the hand-crafted evaluation. With the
+network the same node limits would play stronger, and the ratings would be wrong, so below full
+strength the search keeps the evaluation they were measured with, until they are calibrated
+again.
+
+**A lone king.** Making the network the default broke one test: king and queen against king,
+played at 3,000 nodes a move, with which the self-play tools check that they record a won game.
+The network drew it. Five such endings, each played out by both evaluations:
+
+| Nodes a move | Hand-crafted wins | Network wins |
+| --- | --- | --- |
+| 3,000 | 5 of 5 | 0 of 5 |
+| 20,000 | 5 of 5 | 2 of 5 |
+| 100,000 | 5 of 5 | 4 of 5 |
+| 500,000 | 5 of 5 | 5 of 5, more slowly |
+
+To mate a lone king, the side ahead drives it to the edge, and the hand-crafted evaluation
+rewards that, through its king tables and mobility. The network was trained on balanced games,
+where a bare king is rare, and it scores those positions much alike: a big lead, whatever the
+kings do. So the search shuffles until a repetition or the fifty-move rule ends the game. A deep
+search finds the mate anyway, which is why the games at 8 seconds never showed it, but fast games
+and shallow analysis don't. Stockfish kept special evaluations for such endings beside its
+networks for years. Here, when exactly one side has only its king, the search uses the
+hand-crafted evaluation (the `loneking` switch), and the network wins all five at 3,000 nodes,
+as quickly as the hand-crafted evaluation.
+
+The bench now searches with the network: 715,674 nodes, 1,268 fewer than the network alone,
+since a few of its positions reach a bare king deep in the search, against the hand-crafted
+evaluation's 749,181. Every commit message's `Bench:` line changes with it.
+
 ## Pitfalls
 
 - **Trainer and engine must agree** on the numbering, the layers and the scales. They share
@@ -488,6 +535,10 @@ piece-square tables passed the same way, 14 to 0.
 - **An eval scale that doesn't match** quietly changes every margin in the search.
 - **Overflow** in the integer arithmetic gives silently wrong scores. The weight limit and the
   bounds above rule it out, and a test runs the largest possible weights.
+- **Endings the data never showed.** A network learns only what its positions show. Balanced
+  self-play has few bare kings, so the first network couldn't drive one to the edge. Test the
+  endings every beginner must win, king and queen or rook against king, at low node counts,
+  where the search can't cover the gap.
 - **A network that quietly doesn't load.** An engine that can't read its `EvalFile` says so
   in an `info string` and plays on with the hand-crafted evaluation, and a match tool ignores
   info strings, so a test of the network would measure the old evaluation against itself.

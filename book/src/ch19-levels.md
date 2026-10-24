@@ -334,6 +334,13 @@ With a person's horizon the levels lose far more often to engines, so their rati
 engines would now be much lower, the lower levels below every reference engine (the weakest is
 rated 1058). Rating them on CCRL's scale again would need weaker engines.
 
+## Levels and the network
+
+From stage 21 the engine evaluates with an NNUE network (chapter 21), but the levels keep the
+hand-crafted evaluation they were calibrated with: below full strength the search doesn't use
+the network. With it, the same node limits would play stronger and every rating above would be
+wrong. Calibrating the levels again with the network is for later.
+
 ## Pitfalls
 
 - **A rating against engines isn't a rating against people.** Engines punish every blunder;

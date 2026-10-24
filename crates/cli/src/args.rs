@@ -9,7 +9,8 @@ pub enum Command {
     /// Run in the given mode.
     Run(Mode),
     /// Run the fixed benchmark and print its node count and speed, evaluating with the NNUE
-    /// network in this file if one is given.
+    /// network in this file, or with none (`none`, the hand-crafted evaluation), if given; with
+    /// the built-in network otherwise.
     Bench(Option<String>),
     /// Print the engine name and version.
     Version,
@@ -43,8 +44,9 @@ Node Protocol when a program starts it (its first line, `uci`, `xboard` or a JSO
 decides).
 
 Commands:
-  bench [NET]    Run the fixed benchmark; prints total nodes and speed. With NET (a .nnue
-                 file), evaluate with that NNUE network
+  bench [NET]    Run the fixed benchmark; prints total nodes and speed. It evaluates with
+                 the built-in NNUE network, or with NET: a .nnue file, or none for the
+                 hand-crafted evaluation
 
 Options:
   --shell        Force the interactive shell

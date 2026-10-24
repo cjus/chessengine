@@ -209,6 +209,18 @@ teaching value, and the trainer uses the Mac's GPU through Metal.
   the bench with a net from 134,000 positions, millions at depth 4 on Kiwipete with random
   weights), because a noisy evaluation prunes badly. The levels were calibrated with the HCE;
   with a net they would need calibrating again.
+- **The default net** (Carlos, 2026-10-24): gen1's 256-wide net, which passed its SPRT against
+  the HCE (+14 −0 =0, #195), is built into every build (`cb2026_engine::builtin_network`) and
+  used unless told otherwise. `EvalFile` defaults to `<built-in>`; empty (or `none`) means the
+  HCE, a path another net, the same words everywhere (`EvalChoice`: the shell's `set
+  evalfile`, `cb2026 bench [NET]`, `datagen --evalfile`). Two places keep the HCE: **the
+  strength levels**, below full strength, since they were calibrated with it (recalibrating
+  with a net is for later); and **positions where one side has only its king** (the
+  `lone_king` switch, on), since the net, which saw few, drew K+Q and K+R against a lone king
+  at 3,000 nodes a move in all five tried, where the HCE won them all (the net alone won all
+  five only by 500,000). `cb2026 bench` searches with the net: 715,674 nodes, against the
+  HCE's 749,181 (`cb2026 bench none`). `datagen` plays with the built-in net unless given
+  `--evalfile none`, so the next data is the net's own games.
 - **Data:** `datagen` self-play, with the HCE for the first net and each net's own games for the
   next, stores the search score as well as the game result, in a compact binary file. A first
   net needs about 100 million positions. `datagen` made about 190 a second per thread on the M1
@@ -281,16 +293,20 @@ teaching value, and the trainer uses the Mac's GPU through Metal.
   checks it with the rest, and checks the `gpu` feature on its own (clippy, the GPU tests, the
   docs); the GPU tests run on Metal on the Mac, and on the nightly Linux CI, which has no GPU,
   they say so and pass.
-- **Nets** are not committed: they are published as release assets and fetched by a script, as
-  opening books are. A release build embeds the default net.
+- **Nets:** the default net is committed, in `nets/` with a README saying how it was made
+  (Carlos, 2026-10-24): every build compiles it in, and a release's build runs before the
+  release exists, so the file can't come from the release. It is small (395 KB for 256 wide).
+  Each release carries it as a download as well (the Release workflow attaches `nets/*.nnue`).
+  Other nets, experiments and older generations, stay out of the repository.
 - **Order:** the net's definition (inputs, layers, the integer format) comes first, in
   `crates/nnue`, since the trainer and the engine must agree on it. Then `datagen`'s scores and
   file format, the CPU trainer and the GPU backend, alongside the engine's inference; none of
   these change the engine's play until a net is switched on. The first SPRT, net against HCE,
   needs both halves.
 - **Judging a net** (2026-10-23): `NET=<file> scripts/mac-sprt.sh <PR>` gives the PR's engine
-  the net (UCI `EvalFile`) and leaves main's on the HCE; `BASE_NET=<file>` gives main's engine a
-  net too, to compare two. The PR is the one that would make the net the default, so the
+  the net (UCI `EvalFile`) and leaves main's on its default (the built-in net since #196, the
+  HCE before); `BASE_NET` gives main's engine one too, to compare any two. Both also take
+  `builtin` and `none` (the HCE). The PR is the one that would make the net the default, so the
   result lands where the decision is made. The script loads each net through UCI before the
   match and stops if it doesn't load, since an engine that can't load its net plays on with the
   HCE and the match would quietly test the HCE against itself.
@@ -354,7 +370,7 @@ moves ...`, every `go` parameter, `stop`, `ponderhit`, `quit`, and `info` lines 
 | OwnBook | check | false | |
 | BookFile | string | `<empty>` | |
 | Clear Hash | button | | |
-| EvalFile | string | `<empty>` | M6: an NNUE network file (`.nnue`); empty means the HCE. A built-in net comes when one beats the HCE |
+| EvalFile | string | `<built-in>` | M6: the NNUE network: `<built-in>` (the default, gen1's), a `.nnue` file, or empty (or `none`) for the HCE |
 
 Technique switches and tuning parameters are not shown to GUIs by default; they appear only in a
 developer build or when the engine is started with `--dev`, so GUI option lists stay clean.

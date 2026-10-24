@@ -140,21 +140,24 @@ with any time losses, illegal moves, failures and aborted games. The games are k
 While the match runs, `mac-sprt.sh` also posts the score so far every 2,000 games
 (`PROGRESS_EVERY`, 0 for none), as one comment it keeps editing.
 
-**NNUE networks** (from stage 21). `NET=<file>` gives the PR's engine that network through UCI
-`EvalFile`, and main's engine keeps the hand-crafted evaluation, so with a PR that doesn't change
-the engine's code the SPRT measures the network against the HCE. With `BASE_NET=<file>` too,
-main's engine gets that network, to compare two (256 against 512, or one generation against the
-next):
+**NNUE networks** (from stage 21). `NET` gives the PR's engine an evaluation through UCI
+`EvalFile`: a `.nnue` file, `builtin` for its built-in network, or `none` for the hand-crafted
+evaluation. Main's engine keeps its default, the built-in network (or the hand-crafted
+evaluation, for a main from before #196, as the comments say), so with a PR that doesn't change
+the engine's code `NET=<file>` measures that network against the built-in one. With `BASE_NET`
+too, main's engine gets that, to compare any two: `NET=none BASE_NET=builtin` measures the
+hand-crafted evaluation against the network, and 512 against 256 is `NET=<512> BASE_NET=<256>`:
 
 ```sh
 NET=~/nnue-data/gen1/net-256/epoch-20.nnue nohup scripts/mac-sprt.sh <PR> > ~/sprt-<PR>.log 2>&1 &
 tail -f ~/sprt-<PR>.log
 ```
 
-An engine that can't load its network says so in an `info string` and plays on with the HCE,
-and the match tool ignores info strings, so before the match the script loads each network
-through UCI as the match will and stops if it doesn't load. The comments name each network
-with the start of its SHA-256, and its games go in `target/sprt/pr<PR>-<commit>-net-<hash>.pgn`.
+An engine that can't load its network says so in an `info string` and plays on without it,
+and the match tool ignores info strings, so before the match the script gives each engine its
+setting through UCI as the match will and stops if it isn't taken. The comments name each
+side's evaluation (a file with the start of its SHA-256), and the games go in
+`target/sprt/pr<PR>-<commit>-<net-hash, builtin or hce>.pgn`.
 
 Claude follows a running SPRT with `scripts/watch-sprt.sh <PR> [hours] [undecided games]`,
 which checks the PR every 10 minutes for the result comment and prints it. If the progress
@@ -253,12 +256,14 @@ tail -f ~/nnue-data.log
 
 Makes an NNUE network's training data and trains on it: self-play (`datagen --format records`)
 until there are 100 million positions, about 3.2 GB and 12 hours on the M3 Max, in chunks of
-56,000 games (about half an hour each), each its own file in `~/nnue-data/gen1`. Then it checks
+56,000 games (about half an hour each), each its own file in `~/nnue-data/gen2`. The games are
+the built-in network's (`EVALFILE`, default `builtin`), so the data is for the next generation;
+gen1's, in `~/nnue-data/gen1` on the M3, were the hand-crafted evaluation's (`EVALFILE=none`). Then it checks
 every record, trains networks of 256 and 512 on the GPU for 20 epochs, runs `cb2026 bench` with
 each, and posts a report; a progress comment on the issue is updated after every chunk. Started
 again after a stop, it keeps the finished chunks and redoes only the unfinished one; it won't
 mix chunks from two commits, and won't start while a match is running. `POSITIONS`,
-`CHUNK_GAMES`, `OUT`, `WIDTHS`, `BACKEND` and `EPOCHS` change its settings.
+`CHUNK_GAMES`, `OUT`, `WIDTHS`, `BACKEND`, `EPOCHS` and `EVALFILE` change its settings.
 
 ## Bench
 

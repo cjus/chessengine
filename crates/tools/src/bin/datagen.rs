@@ -5,7 +5,7 @@
 //! cargo run --release -p cb2026-tools --bin datagen -- \
 //!     --out data.txt [--format text|records] [--games 3000] [--nodes 6000] \
 //!     [--random-plies 8] [--max-start-score N|off] [--threads 1] [--seed 1] \
-//!     [--openings tests/data/openings.epd]
+//!     [--openings tests/data/openings.epd] [--evalfile builtin|none|FILE]
 //! ```
 //!
 //! - `--format text` (the default), for the Texel tuner: each line is `FEN;result`, the result
@@ -18,19 +18,26 @@
 //! `N` centipawns, so the games start roughly balanced; `off` keeps every start. The default is
 //! 200 for records and `off` for text, so the tuner's runs in chapter 16 can still be repeated.
 //!
+//! `--evalfile` chooses what the games are played with, read as UCI's `EvalFile` is: the
+//! built-in NNUE network (the default, so that the next network learns from the current one's
+//! games), `none` for the hand-crafted evaluation (which played the first network's data and
+//! chapter 16's), or a network file.
+//!
 //! See `cb2026_tools::selfplay` for how games are played and which positions are kept.
 
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::process::ExitCode;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
+use cb2026_engine::{EvalChoice, Network, builtin_network};
 use cb2026_tools::match_runner::parse_openings;
 use cb2026_tools::selfplay::{DatagenSettings, generate};
 
 const USAGE: &str = "Usage: datagen --out FILE [--format text|records] [--games N] [--nodes N] \
-[--random-plies N] [--max-start-score N|off] [--threads N] [--seed N] [--openings FILE]";
+[--random-plies N] [--max-start-score N|off] [--threads N] [--seed N] [--openings FILE] \
+[--evalfile builtin|none|FILE]";
 
 /// The largest start score, in centipawns, kept by default when writing records. Measured on
 /// 600 games (2026-10-23): with no limit 18.5% of the records were within ±100 cp and 37.5%
@@ -68,6 +75,7 @@ fn run() -> Result<(), String> {
         seed: 1,
         openings: Vec::new(),
         max_start_score: None,
+        network: Some(builtin_network()),
     };
     let mut max_start_score = None;
     let mut openings_path = "tests/data/openings.epd".to_string();
@@ -96,6 +104,19 @@ fn run() -> Result<(), String> {
             "--threads" => settings.threads = number(value()?)? as usize,
             "--seed" => settings.seed = number(value()?)?,
             "--openings" => openings_path = value()?,
+            "--evalfile" => {
+                settings.network = match EvalChoice::parse(&value()?) {
+                    EvalChoice::BuiltIn => Some(builtin_network()),
+                    EvalChoice::HandCrafted => None,
+                    EvalChoice::File(path) => {
+                        let bytes =
+                            std::fs::read(path).map_err(|e| format!("can't read {path}: {e}"))?;
+                        Some(Arc::new(
+                            Network::from_bytes(&bytes).map_err(|e| format!("{path}: {e}"))?,
+                        ))
+                    }
+                }
+            }
             other => return Err(format!("unknown argument '{other}'")),
         }
     }
@@ -111,6 +132,13 @@ fn run() -> Result<(), String> {
         return Err(format!("no openings in {openings_path}"));
     }
 
+    match &settings.network {
+        Some(net) if Arc::ptr_eq(net, &builtin_network()) => {
+            println!("Playing with the built-in NNUE network, {}", net.summary());
+        }
+        Some(net) => println!("Playing with NNUE network {}", net.summary()),
+        None => println!("Playing with the hand-crafted evaluation"),
+    }
     let file = File::create(&out).map_err(|e| format!("can't create {out}: {e}"))?;
     let writer = Mutex::new(BufWriter::new(file));
     let start = Instant::now();

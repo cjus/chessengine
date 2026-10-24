@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-24, 05:41 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-24, 06:12 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -93,7 +93,10 @@ ready for the net-vs-HCE SPRT, #194; the first network, gen1: 104.2M positions i
 trained on its GPU in 7 and 13 minutes, sane evaluations, a bench of 716,942 nodes with the 256
 net against the HCE's 749,181, and +172 −4 =24 against the HCE in 200 games at 1+0.01, #190;
 **the 256 net passed its SPRT against the HCE**, +14 −0 =0 at 8+0.08 on the M3 Max (LLR 3.21),
-#195.*
+#195; **the net is the default** (Carlos: committed in `nets/`, on the v1.0.0 release),
+built into every build, with the HCE kept at strength levels and for a lone king (the net alone
+drew K+Q and K+R against a lone king at 3,000 nodes a move), bench 749181 → 715674, #196; the
+robustness run again before v1.0.0 is tagged, #197.*
 
 ## Stages
 
@@ -661,10 +664,19 @@ Run the full test suite on every commit you replay, not only at the tip: each be
      **passed after 14 games, +14 −0 =0** (LLR 3.21), with no time losses or failures. Too
      lopsided to give an Elo figure (as stage 9's 14–0); 200 games at 1+0.01 on the M1 Max gave
      about +424 ± 71.
-   - Next: make the net the default: a release asset fetched by a script (nets aren't
-     committed), embedded in release builds, `EvalFile` defaulting to it, the HCE still a switch
-     (`EvalFile` empty, or `nnue` off). Bench then changes from 749181 to the net's figure
-     (716,942 on the M3), and the strength levels, calibrated with the HCE, need calibrating
-     again. An Elo figure for the ledger needs a fixed number of games (or a gauntlet against
-     the reference engines, beside main's 2714 ± 10). Later: 512 against 256 (`BASE_NET=`) and a
-     second generation from the net's own games.
+   - Done: **the net is the default** (#196; Carlos, 2026-10-24: commit it, put it on the
+     v1.0.0 release). `nets/cb2026-gen1-256.nnue` is committed (395 KB; a release's build runs
+     before the release exists, so the file can't come from it) and built into every build
+     (`cb2026_engine::builtin_network`); the Release workflow attaches it to each release.
+     `EvalFile` defaults to `<built-in>`; empty or `none` is the HCE, the same words in the
+     shell, `cb2026 bench [NET]` and `datagen --evalfile` (`EvalChoice`). The HCE stays at
+     strength levels (calibrated with it; Carlos) and when one side has only its king (the
+     `loneking` switch: the net alone drew all five K+Q and K+R endings tried at 3,000 nodes,
+     with the rule it wins them as the HCE does). Bench 749181 → 715674. `datagen` and
+     `mac-nnue-data.sh` now play with the net (gen2's data, in `~/nnue-data/gen2`) unless given
+     `none`; `mac-sprt.sh`'s `NET`/`BASE_NET` take `builtin` and `none` too.
+   - Next: **the robustness run again (Carlos, M3, #197)**, about 10–11 hours, since v1.0's
+     was with the HCE; then the `v1.0.0` tag, whose release carries the net and the Lichess
+     book (#183). Later: an Elo figure for the net (a fixed number of games, or a gauntlet
+     against the reference engines beside main's 2714 ± 10), the levels recalibrated with the
+     net, 512 against 256 (`NET=… BASE_NET=…`), and gen2 from the net's own games.
