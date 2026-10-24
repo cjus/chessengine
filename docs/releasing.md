@@ -11,7 +11,8 @@ tag. Claude's cloud sessions can't push tags, so the tag is Carlos's step.
 2. The version in the root `Cargo.toml` (`[workspace.package] version`) is the new version, and
    `docs/elo-ledger.md` and the book are up to date. Claude prepares this in a PR.
 3. For v1.0.0: the robustness run again, since the engine now evaluates with the built-in NNUE
-   network (#196) and the first run was with the hand-crafted evaluation.
+   network (#196) and the first run was with the hand-crafted evaluation. Clean on 2026-10-24
+   (#197); the tag is #199.
 
 ## Making the release
 

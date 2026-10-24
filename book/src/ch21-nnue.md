@@ -526,6 +526,11 @@ The bench now searches with the network: 715,674 nodes, 1,268 fewer than the net
 since a few of its positions reach a bare king deep in the search, against the hand-crafted
 evaluation's 749,181. Every commit message's `Bench:` line changes with it.
 
+A new evaluation is a new way for the engine to fail: an accumulator updated at every move, and
+nodes about 6% slower, so less time to spare. Before v1.0.0 was tagged, the release's robustness
+run was played again with the network: 10,000 games against itself, 6,000 of them at 1+0.01, with
+no time losses, illegal moves, failures or aborted games.
+
 ## Pitfalls
 
 - **Trainer and engine must agree** on the numbering, the layers and the scales. They share
