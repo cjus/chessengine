@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-24, 05:34 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-24, 05:41 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -92,7 +92,8 @@ follow v1.0, #191; the first Lichess book goes into the v1.0.0 release, #183; **
 ready for the net-vs-HCE SPRT, #194; the first network, gen1: 104.2M positions in 12.4 hours on the M3 Max, nets of 256 and 512
 trained on its GPU in 7 and 13 minutes, sane evaluations, a bench of 716,942 nodes with the 256
 net against the HCE's 749,181, and +172 −4 =24 against the HCE in 200 games at 1+0.01, #190;
-its SPRT against the HCE is next, on the M3, #195.*
+**the 256 net passed its SPRT against the HCE**, +14 −0 =0 at 8+0.08 on the M3 Max (LLR 3.21),
+#195.*
 
 ## Stages
 
@@ -656,9 +657,14 @@ Run the full test suite on every commit you replay, not only at the tip: each be
      one too, to compare two nets. It loads each net through UCI before the match and stops if
      it doesn't load (an engine that can't load its net plays on with the HCE), and names each
      net with the start of its SHA-256 in the comments.
-   - Next: **the SPRT on #195 (Carlos, M3)**, 256 net against HCE, [0, 5] at 8+0.08:
-     `NET=~/nnue-data/gen1/net-256/epoch-20.nnue scripts/mac-sprt.sh 195`. When it passes: make
-     the net the default (a release asset, embedded in release builds, `EvalFile` defaulting
-     to it, the HCE still a switch), the Elo ledger, the levels recalibrated with the net, and
-     later 512 against 256 (`BASE_NET=`) and a second generation from the net's own games. If
-     it fails: more data, the eval scale and result weight, or that second generation.
+   - Done: **the SPRT** (#195): the 256 net against the HCE, [0, 5] at 8+0.08 on the M3 Max,
+     **passed after 14 games, +14 −0 =0** (LLR 3.21), with no time losses or failures. Too
+     lopsided to give an Elo figure (as stage 9's 14–0); 200 games at 1+0.01 on the M1 Max gave
+     about +424 ± 71.
+   - Next: make the net the default: a release asset fetched by a script (nets aren't
+     committed), embedded in release builds, `EvalFile` defaulting to it, the HCE still a switch
+     (`EvalFile` empty, or `nnue` off). Bench then changes from 749181 to the net's figure
+     (716,942 on the M3), and the strength levels, calibrated with the HCE, need calibrating
+     again. An Elo figure for the ledger needs a fixed number of games (or a gauntlet against
+     the reference engines, beside main's 2714 ± 10). Later: 512 against 256 (`BASE_NET=`) and a
+     second generation from the net's own games.

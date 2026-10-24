@@ -473,7 +473,11 @@ evaluation prunes well.
 The first games: 200 at one second each plus 0.01 a move, the 256 network against the
 hand-crafted evaluation, ended 172 wins, 4 losses and 24 draws, about +424 Elo ± 71. Games that
 fast exaggerate any difference in evaluation, so that is a first sign rather than a measurement;
-the SPRT at the usual 8 seconds plus 0.08 is what counts.
+the SPRT at the usual 8 seconds plus 0.08 is what counts. It passed after 14 games, all of them
+won: the log-likelihood ratio reached 3.21, beyond the 2.94 that accepts the gain. A result that
+lopsided proves the network stronger but not by how much: with no losses or draws there is
+nothing to measure a difference from, and that takes a fixed number of games. Stage 9's
+piece-square tables passed the same way, 14 to 0.
 
 ## Pitfalls
 
