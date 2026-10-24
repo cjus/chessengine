@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-24, 16:45 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-24, 17:55 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -182,7 +182,8 @@ the release (Carlos, 2026-10-23, #191), and Scid vs. PC and ChessBase weren't ch
 1. the version is 1.0.0 (#154, merged on 2026-10-23);
 2. the robustness run again with the network as the default (#197): clean on 2026-10-24;
 3. Carlos tags `v1.0.0`, and the Release workflow makes a draft release (#199);
-4. the book is uploaded to the draft (`docs/releasing.md`; #183);
+4. the book is uploaded to the draft, and its line added to `SHA256SUMS.txt`, which the
+   workflow writes before the book is there (`docs/releasing.md`; #183);
 5. Carlos checks the draft and publishes it.
 
 The robustness run was played again (#197) because #196 made the built-in network the default,
