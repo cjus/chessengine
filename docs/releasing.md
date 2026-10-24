@@ -34,10 +34,20 @@ chapter 18, `scripts/lichess-book.sh`). v1.0.0 carries September 2026's (cjus/ch
 Upload it to the draft before publishing, and say in the notes what it is: Polyglot, from
 Lichess's games (CC0), for `OwnBook` and `BookFile`.
 
+The workflow wrote `SHA256SUMS.txt` before the book was there, so add the book's line to it and
+replace it on the draft (the same format as the workflow's: `shasum -a 256 -c SHA256SUMS.txt`
+checks every file):
+
 ```sh
-gh release upload v1.0.0 ~/books/cb2026-lichess-2026-09.bin
-``` The `Cross-platform` workflow also runs
-the tests on macOS and Windows for the tag.
+cd "$(mktemp -d)"
+gh release upload v1.0.0 -R cjus/chessengine ~/books/cb2026-lichess-2026-09.bin
+gh release download v1.0.0 -R cjus/chessengine -p SHA256SUMS.txt
+(cd ~/books && shasum -a 256 cb2026-lichess-2026-09.bin) >> SHA256SUMS.txt
+gh release upload v1.0.0 -R cjus/chessengine SHA256SUMS.txt --clobber
+gh release download v1.0.0 -R cjus/chessengine -p SHA256SUMS.txt -O -   # 7 lines, the book's last
+```
+
+The `Cross-platform` workflow also runs the tests on macOS and Windows for the tag.
 
 The binaries are built for each platform's baseline CPU, so they run everywhere; building from
 source with `RUSTFLAGS="-C target-cpu=native"` is a little faster on a given machine.
