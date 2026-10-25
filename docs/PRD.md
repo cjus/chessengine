@@ -79,7 +79,10 @@ Short version for readers of the book (each point gets its own chapter):
 One self-contained binary per platform, no installer and no runtime dependencies, so a GUI can
 simply point at it. Built with stable Rust (pinned in `rust-toolchain.toml`, Rust 2024 edition).
 CPU features are chosen at compile time, one binary per target level, which is the usual practice
-for engines; the release notes say which binary to pick.
+for engines; the release notes say which binary to pick. The macOS binaries are signed with
+Carlos's Developer ID and notarised by Apple (from v1.0.0, 2026-10-24: `scripts/mac-sign-release.sh`
+on the Mac that holds the key, `docs/releasing.md`), so macOS runs a downloaded one without
+Gatekeeper stopping it. The Linux and Windows binaries are unsigned.
 
 ## Architecture
 
