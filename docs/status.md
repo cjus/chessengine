@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-24, 17:55 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-24, 19:20 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -97,7 +97,11 @@ net against the HCE's 749,181, and +172 −4 =24 against the HCE in 200 games at
 built into every build, with the HCE kept at strength levels and for a lone king (the net alone
 drew K+Q and K+R against a lone king at 3,000 nodes a move), bench 749181 → 715674, #196; **the
 robustness run again with the net clean**, 10,000 games at `72f50f1` with no time losses,
-illegal moves, failures or aborted games, #197, so the `v1.0.0` tag is next (Carlos, #199).*
+illegal moves, failures or aborted games, #197, so the `v1.0.0` tag is next (Carlos, #199);
+the book's line goes into `SHA256SUMS.txt` after its upload, #201; **the Mac binaries signed and
+notarised**: Carlos's Developer ID (G2, expires 2027-11-23) and notarytool credentials are on
+the M1 Max, and `scripts/mac-sign-release.sh <tag>` signs, notarises, checks and replaces a
+draft release's two macOS packages, tested end to end on a temporary draft, #202.*
 
 ## Stages
 
@@ -182,9 +186,11 @@ the release (Carlos, 2026-10-23, #191), and Scid vs. PC and ChessBase weren't ch
 1. the version is 1.0.0 (#154, merged on 2026-10-23);
 2. the robustness run again with the network as the default (#197): clean on 2026-10-24;
 3. Carlos tags `v1.0.0`, and the Release workflow makes a draft release (#199);
-4. the book is uploaded to the draft, and its line added to `SHA256SUMS.txt`, which the
+4. the Mac binaries are signed and notarised on the M1 Max, which holds the Developer ID key:
+   `scripts/mac-sign-release.sh v1.0.0` (`docs/releasing.md`, "Signing the Mac binaries");
+5. the book is uploaded to the draft, and its line added to `SHA256SUMS.txt`, which the
    workflow writes before the book is there (`docs/releasing.md`; #183);
-5. Carlos checks the draft and publishes it.
+6. Carlos checks the draft and publishes it.
 
 The robustness run was played again (#197) because #196 made the built-in network the default,
 and v1.0's first run (#146) was with the hand-crafted evaluation. It finished on 2026-10-24 at
