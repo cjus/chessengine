@@ -544,9 +544,10 @@ terms push the defending king towards the edge, and that is enough most of the t
 besides the kings, `PAWNLESS_ENDING_PIECES`), the search uses the hand-crafted evaluation.
 Those are the endings the common Syzygy tables solve, so an engine with tablebases plays them
 perfectly with either evaluation. With the switch, the network converts exactly what the
-hand-crafted evaluation does, 32, 15 and 15, since the search is the same. Its SPRT started from
-100 such endings, wins and draws (`tests/data/pawnless-endings.epd`), and a check from the usual
-openings showed nothing else changed (cjus/chessengine#208).
+hand-crafted evaluation does, 32, 15 and 15, since the search is the same. Its SPRT, from 100
+such endings, wins and draws (`tests/data/pawnless-endings.epd`), passed at +39 ± 16 Elo in
+1,195 games, and 1,000 games from the usual openings showed nothing else changed, +1.7 ± 15.3
+(cjus/chessengine#208).
 
 The bench now searches with the network: 715,827 nodes, against the hand-crafted evaluation's
 749,181. A few of its positions reach a bare king or a small pawnless ending deep in the

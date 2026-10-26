@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-26, 06:20 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-26, 06:50 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -112,7 +112,7 @@ at the same settings); `mac-robustness.sh` takes `THREADS=N`, #204; Carlos's: th
 (#205), a robustness run at 4 threads (#206) and a gauntlet with the net (#207); **the queen
 endings fixed**: with a network, pawnless endings of at most five men get the HCE (the
 `pawnless_endings` switch), so the net converts what the HCE does (32, 15 and 15), bench
-715674 → 715827, #208, its SPRT from 100 such endings on the M3 first.*
+715674 → 715827, SPRT from 100 such endings passed, +39.1 ± 15.6, #208.*
 
 ## Stages
 
@@ -186,8 +186,8 @@ endings fixed**: with a network, pawnless endings of at most five men get the HC
 | M5: larger reductions when the hash move is a capture, off the principal variation (chapter 14.1) | #179 | 749181 (754886 with them on) | Merged, off by default: −7.5 ± 8.0, 3,031 games, [0, 5] failed (M3 Max) |
 | v1.0: opening books from people's games, the `make-book` tool and `scripts/lichess-book.sh` (chapter 18) | #173 | 749181 | Merged, no functional change. The first book, from Lichess's September 2026 games: 97,432 moves from 1,499,615 games, 1.6 MB, 58 minutes on the M3 (#174) |
 
-**Nothing is running on the M3 now** (2026-10-26). Next for it, one at a time: #208's SPRT,
-then, once #208 merges, the robustness run at 4 threads (#206) and the gauntlet with the net
+**Nothing is running on the M3 now** (2026-10-26, 06:45 MDT: #208's SPRT passed). Next for it,
+one after the other: the robustness run at 4 threads (#206) and the gauntlet with the net
 (#207); the trainer's speed (#187) whenever.
 
 **v1.0's gates have all passed.** The GUI matrix, the last, passed on 2026-10-23 (#37, recorded
@@ -239,8 +239,10 @@ Windows and Intel Mac tests last ran before any NNUE code. What Claude ran, on `
   (KQ v KR 32 of 45, KQ v KB and KQ v KN 15 of 15), since the search is the same. In the rest
   of the suite it is within one or two positions of the net alone (98 against 99 at 3,000
   nodes, 108 against 110 at 20,000). From the usual openings it changes nothing: 1,000 games at
-  1+0.01 against `main` on the M1 Max, +255 −250 =495, +1.7 ± 15.3. Its SPRT starts from
-  `tests/data/pawnless-endings.epd`, 100 small pawnless endings, wins and draws.
+  1+0.01 against `main` on the M1 Max, +255 −250 =495, +1.7 ± 15.3. Its SPRT, from
+  `tests/data/pawnless-endings.epd` (100 small pawnless endings, wins and draws), **passed** on
+  the M3: +438 −304 =453 in 1,195 games at 8+0.08, **+39.1 ± 15.6** (LLR 2.97), with no time
+  losses, illegal moves or failures.
 - **Chess960:** net against HCE, 200 games at 1+0.01 on the M1 Max, **+158 −24 =18, +282 ± 61**.
   Standard chess at the same settings gave +171 −9 =20, +392 ± 72. No time losses, illegal
   moves or failures in either.
@@ -447,10 +449,9 @@ passed; the rest wait on GUI checks, level calibration or the v1.0 work.
 
 The open [`needs-carlos` issues](https://github.com/cjus/chessengine/issues?q=is%3Aopen+label%3Aneeds-carlos):
 
-- #208's SPRT (M3), the fix for queen-against-one-piece endings, before #206 and #207.
 - #205, #206, #207: the testing pass with the net before v1.0.0: the GUI re-check (M1 Max,
   about an hour), a robustness run at 4 threads (M3, about 3 hours) and a gauntlet (M3, about
-  4 hours), the M3 ones after #208 merges.
+  4 hours), with #208's fix in.
 - #199: the `v1.0.0` tag, on hold for the testing pass (2026-10-26), then publishing the draft
   release with the book on it (#183).
 - #187: the NNUE trainer's speed on the M3 Max (a few minutes).
