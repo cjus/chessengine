@@ -1097,6 +1097,27 @@ mod tests {
         let search = |network: bool, lone_king: bool| {
             let mut engine = Engine::new();
             engine.techniques.lone_king = lone_king;
+            // K+Q against K is a small pawnless ending too: this tests the lone king alone.
+            engine.techniques.pawnless_endings = false;
+            if !network {
+                engine.network = None;
+            }
+            let info = search_with(&mut engine, fen, 3);
+            (info.nodes, info.score)
+        };
+        assert_eq!(search(true, true), search(false, true));
+        // Switched off, the network evaluates it, and differently.
+        assert_ne!(search(true, false), search(false, true));
+    }
+
+    #[test]
+    fn with_a_network_a_small_pawnless_ending_gets_the_hand_crafted_evaluation() {
+        // King and queen against king and rook: captures only take pieces away, so every
+        // position the search meets is pawnless with at most five men.
+        let fen = "8/8/3k4/8/1r6/8/2Q5/4K3 w - - 0 1";
+        let search = |network: bool, pawnless: bool| {
+            let mut engine = Engine::new();
+            engine.techniques.pawnless_endings = pawnless;
             if !network {
                 engine.network = None;
             }

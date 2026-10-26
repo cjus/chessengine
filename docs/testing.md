@@ -135,6 +135,12 @@ tail -f ~/sprt-<PR>.log
 scripts/mac-sprt.sh <PR number> [elo0 elo1] [time control]
 ```
 
+A change that only matters in some kind of position can start its games from such positions:
+`OPENINGS=<file>` replaces the 50 openings. For example, the pawnless-endings switch (#PRNUM) was
+tested from `tests/data/pawnless-endings.epd`, 100 small pawnless endings confirmed by the
+Lichess tablebases. Its games still need a check from the usual openings, to show nothing
+else changed.
+
 This builds the PR and `main` in separate worktrees, runs the SPRT with one game per
 performance core minus one under `caffeinate`, and posts the result to the PR as a comment,
 with any time losses, illegal moves, failures and aborted games. The games are kept in
