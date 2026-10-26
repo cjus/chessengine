@@ -753,7 +753,7 @@ pub struct Techniques {
     /// treated them as a big lead whatever the kings did: in won positions from the Lichess
     /// tablebases, at 200,000 nodes a move, it converted K+Q against K+R 15 times in 45 and
     /// against a lone knight 9 times in 15, where the hand-crafted evaluation converted 32 and
-    /// 15 (cjus/chessengine#PRNUM).
+    /// 15 (cjus/chessengine#208).
     pub pawnless_endings: bool,
 }
 

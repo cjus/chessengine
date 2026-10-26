@@ -224,7 +224,7 @@ teaching value, and the trainer uses the Mac's GPU through Metal.
   five only by 500,000); and **small pawnless endings**, of at most five men (the
   `pawnless_endings` switch, on, 2026-10-26), since in tablebase-won positions at 200,000 nodes
   a move the net converted K+Q against K+R 15 times in 45 and against a lone knight 9 in 15,
-  where the HCE converted 32 and 15 (cjus/chessengine#PRNUM). `cb2026 bench` searches with the
+  where the HCE converted 32 and 15 (cjus/chessengine#208). `cb2026 bench` searches with the
   net: 715,827 nodes, against the
   HCE's 749,181 (`cb2026 bench none`). `datagen` plays with the built-in net unless given
   `--evalfile none`, so the next data is the net's own games.

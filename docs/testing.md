@@ -136,7 +136,7 @@ scripts/mac-sprt.sh <PR number> [elo0 elo1] [time control]
 ```
 
 A change that only matters in some kind of position can start its games from such positions:
-`OPENINGS=<file>` replaces the 50 openings. For example, the pawnless-endings switch (#PRNUM) was
+`OPENINGS=<file>` replaces the 50 openings. For example, the pawnless-endings switch (#208) was
 tested from `tests/data/pawnless-endings.epd`, 100 small pawnless endings confirmed by the
 Lichess tablebases. Its games still need a check from the usual openings, to show nothing
 else changed.

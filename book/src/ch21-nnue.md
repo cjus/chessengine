@@ -546,7 +546,7 @@ Those are the endings the common Syzygy tables solve, so an engine with tablebas
 perfectly with either evaluation. With the switch, the network converts exactly what the
 hand-crafted evaluation does, 32, 15 and 15, since the search is the same. Its SPRT started from
 100 such endings, wins and draws (`tests/data/pawnless-endings.epd`), and a check from the usual
-openings showed nothing else changed (cjus/chessengine#PRNUM).
+openings showed nothing else changed (cjus/chessengine#208).
 
 The bench now searches with the network: 715,827 nodes, against the hand-crafted evaluation's
 749,181. A few of its positions reach a bare king or a small pawnless ending deep in the
