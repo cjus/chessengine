@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-26, 13:40 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-26, 13:54 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -115,7 +115,11 @@ endings fixed**: with a network, pawnless endings of at most five men get the HC
 715674 → 715827, SPRT from 100 such endings passed, +39.1 ± 15.6, #208; the robustness run at
 4 threads clean, 2,400 games, #206; **the gauntlet with the net: 3236 ± 16**, 454 above the
 HCE's 2782 (the reference engines now too weak for a sharp figure), #207; left before the tag:
-the GUI re-check (#205).*
+the GUI re-check (#205); the README rewritten for v1.0.0 (downloads, GUI options, the book,
+tablebases, levels, building) and the shell's `elo` help corrected to 600–2500, #212; the full
+v1.0.0 release notes are ready to paste in #199; on the M3, the trainer's speed (#187) and then
+gen2's data and networks from gen1's own games (#211, about 13 hours, started 2026-10-26 at
+about 13:50).*
 
 ## Stages
 
@@ -189,8 +193,9 @@ the GUI re-check (#205).*
 | M5: larger reductions when the hash move is a capture, off the principal variation (chapter 14.1) | #179 | 749181 (754886 with them on) | Merged, off by default: −7.5 ± 8.0, 3,031 games, [0, 5] failed (M3 Max) |
 | v1.0: opening books from people's games, the `make-book` tool and `scripts/lichess-book.sh` (chapter 18) | #173 | 749181 | Merged, no functional change. The first book, from Lichess's September 2026 games: 97,432 moves from 1,499,615 games, 1.6 MB, 58 minutes on the M3 (#174) |
 
-**Nothing is running on the M3 now** (2026-10-26, 13:36 MDT: #206 and #207 done). Next for
-it: the trainer's speed (#187) whenever; gen2's data after v1.0.0.
+**The M3 is running gen2** (since about 13:50 MDT on 2026-10-26): the trainer's speed (#187, a
+few minutes), then gen1's self-play into `~/nnue-data/gen2` and the 256 and 512 networks
+trained on it (#211, about 13 hours). It changes nothing in v1.0.0, which ships gen1.
 
 **v1.0's gates have all passed.** The GUI matrix, the last, passed on 2026-10-23 (#37, recorded
 in `docs/gui-compat.md` and the PRD): En Croissant, Cute Chess, XBoard and HIARCS Chess Explorer
@@ -463,6 +468,7 @@ The open [`needs-carlos` issues](https://github.com/cjus/chessengine/issues?q=is
 
 - #205: the GUI re-check with the net (M1 Max, about an hour), the testing pass's last item
   before v1.0.0 (#206 and #207 are done).
+- #211: gen2 on the M3 (running; nothing to do unless it stops).
 - #199: the `v1.0.0` tag, on hold for the testing pass (2026-10-26), then publishing the draft
   release with the book on it (#183).
 - #187: the NNUE trainer's speed on the M3 Max (a few minutes).
