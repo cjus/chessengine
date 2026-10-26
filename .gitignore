@@ -26,3 +26,6 @@ rustc-ice-*.txt
 # mdBook output
 book/book/
 syzygy-tables/
+
+# macOS Finder metadata
+.DS_Store
