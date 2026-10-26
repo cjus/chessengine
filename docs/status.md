@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-26, 07:40 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-26, 06:20 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -238,8 +238,9 @@ Windows and Intel Mac tests last ran before any NNUE code. What Claude ran, on `
   common Syzygy tables cover. At 200,000 nodes the net then converts exactly what the HCE does
   (KQ v KR 32 of 45, KQ v KB and KQ v KN 15 of 15), since the search is the same. In the rest
   of the suite it is within one or two positions of the net alone (98 against 99 at 3,000
-  nodes, 108 against 110 at 20,000). Its SPRT starts from `tests/data/pawnless-endings.epd`,
-  100 small pawnless endings, wins and draws.
+  nodes, 108 against 110 at 20,000). From the usual openings it changes nothing: 1,000 games at
+  1+0.01 against `main` on the M1 Max, +255 −250 =495, +1.7 ± 15.3. Its SPRT starts from
+  `tests/data/pawnless-endings.epd`, 100 small pawnless endings, wins and draws.
 - **Chess960:** net against HCE, 200 games at 1+0.01 on the M1 Max, **+158 −24 =18, +282 ± 61**.
   Standard chess at the same settings gave +171 −9 =20, +392 ± 72. No time losses, illegal
   moves or failures in either.
