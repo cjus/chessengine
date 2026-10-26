@@ -155,7 +155,8 @@ Commands:
   new960 [n]           Chess960 starting position n (0-959, 518 is the standard one;
                        random without n)
   level <0-20>         The engine's strength level (20 = full strength)
-  elo <n>|off          Limit the engine's strength to about n Elo (650-2450), or not
+  elo <n>|off          Limit the engine's strength to about n on Lichess's rapid scale
+                       (600-2500), or not
   set multipv <N>      Search and show the N best lines
   set syzygy <path>    Load Syzygy endgame tablebases from a directory (none: unload)
   tb                   The tablebase result and best move for this position
