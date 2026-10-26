@@ -240,6 +240,11 @@ pub const SWITCHES: &[Switch] = &[
         flag: |e| &mut e.techniques.lone_king,
     },
     Switch {
+        name: "pawnless",
+        description: "With a network, the hand-crafted evaluation in pawnless endings of five men or fewer (it drives the king to the edge)",
+        flag: |e| &mut e.techniques.pawnless_endings,
+    },
+    Switch {
         name: "correction",
         description: "Correction history (static evaluation corrected by pawn structure)",
         flag: |e| &mut e.techniques.correction_history,

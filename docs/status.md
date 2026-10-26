@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-26, 06:30 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-26, 06:50 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -109,7 +109,10 @@ tablebase-won positions: the net converts as well as the HCE or better, except *
 one piece** (KQ v KR 15 of 45 against the HCE's 32, KQ v KB 12 of 15 against 15, KQ v KN 9 of 15
 against 15, at 200,000 nodes a move); Chess960, net against HCE, +282 ± 61 (standard +392 ± 72
 at the same settings); `mac-robustness.sh` takes `THREADS=N`, #204; Carlos's: the GUI re-check
-(#205), a robustness run at 4 threads (#206) and a gauntlet with the net (#207).*
+(#205), a robustness run at 4 threads (#206) and a gauntlet with the net (#207); **the queen
+endings fixed**: with a network, pawnless endings of at most five men get the HCE (the
+`pawnless_endings` switch), so the net converts what the HCE does (32, 15 and 15), bench
+715674 → 715827, SPRT from 100 such endings passed, +39.1 ± 15.6, #208.*
 
 ## Stages
 
@@ -183,9 +186,9 @@ at the same settings); `mac-robustness.sh` takes `THREADS=N`, #204; Carlos's: th
 | M5: larger reductions when the hash move is a capture, off the principal variation (chapter 14.1) | #179 | 749181 (754886 with them on) | Merged, off by default: −7.5 ± 8.0, 3,031 games, [0, 5] failed (M3 Max) |
 | v1.0: opening books from people's games, the `make-book` tool and `scripts/lichess-book.sh` (chapter 18) | #173 | 749181 | Merged, no functional change. The first book, from Lichess's September 2026 games: 97,432 moves from 1,499,615 games, 1.6 MB, 58 minutes on the M3 (#174) |
 
-**Nothing is running on the M3 now** (2026-10-26). Next for it, one at a time: the robustness
-run at 4 threads (#206, after #204 merges) and the gauntlet with the net (#207); the trainer's
-speed (#187) whenever.
+**Nothing is running on the M3 now** (2026-10-26, 06:45 MDT: #208's SPRT passed). Next for it,
+one after the other: the robustness run at 4 threads (#206) and the gauntlet with the net
+(#207); the trainer's speed (#187) whenever.
 
 **v1.0's gates have all passed.** The GUI matrix, the last, passed on 2026-10-23 (#37, recorded
 in `docs/gui-compat.md` and the PRD): En Croissant, Cute Chess, XBoard and HIARCS Chess Explorer
@@ -194,8 +197,8 @@ the release (Carlos, 2026-10-23, #191), and Scid vs. PC and ChessBase weren't ch
 1. the version is 1.0.0 (#154, merged on 2026-10-23);
 2. the robustness run again with the network as the default (#197): clean on 2026-10-24;
 3. **the testing pass with the network** (Carlos, 2026-10-26; below): the GUI re-check (#205), a
-   robustness run at 4 threads (#206), a gauntlet with the net (#207), and what to do about
-   queen-against-one-piece endings;
+   robustness run at 4 threads (#206) and a gauntlet with the net (#207), after the fix for
+   queen-against-one-piece endings (#208) and its SPRT;
 4. Carlos tags `v1.0.0`, and the Release workflow makes a draft release (#199);
 5. the Mac binaries are signed and notarised on the M1 Max, which holds the Developer ID key:
    `scripts/mac-sign-release.sh v1.0.0` (`docs/releasing.md`, "Signing the Mac binaries");
@@ -229,6 +232,17 @@ Windows and Intel Mac tests last ran before any NNUE code. What Claude ran, on `
   its failures were draws by the fifty-move rule; in that one the queen went for the rook. With Syzygy tables the engine plays these perfectly. KB+N
   v K converts 0, 7 and 11 of 15 at the three node counts for both evaluations, since the lone-
   king rule gives it to the HCE, which has no special KB+N knowledge.
+- **The fix** (#208, Carlos: fix it first, 2026-10-26). The `pawnless_endings` switch (on)
+  widens the lone-king rule: with a network, a pawnless ending of at most five men
+  (`PAWNLESS_ENDING_PIECES` = 3 besides the kings) gets the HCE. These are the endings the
+  common Syzygy tables cover. At 200,000 nodes the net then converts exactly what the HCE does
+  (KQ v KR 32 of 45, KQ v KB and KQ v KN 15 of 15), since the search is the same. In the rest
+  of the suite it is within one or two positions of the net alone (98 against 99 at 3,000
+  nodes, 108 against 110 at 20,000). From the usual openings it changes nothing: 1,000 games at
+  1+0.01 against `main` on the M1 Max, +255 −250 =495, +1.7 ± 15.3. Its SPRT, from
+  `tests/data/pawnless-endings.epd` (100 small pawnless endings, wins and draws), **passed** on
+  the M3: +438 −304 =453 in 1,195 games at 8+0.08, **+39.1 ± 15.6** (LLR 2.97), with no time
+  losses, illegal moves or failures.
 - **Chess960:** net against HCE, 200 games at 1+0.01 on the M1 Max, **+158 −24 =18, +282 ± 61**.
   Standard chess at the same settings gave +171 −9 =20, +392 ± 72. No time losses, illegal
   moves or failures in either.
@@ -429,15 +443,15 @@ passed; the rest wait on GUI checks, level calibration or the v1.0 work.
 | M3 Evaluation | stages 15–16 | **Passed** 2026-10-18: stage 16 rated 2669 ± 10 by gauntlet at 8+0.08 (gate ≥2400 CCRL), #36 |
 | M4 Complete engine | stages 17–20 | **Passed** 2026-10-23: levels calibrated at 40+0.4 on 2026-10-19, 629–2483 (#106); the GUI matrix passed (#37); the Lichess bot's games follow v1.0 (#191) |
 | M5 v1.0 | strength work, release | Started (the M5 branches above); release workflow merged (#40); `main` rated 2782 ± 11 by gauntlet on 2026-10-21 (#131; 2714 ± 10 on 2026-10-18, #36), above the gate (≥2400, goal 2600+); the robustness run clean on 2026-10-22 (#146), and again with the network as the default on 2026-10-24 (#197); the GUI matrix passed on 2026-10-23 (#37); version 1.0.0 merged (#154); the `v1.0.0` tag waits on the testing pass with the net (#205–#207; Carlos, 2026-10-26) |
-| M6 NNUE | stage 21 | SPRT gate passed 2026-10-24: gen1 (256 wide) beat the HCE +14 −0 (#195), and is the default since #196 (the HCE kept for levels and a lone king); chapter 21 written. Open: queen-against-one-piece endings (2026-10-26), gen2 from the net's own games |
+| M6 NNUE | stage 21 | SPRT gate passed 2026-10-24: gen1 (256 wide) beat the HCE +14 −0 (#195), and is the default since #196 (the HCE kept for levels, a lone king and, from #208, small pawnless endings); chapter 21 written. Open: gen2 from the net's own games |
 
 ## Waiting on Carlos
 
 The open [`needs-carlos` issues](https://github.com/cjus/chessengine/issues?q=is%3Aopen+label%3Aneeds-carlos):
 
 - #205, #206, #207: the testing pass with the net before v1.0.0: the GUI re-check (M1 Max,
-  about an hour), a robustness run at 4 threads (M3, about 3 hours, after #204) and a gauntlet
-  (M3, about 4 hours).
+  about an hour), a robustness run at 4 threads (M3, about 3 hours) and a gauntlet (M3, about
+  4 hours), with #208's fix in.
 - #199: the `v1.0.0` tag, on hold for the testing pass (2026-10-26), then publishing the draft
   release with the book on it (#183).
 - #187: the NNUE trainer's speed on the M3 Max (a few minutes).

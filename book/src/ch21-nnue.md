@@ -522,9 +522,37 @@ networks for years. Here, when exactly one side has only its king, the search us
 hand-crafted evaluation (the `loneking` switch), and the network wins all five at 3,000 nodes,
 as quickly as the hand-crafted evaluation.
 
-The bench now searches with the network: 715,674 nodes, 1,268 fewer than the network alone,
-since a few of its positions reach a bare king deep in the search, against the hand-crafted
-evaluation's 749,181. Every commit message's `Bench:` line changes with it.
+**Small pawnless endings.** The lone king wasn't the only gap. Before v1.0.0 was tagged, a test
+of endgames played out won positions, each confirmed by the Lichess tablebases, with cb2026 on
+both sides and no tablebases of its own, once with each evaluation. Where the defender keeps a
+pawn, or a rook against a rook and pawn, the network converted as often as the hand-crafted
+evaluation or more. With a queen against a single piece it failed, at 200,000 nodes a move,
+about what a game at 8+0.08 gives a move:
+
+| Ending | Network | Hand-crafted |
+| --- | --- | --- |
+| K+Q against K+R (45 positions) | 15 | 32 |
+| K+Q against K+B (15) | 12 | 15 |
+| K+Q against K+N (15) | 9 | 15 |
+
+The cause is the lone king's again. A queen ahead is a big lead to the network wherever the
+kings stand, and nothing in its few such training positions showed it how to make progress, so
+nearly every failure was a draw by the fifty-move rule. A queen against a rook is hard for the
+hand-crafted evaluation too, since the rook can harass the king for many moves, but its king
+terms push the defending king towards the edge, and that is enough most of the time. So the
+`pawnless` switch widens the rule: in a pawnless ending of at most five men (three pieces
+besides the kings, `PAWNLESS_ENDING_PIECES`), the search uses the hand-crafted evaluation.
+Those are the endings the common Syzygy tables solve, so an engine with tablebases plays them
+perfectly with either evaluation. With the switch, the network converts exactly what the
+hand-crafted evaluation does, 32, 15 and 15, since the search is the same. Its SPRT, from 100
+such endings, wins and draws (`tests/data/pawnless-endings.epd`), passed at +39 ± 16 Elo in
+1,195 games, and 1,000 games from the usual openings showed nothing else changed, +1.7 ± 15.3
+(cjus/chessengine#208).
+
+The bench now searches with the network: 715,827 nodes, against the hand-crafted evaluation's
+749,181. A few of its positions reach a bare king or a small pawnless ending deep in the
+search, where the hand-crafted evaluation takes over. Every commit message's `Bench:` line
+changes with it.
 
 A new evaluation is a new way for the engine to fail: an accumulator updated at every move, and
 nodes about 6% slower, so less time to spare. Before v1.0.0 was tagged, the release's robustness

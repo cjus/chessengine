@@ -398,6 +398,10 @@ pub const MAX_PLY: u32 = 128;
 /// The network's evaluation is kept within this many centipawns: far beyond any real advantage,
 /// and well below tablebase and mate scores, which the search must never mistake it for.
 pub const NNUE_EVAL_LIMIT: i32 = 20_000;
+/// The most pieces besides the two kings in a pawnless ending that the hand-crafted evaluation
+/// plays even with a network ([`Techniques::pawnless_endings`]): five men in all, the endings
+/// the common Syzygy tables cover.
+pub const PAWNLESS_ENDING_PIECES: u32 = 3;
 /// Search depth when the caller gives no limit at all (no depth, time, nodes or `infinite`).
 pub const DEFAULT_DEPTH: u32 = 6;
 /// How many nodes pass between checks of the stop flag, the clock and the node limit.
@@ -743,6 +747,14 @@ pub struct Techniques {
     /// The first network, which saw few such positions, drew K+Q and K+R against a lone king at
     /// 3,000 nodes a move where the hand-crafted evaluation won all five tried.
     pub lone_king: bool,
+    /// With a network: evaluate pawnless endings of at most [`PAWNLESS_ENDING_PIECES`] pieces
+    /// besides the kings, such as a queen against a rook, with the hand-crafted evaluation,
+    /// which drives the weaker king to the edge. The first network saw few such endings and
+    /// treated them as a big lead whatever the kings did: in won positions from the Lichess
+    /// tablebases, at 200,000 nodes a move, it converted K+Q against K+R 15 times in 45 and
+    /// against a lone knight 9 times in 15, where the hand-crafted evaluation converted 32 and
+    /// 15 (cjus/chessengine#208).
+    pub pawnless_endings: bool,
 }
 
 impl Default for Techniques {
@@ -826,6 +838,7 @@ impl Default for Techniques {
             // The network is used whenever one is loaded: the built-in one by default.
             nnue: true,
             lone_king: true,
+            pawnless_endings: true,
         }
     }
 }
@@ -1020,6 +1033,13 @@ fn lone_king(pos: &Position) -> bool {
     bare(Color::White) != bare(Color::Black)
 }
 
+/// Whether `pos` is a pawnless ending of at most [`PAWNLESS_ENDING_PIECES`] pieces besides the
+/// kings (see [`Techniques::pawnless_endings`]).
+fn pawnless_ending(pos: &Position) -> bool {
+    pos.pieces_of_type(PieceType::Pawn).is_empty()
+        && pos.occupied().count() <= 2 + PAWNLESS_ENDING_PIECES
+}
+
 /// The network a search evaluates with, and an accumulator for each ply: the one at ply `p`
 /// belongs to the position the search is at `p` plies from the root.
 struct NnueStack<'a> {
@@ -1105,12 +1125,20 @@ impl<'a> Searcher<'a> {
         }
     }
 
+    /// Whether `pos` is an ending the hand-crafted evaluation plays better than the network:
+    /// a lone king ([`Techniques::lone_king`]) or a small pawnless ending
+    /// ([`Techniques::pawnless_endings`]).
+    fn hand_crafted_ending(&self, pos: &Position) -> bool {
+        (self.techniques.lone_king && lone_king(pos))
+            || (self.techniques.pawnless_endings && pawnless_ending(pos))
+    }
+
     /// The static evaluation of `pos`, at `ply`: the network's, from the accumulator the
-    /// search has kept up to date, or the hand-crafted evaluation's (also with a network when
-    /// one side has only its king, see [`Techniques::lone_king`]).
+    /// search has kept up to date, or the hand-crafted evaluation's (also with a network in
+    /// the endings it plays better, see [`Searcher::hand_crafted_ending`]).
     fn evaluate(&self, pos: &Position, ply: u32) -> i32 {
         match &self.nnue {
-            Some(nnue) if !(self.techniques.lone_king && lone_king(pos)) => {
+            Some(nnue) if !self.hand_crafted_ending(pos) => {
                 let acc = &nnue.accumulators[ply as usize];
                 // Debug builds check every incremental update against a fresh computation.
                 debug_assert!(
@@ -2317,6 +2345,17 @@ fn has_pieces(pos: &Position) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pawnless_endings_are_the_small_ones_without_pawns() {
+        let ending = |fen: &str| pawnless_ending(&Position::from_fen(fen).unwrap());
+        // K+Q against K+R, and five men: K+R+B against K+R.
+        assert!(ending("8/8/3k4/8/1r6/8/2Q5/4K3 w - - 0 1"));
+        assert!(ending("8/8/3k4/8/1r6/8/2RB4/4K3 w - - 0 1"));
+        // Six men, or five with a pawn.
+        assert!(!ending("8/8/3k4/8/1r6/8/2RBN3/4K3 w - - 0 1"));
+        assert!(!ending("8/8/3k4/8/1r6/8/2QP4/4K3 w - - 0 1"));
+    }
 
     fn search(fen: &str, depth: u32, techniques: Techniques) -> RootResult {
         search_with_window(fen, depth, techniques, None)
