@@ -19,7 +19,9 @@
 #
 # Written for the test Mac (Apple Silicon): one game per performance core minus one, the Mac
 # kept awake with caffeinate. Needs git, cargo and the GitHub CLI (`gh`, logged in). Set
-# OPENINGS=<file> to use another opening book. See docs/testing.md, "Robustness runs".
+# OPENINGS=<file> to use another opening book. Set THREADS=N to have both sides search with N
+# threads (Lazy SMP); the games at a time are then the performance cores minus one, divided by
+# N, since only the side to move searches. See docs/testing.md, "Robustness runs".
 set -euo pipefail
 
 if [[ $# -lt 1 || "$1" == "-h" || "$1" == "--help" ]]; then
@@ -57,7 +59,15 @@ cp "$BIN/cb2026" "$WORK/second/cb2026"
 VERSION="$("$WORK/first/cb2026" --version 2>/dev/null || echo cb2026)"
 
 CORES="$(sysctl -n hw.perflevel0.physicalcpu 2>/dev/null || getconf _NPROCESSORS_ONLN)"
-CONCURRENCY=$(( CORES > 1 ? CORES - 1 : 1 ))
+THREADS="${THREADS:-1}"
+[[ "$THREADS" =~ ^[1-9][0-9]*$ ]] || { echo "mac-robustness: THREADS must be a number of threads" >&2; exit 2; }
+CONCURRENCY=$(( CORES > 1 ? (CORES - 1) / THREADS : 1 ))
+(( CONCURRENCY >= 1 )) || CONCURRENCY=1
+# Threads is left at the engine's default (1) unless THREADS asks for more.
+THREAD_OPTIONS=()
+(( THREADS > 1 )) && THREAD_OPTIONS=(--option "Threads=$THREADS")
+PLAYING="$CONCURRENCY games at a time"
+(( THREADS > 1 )) && PLAYING="$PLAYING, $THREADS threads each"
 OPENINGS="${OPENINGS:-$WORK/src/tests/data/openings.epd}"
 KEEP_AWAKE=()
 command -v caffeinate >/dev/null && KEEP_AWAKE=(caffeinate -i)
@@ -89,7 +99,7 @@ post_progress() {
   local body="<!-- robustness-progress -->
 **Robustness run progress** (\`scripts/mac-robustness.sh\` on $MACHINE; the result follows in its own comment)
 
-- $VERSION at \`$SHA\` against itself, $CONCURRENCY games at a time, started $STARTED
+- $VERSION at \`$SHA\` against itself, $PLAYING, started $STARTED
 - Time controls: $ROBUSTNESS
 
 | Time control | Games | Score (first copy) | Time losses | Illegal moves | Failures | Aborted |
@@ -109,12 +119,12 @@ for spec in $ROBUSTNESS; do
   SLUG="$(printf '%s' "$TC" | tr '/+' '-p')"
   LOG="$WORK/robustness-$SLUG.log"
   PGN="$ROOT/target/robustness/$SHA-$SLUG.pgn"
-  echo "Playing $GAMES games at $TC, $CONCURRENCY at a time..."
+  echo "Playing $GAMES games at $TC, $PLAYING..."
   set +e
   ${KEEP_AWAKE[@]+"${KEEP_AWAKE[@]}"} "$BIN/match" \
     --engine "$WORK/first/cb2026" --engine "$WORK/second/cb2026" \
     --tc "$TC" --games "$GAMES" --concurrency "$CONCURRENCY" \
-    --openings "$OPENINGS" --pgn "$PGN" 2>&1 | tee "$LOG"
+    --openings "$OPENINGS" --pgn "$PGN" ${THREAD_OPTIONS[@]+"${THREAD_OPTIONS[@]}"} 2>&1 | tee "$LOG"
   STATUS="${PIPESTATUS[0]}"
   set -e
   FINAL="$(grep '^Final:' "$LOG" | tail -1)" || true
@@ -122,7 +132,7 @@ for spec in $ROBUSTNESS; do
     gh issue comment "$TARGET" --body "<!-- robustness -->
 **Robustness run failed** (\`scripts/mac-robustness.sh\` on $MACHINE): the match at $TC stopped with exit status $STATUS before it finished, so the run has no result.
 
-- $VERSION at \`$SHA\` against itself, $CONCURRENCY games at a time, started $STARTED
+- $VERSION at \`$SHA\` against itself, $PLAYING, started $STARTED
 - Finished before it: ${DONE:-nothing}
 
 The end of the log:
@@ -168,7 +178,7 @@ fi
 gh issue comment "$TARGET" --body "<!-- robustness -->
 **Robustness run result** (run by \`scripts/mac-robustness.sh\` on $MACHINE)
 
-- $VERSION at \`$SHA\` against itself, $CONCURRENCY games at a time, default Move Overhead
+- $VERSION at \`$SHA\` against itself, $PLAYING, default Move Overhead
 - Started $STARTED, finished $(date '+%Y-%m-%d %H:%M %Z')
 - $VERDICT
 

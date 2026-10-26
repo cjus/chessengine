@@ -106,7 +106,11 @@ tail -f ~/robustness.log
 
 The run is clean when every count is zero. `ROBUSTNESS="1+0.01:6000 10+0.1:3000 40/60:1000"`
 changes the time controls and game counts, and a second argument builds another git ref than
-`origin/main`.
+`origin/main`. Every game is at Threads 1, the engine's default, unless `THREADS=N` asks for
+more. Both sides then search with N threads, and the games at a time are the performance cores
+minus one, divided by N, since only the side to move searches. The M3 Max plays 2 at a time
+with `THREADS=4`. A run with threads tests Lazy SMP's start and stop on every move, which games
+at Threads 1 never reach.
 
 ## Quick matches from the shell
 
