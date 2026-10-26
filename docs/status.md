@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-24, 19:20 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-26, 06:30 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -101,7 +101,15 @@ illegal moves, failures or aborted games, #197, so the `v1.0.0` tag is next (Car
 the book's line goes into `SHA256SUMS.txt` after its upload, #201; **the Mac binaries signed and
 notarised**: Carlos's Developer ID (G2, expires 2027-11-23) and notarytool credentials are on
 the M1 Max, and `scripts/mac-sign-release.sh <tag>` signs, notarises, checks and replaces a
-draft release's two macOS packages, tested end to end on a temporary draft, #202.*
+draft release's two macOS packages, tested end to end on a temporary draft, #202.
+2026-10-26: **the tag waits for a testing pass with the net** (Carlos, #199), since most of v1.0's
+checks were run with the HCE; the Cross-platform workflow passed on `597f5fe`, the first run
+with NNUE code on macOS and Windows, and the nightly CI too; an endgame suite of 130
+tablebase-won positions: the net converts as well as the HCE or better, except **queen against
+one piece** (KQ v KR 15 of 45 against the HCE's 32, KQ v KB 12 of 15 against 15, KQ v KN 9 of 15
+against 15, at 200,000 nodes a move); Chess960, net against HCE, +282 ± 61 (standard +392 ± 72
+at the same settings); `mac-robustness.sh` takes `THREADS=N`, #204; Carlos's: the GUI re-check
+(#205), a robustness run at 4 threads (#206) and a gauntlet with the net (#207).*
 
 ## Stages
 
@@ -175,9 +183,9 @@ draft release's two macOS packages, tested end to end on a temporary draft, #202
 | M5: larger reductions when the hash move is a capture, off the principal variation (chapter 14.1) | #179 | 749181 (754886 with them on) | Merged, off by default: −7.5 ± 8.0, 3,031 games, [0, 5] failed (M3 Max) |
 | v1.0: opening books from people's games, the `make-book` tool and `scripts/lichess-book.sh` (chapter 18) | #173 | 749181 | Merged, no functional change. The first book, from Lichess's September 2026 games: 97,432 moves from 1,499,615 games, 1.6 MB, 58 minutes on the M3 (#174) |
 
-**Nothing is running on the M3 now** (2026-10-23, 16:33 MDT). Next for it: the NNUE trainer's
-speed (#187, a few minutes) and stage 21's data run, the first net's records and its training
-(#190, about 12 hours; it doesn't need #187 first). No SPRT candidate is chosen yet.
+**Nothing is running on the M3 now** (2026-10-26). Next for it, one at a time: the robustness
+run at 4 threads (#206, after #204 merges) and the gauntlet with the net (#207); the trainer's
+speed (#187) whenever.
 
 **v1.0's gates have all passed.** The GUI matrix, the last, passed on 2026-10-23 (#37, recorded
 in `docs/gui-compat.md` and the PRD): En Croissant, Cute Chess, XBoard and HIARCS Chess Explorer
@@ -185,12 +193,48 @@ on the M1 Max, with two fixes found on the way (#169, #170). The Lichess bot's t
 the release (Carlos, 2026-10-23, #191), and Scid vs. PC and ChessBase weren't checked. Next:
 1. the version is 1.0.0 (#154, merged on 2026-10-23);
 2. the robustness run again with the network as the default (#197): clean on 2026-10-24;
-3. Carlos tags `v1.0.0`, and the Release workflow makes a draft release (#199);
-4. the Mac binaries are signed and notarised on the M1 Max, which holds the Developer ID key:
+3. **the testing pass with the network** (Carlos, 2026-10-26; below): the GUI re-check (#205), a
+   robustness run at 4 threads (#206), a gauntlet with the net (#207), and what to do about
+   queen-against-one-piece endings;
+4. Carlos tags `v1.0.0`, and the Release workflow makes a draft release (#199);
+5. the Mac binaries are signed and notarised on the M1 Max, which holds the Developer ID key:
    `scripts/mac-sign-release.sh v1.0.0` (`docs/releasing.md`, "Signing the Mac binaries");
-5. the book is uploaded to the draft, and its line added to `SHA256SUMS.txt`, which the
+6. the book is uploaded to the draft, and its line added to `SHA256SUMS.txt`, which the
    workflow writes before the book is there (`docs/releasing.md`; #183);
-6. Carlos checks the draft and publishes it.
+7. Carlos checks the draft and publishes it.
+
+**The testing pass with the network** (2026-10-26). Carlos wanted more testing before calling
+the engine 1.0.0. The gauntlet (#131) and the GUI matrix (#37) were run with the HCE, and the
+Windows and Intel Mac tests last ran before any NNUE code. What Claude ran, on `597f5fe`:
+- **The Cross-platform workflow passed:** the tests on macOS and Windows, run by hand. The
+  nightly CI on Linux passed on 10-25 and 10-26.
+- **An endgame suite.** 130 won positions in eight endings, each confirmed by the Lichess
+  tablebase API, were played out by cb2026 against itself without tablebases, once with each
+  evaluation. Of the 130, the net converted 99 at 3,000 nodes a move and 110 at 20,000; the
+  HCE 94 and 106. With only a bare king on the defending side, the lone-king rule gives the search
+  to the HCE, so those endings come out the same. Where the defender keeps a piece or a pawn,
+  the net converts KR+P v KR (14 of 15 against 12) and KQ v KP as well or better, but it is
+  slow in KQ v KP (48 plies against 20). It is clearly worse with a queen against one piece. At
+  200,000 nodes, with 30 more positions and two more endings:
+
+  | Ending | Net converts | HCE converts |
+  | --- | --- | --- |
+  | KQ v KR (45 positions) | 15 | 32 |
+  | KQ v KB (15) | 12 | 15 |
+  | KQ v KN (15) | 9 | 15 |
+  | KR v KP, won (15) | 15 | 15 |
+
+  This looks like the lone king's cause again: the gen1 data, from balanced openings, holds
+  few such endings, so the net sees "a queen up" but not how to make progress. All but one of
+  its failures were draws by the fifty-move rule; in that one the queen went for the rook. With Syzygy tables the engine plays these perfectly. KB+N
+  v K converts 0, 7 and 11 of 15 at the three node counts for both evaluations, since the lone-
+  king rule gives it to the HCE, which has no special KB+N knowledge.
+- **Chess960:** net against HCE, 200 games at 1+0.01 on the M1 Max, **+158 −24 =18, +282 ± 61**.
+  Standard chess at the same settings gave +171 −9 =20, +392 ± 72. No time losses, illegal
+  moves or failures in either.
+
+Every game of the pass, 1,860 in all, was free of time losses, illegal moves, failures and
+aborted games. The positions and scripts are in Claude's scratch space, not the repository.
 
 The robustness run was played again (#197) because #196 made the built-in network the default,
 and v1.0's first run (#146) was with the hand-crafted evaluation. It finished on 2026-10-24 at
@@ -384,15 +428,18 @@ passed; the rest wait on GUI checks, level calibration or the v1.0 work.
 | M2 Classical search | stages 8–14 | **Passed** 2026-10-18: stage 14 rated 2442 ± 11 by gauntlet at 8+0.08 (gate ~2200 CCRL), #36 |
 | M3 Evaluation | stages 15–16 | **Passed** 2026-10-18: stage 16 rated 2669 ± 10 by gauntlet at 8+0.08 (gate ≥2400 CCRL), #36 |
 | M4 Complete engine | stages 17–20 | **Passed** 2026-10-23: levels calibrated at 40+0.4 on 2026-10-19, 629–2483 (#106); the GUI matrix passed (#37); the Lichess bot's games follow v1.0 (#191) |
-| M5 v1.0 | strength work, release | Started (the M5 branches above); release workflow merged (#40); `main` rated 2782 ± 11 by gauntlet on 2026-10-21 (#131; 2714 ± 10 on 2026-10-18, #36), above the gate (≥2400, goal 2600+); the robustness run clean on 2026-10-22 (#146), and again with the network as the default on 2026-10-24 (#197); the GUI matrix passed on 2026-10-23 (#37); version 1.0.0 merged (#154); the `v1.0.0` tag is next (#199) |
-| M6 NNUE | stage 21 | Started 2026-10-23: the net's definition (#177), training records (#178) |
+| M5 v1.0 | strength work, release | Started (the M5 branches above); release workflow merged (#40); `main` rated 2782 ± 11 by gauntlet on 2026-10-21 (#131; 2714 ± 10 on 2026-10-18, #36), above the gate (≥2400, goal 2600+); the robustness run clean on 2026-10-22 (#146), and again with the network as the default on 2026-10-24 (#197); the GUI matrix passed on 2026-10-23 (#37); version 1.0.0 merged (#154); the `v1.0.0` tag waits on the testing pass with the net (#205–#207; Carlos, 2026-10-26) |
+| M6 NNUE | stage 21 | SPRT gate passed 2026-10-24: gen1 (256 wide) beat the HCE +14 −0 (#195), and is the default since #196 (the HCE kept for levels and a lone king); chapter 21 written. Open: queen-against-one-piece endings (2026-10-26), gen2 from the net's own games |
 
 ## Waiting on Carlos
 
 The open [`needs-carlos` issues](https://github.com/cjus/chessengine/issues?q=is%3Aopen+label%3Aneeds-carlos):
 
-- #199: the `v1.0.0` tag (every gate passed), then publishing the draft release with the book
-  on it (#183).
+- #205, #206, #207: the testing pass with the net before v1.0.0: the GUI re-check (M1 Max,
+  about an hour), a robustness run at 4 threads (M3, about 3 hours, after #204) and a gauntlet
+  (M3, about 4 hours).
+- #199: the `v1.0.0` tag, on hold for the testing pass (2026-10-26), then publishing the draft
+  release with the book on it (#183).
 - #187: the NNUE trainer's speed on the M3 Max (a few minutes).
 - #191: the Lichess bot's two games, after v1.0.
 - #88: whether macOS honours the search threads' QoS outside Claude Code.
