@@ -848,6 +848,17 @@ as before: 6,000 games at 1+0.01, 3,000 at 10+0.1 and 1,000 at 40/60, with no ti
 illegal moves, failures or aborted games. The network's slower nodes (about 6%) cost no flag at
 1+0.01, the time control with the least to spare.
 
+Carlos then asked for a testing pass with the network before tagging (2026-10-26). It found
+one weakness, queen against one piece, fixed by the pawnless-endings rule
+(cjus/chessengine#208). With the network and that rule, `main` (at `7692c60`) rated **3236 ±
+16** in the same gauntlet (2026-10-26, +5023 −125 =452; cjus/chessengine#207), 454 above the
+hand-crafted evaluation's 2782. The reference engines are now too weak to measure it well.
+cb2026 scored 96.6% or more against five of the seven, which say little, so the rating rests
+on Weiss 1.0 (86.8%, performance 3223) and Stash v27.0 (75.6%, performance 3245), which agree;
+stronger reference engines would sharpen the next gauntlet. No engine had a time loss, an
+illegal move or a failure. A robustness run at four search threads each was clean too
+(2026-10-26, cjus/chessengine#206): 2,000 games at 1+0.01 and 400 at 10+0.1, 2 at a time.
+
 M4's levels are calibrated (2026-10-19, cjus/chessengine#106): Skill Levels 0–19 rate **629 to
 2483** at 40+0.4 (± 23 to 55), and `UCI_Elo` maps onto those ratings
 (`crates/engine/src/levels.rs`, chapter 19). Every other level played 800 games against the

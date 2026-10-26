@@ -320,7 +320,9 @@ odd levels' measured ratings, less than each level's own margin.
 The ratings in italics are halfway between their neighbours, not measured.
 
 Full strength rated 2782 ± 11 in the gauntlet of 2026-10-21, at 8+0.08 (2714 ± 10 on 2026-10-18,
-before correction history and double extensions). It uses the clock, so unlike the levels it
+before correction history and double extensions). With the network as the default (chapter 21)
+it rated 3236 ± 16 on 2026-10-26. The levels keep the hand-crafted evaluation, so their
+ratings stand. It uses the clock, so unlike the levels it
 gains from more time much as its opponents do. Level 19 played about 300 below it. The 40+0.4
 column was the code's table, and `UCI_Elo` ran from level 0's rating to level 19's, rounded
 inward to 50: 650 to 2450 (1000 to 2400 before any calibration, 800 to 2600 after the first).

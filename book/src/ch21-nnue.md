@@ -557,7 +557,14 @@ changes with it.
 A new evaluation is a new way for the engine to fail: an accumulator updated at every move, and
 nodes about 6% slower, so less time to spare. Before v1.0.0 was tagged, the release's robustness
 run was played again with the network: 10,000 games against itself, 6,000 of them at 1+0.01, with
-no time losses, illegal moves, failures or aborted games.
+no time losses, illegal moves, failures or aborted games. So were 2,400 more with four search
+threads each, which start and stop on every move.
+
+Against other engines the network counts for even more than the SPRT could say. In the
+gauntlet of chapter 19, seven rated engines at 8+0.08, the engine with the network rated 3236 ±
+16, where the hand-crafted evaluation had rated 2782 ± 11: about 450 Elo. The reference engines are now too weak for a sharp figure. The engine
+won at least 96.6% of its games against five of the seven, and such scores say little, so the
+rating rests on the two strongest, against which it performed at 3223 and 3245.
 
 ## Pitfalls
 
