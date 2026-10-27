@@ -387,10 +387,23 @@ kernel only the on-chip memory it uses rather than the most it might need, so mo
 fit at once (Apple calls this Dynamic Caching). Its memory bandwidth is 300 or 400 GB/s,
 depending on the model, against the M1 Max's 400, and the sparse gradient's kernels do little
 arithmetic for each number they read, so memory is likely to bound them. So the GPU's lead,
-2.3 to 2.8 times on the M1 Max, could grow or shrink there. `scripts/mac-trainer-speed.sh` measures both backends on the Mac it runs
-on, and its numbers, not these, should pick the backend for a long run. A GPU of another design
-may also round a little differently, so a network is only repeated exactly on the same machine,
-backend and thread count.
+2.3 to 2.8 times on the M1 Max, could grow or shrink there. `scripts/mac-trainer-speed.sh`
+measures both backends on the Mac it runs on. On the M3 Max with 10 performance cores and 30 GPU
+cores, on 2.9 million records (cjus/chessengine#187):
+
+| Hidden layer | CPU, 10 threads | GPU |
+| --- | --- | --- |
+| 256 | 3.3 million | 5.1 million |
+| 512 | 1.7 million | 2.9 million |
+| 1,024 | 0.78 million | 1.5 million |
+
+Its CPU trainer is about 45% faster than the M1 Max's, and its GPU about as fast, so the GPU's
+lead shrank to 1.5 to 1.9 times. It still leads at every size, so the long runs train on the
+GPU. With all 14 cores, the efficiency cores too, the CPU trained more slowly at 256, 3.1
+million records a second against 3.3: each thread gets an equal share of a batch, and the batch
+waits for the slowest, which is why the trainer uses only the performance cores unless told
+otherwise. A GPU of another design may also round a little differently, so a network is only
+repeated exactly on the same machine, backend and thread count.
 
 ## The network in the search
 
@@ -565,6 +578,69 @@ gauntlet of chapter 19, seven rated engines at 8+0.08, the engine with the netwo
 16, where the hand-crafted evaluation had rated 2782 ± 11: about 450 Elo. The reference engines are now too weak for a sharp figure. The engine
 won at least 96.6% of its games against five of the seven, and such scores say little, so the
 rating rests on the two strongest, against which it performed at 3223 and 3245.
+
+## The second network
+
+The first network learnt from the hand-crafted evaluation's games: that evaluation's searches
+gave the scores, and its play chose the positions and decided how the games ended. The usual
+next step is for a network to teach its successor. Its searches judge positions better, and its
+games go where a stronger player goes. So the second network, gen2, learnt from the first
+network's own games, with everything else as before: the same balanced starts, 6,000 nodes a
+move, about 100 million positions and 20 epochs. Whatever changed came from who played.
+
+The data took the M3 Max 15.1 hours, against 12.4 for the first: 1,288,000 games gave 102.9
+million positions, each taking about 23% longer to make than with the hand-crafted evaluation.
+White won 40.9% of the games, 25.9% were drawn (23.8% before) and Black won 33.2%. Training took
+7 minutes for a network of 256 and 13 for one of 512, as before.
+
+The validation losses ended at 0.0097 for 256 and 0.0096 for 512, above the first networks'
+0.0094 and 0.0093. That says nothing about which is better: each loss is measured on its own
+generation's games, whose targets came from a different player, so losses compare only networks
+trained on the same data. The gap between the training and validation losses tells the same
+story as before: 0.0003 for 256 and 0.0007 for 512, which again learnt more of its positions by
+heart.
+
+The first network's checks, again:
+
+| Position (side to move) | Hand-crafted | gen1, 256 | gen2, 256 | gen2, 512 |
+| --- | --- | --- | --- | --- |
+| The starting position | +10 | +24 | +31 | +29 |
+| White without its queen | −931 | −819 | −844 | −797 |
+| White without a knight | −269 | −227 | −236 | −241 |
+| White without a pawn | −52 | −19 | −23 | −15 |
+| A pawn on the 7th, kings far away | +290 | +752 | +628 | +606 |
+| King and bishop against king, a dead draw | +269 | +148 | +118 | +71 |
+
+The material barely moved, and the dead draw came closer to zero, most of all in the wider
+network. All 285 positions of the test openings and the endgame tests score the same mirrored,
+in all three networks. The 256 network's bench is 701,720 nodes, against gen1's 715,827, at the
+same speed. The 512 network's is 732,931, and it searches 25% fewer nodes a second.
+
+In the endgame test above, with the rules for a bare king and small pawnless endings as
+shipped, gen2 converts exactly what gen1 does, 98 and 108 of 130 positions at 3,000 and 20,000
+nodes a move: those endings get the hand-crafted evaluation either way. Where the network does
+play, it was quicker: a queen against a pawn took 19 plies on average at 20,000 nodes, against
+gen1's 46. Without the rules, at 200,000 nodes, gen2 had learnt a little of what the queen
+endings need:
+
+| Ending | gen1 | gen2 | Hand-crafted |
+| --- | --- | --- | --- |
+| K+Q against K+R (30 positions) | 10 | 13 | 20 |
+| K+Q against K+B (15) | 12 | 13 | 15 |
+| K+Q against K+N (15) | 9 | 12 | 15 |
+
+Better, but short of the hand-crafted evaluation, so the `pawnless` rule stays. The network's
+own games hold few such endings to learn from; data with more of them is a job for the next
+generation.
+
+None of these checks says whether gen2 plays better. That takes games. In the SPRT against gen1
+(cjus/chessengine#214), gen2 given by `EvalFile` against the built-in gen1 at 8+0.08, gen2 won
+98 games, lost 16 and drew 95, about +144 ± 35 Elo, and passed after 209 games. That is a big
+step for a network of the same size trained the same way on as many positions, and it came from
+the data alone: the first network's searches gave better scores, and its games went where a
+stronger player goes. The figure is likely too high. An SPRT that stops this early stops because
+the games went well, and self-play overstates gains against other engines. gen2 is clearly
+stronger; how much stronger against other engines is a gauntlet's question.
 
 ## Pitfalls
 
