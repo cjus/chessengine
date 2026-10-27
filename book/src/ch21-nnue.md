@@ -633,7 +633,14 @@ Better, but short of the hand-crafted evaluation, so the `pawnless` rule stays. 
 own games hold few such endings to learn from; data with more of them is a job for the next
 generation.
 
-None of these checks says whether gen2 plays better. That takes games: an SPRT against gen1 (cjus/chessengine#214).
+None of these checks says whether gen2 plays better. That takes games. In the SPRT against gen1
+(cjus/chessengine#214), gen2 given by `EvalFile` against the built-in gen1 at 8+0.08, gen2 won
+98 games, lost 16 and drew 95, about +144 ± 35 Elo, and passed after 209 games. That is a big
+step for a network of the same size trained the same way on as many positions, and it came from
+the data alone: the first network's searches gave better scores, and its games went where a
+stronger player goes. The figure is likely too high. An SPRT that stops this early stops because
+the games went well, and self-play overstates gains against other engines. gen2 is clearly
+stronger; how much stronger against other engines is a gauntlet's question.
 
 ## Pitfalls
 
