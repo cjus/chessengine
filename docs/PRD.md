@@ -860,7 +860,11 @@ illegal move or a failure. A robustness run at four search threads each was clea
 (2026-10-26, cjus/chessengine#206): 2,000 games at 1+0.01 and 400 at 10+0.1, 2 at a time.
 Those runs were with gen1. gen2 then beat gen1 by SPRT, about +144 ± 35 (2026-10-27,
 cjus/chessengine#214), so v1.0.0 ships gen2 (Carlos), and the gauntlet and the robustness run
-are played again with it before the tag (cjus/chessengine#215).
+are played again with it before the tag (cjus/chessengine#215). With gen2, `main` (at
+`83fa6c6`) rated **3286 ± 17** in the same gauntlet (2026-10-27, +5144 −96 =360), 50 above
+gen1: about a third of the self-play figure. It rests, as before, on Weiss 1.0 (91.6%,
+performance 3310) and Stash v27.0 (78.4%, 3273); no engine had a time loss, an illegal move
+or a failure.
 
 M4's levels are calibrated (2026-10-19, cjus/chessengine#106): Skill Levels 0–19 rate **629 to
 2483** at 40+0.4 (± 23 to 55), and `UCI_Elo` maps onto those ratings
