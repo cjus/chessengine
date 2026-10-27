@@ -212,7 +212,8 @@ teaching value, and the trainer uses the Mac's GPU through Metal.
   the bench with a net from 134,000 positions, millions at depth 4 on Kiwipete with random
   weights), because a noisy evaluation prunes badly. The levels were calibrated with the HCE;
   with a net they would need calibrating again.
-- **The default net** (Carlos, 2026-10-24): gen1's 256-wide net, which passed its SPRT against
+- **The default net** (Carlos, 2026-10-24; gen2 from 2026-10-27, before v1.0.0): gen2's
+  256-wide net, which beat gen1 by SPRT (+98 −16 =95, about +144 ± 35, #214) as gen1 had beaten
   the HCE (+14 −0 =0, #195), is built into every build (`cb2026_engine::builtin_network`) and
   used unless told otherwise. `EvalFile` defaults to `<built-in>`; empty (or `none`) means the
   HCE, a path another net, the same words everywhere (`EvalChoice`: the shell's `set
@@ -225,8 +226,7 @@ teaching value, and the trainer uses the Mac's GPU through Metal.
   `pawnless_endings` switch, on, 2026-10-26), since in tablebase-won positions at 200,000 nodes
   a move the net converted K+Q against K+R 15 times in 45 and against a lone knight 9 in 15,
   where the HCE converted 32 and 15 (cjus/chessengine#208). `cb2026 bench` searches with the
-  net: 715,827 nodes, against the
-  HCE's 749,181 (`cb2026 bench none`). `datagen` plays with the built-in net unless given
+  net: 701,720 nodes (715,827 with gen1), against the HCE's 749,181 (`cb2026 bench none`). `datagen` plays with the built-in net unless given
   `--evalfile none`, so the next data is the net's own games.
 - **Data:** `datagen` self-play, with the HCE for the first net and each net's own games for the
   next, stores the search score as well as the game result, in a compact binary file. A first
@@ -377,7 +377,7 @@ moves ...`, every `go` parameter, `stop`, `ponderhit`, `quit`, and `info` lines 
 | OwnBook | check | false | |
 | BookFile | string | `<empty>` | |
 | Clear Hash | button | | |
-| EvalFile | string | `<built-in>` | M6: the NNUE network: `<built-in>` (the default, gen1's), a `.nnue` file, or empty (or `none`) for the HCE |
+| EvalFile | string | `<built-in>` | M6: the NNUE network: `<built-in>` (the default, gen2's), a `.nnue` file, or empty (or `none`) for the HCE |
 
 Technique switches and tuning parameters are not shown to GUIs by default; they appear only in a
 developer build or when the engine is started with `--dev`, so GUI option lists stay clean.
@@ -858,6 +858,9 @@ on Weiss 1.0 (86.8%, performance 3223) and Stash v27.0 (75.6%, performance 3245)
 stronger reference engines would sharpen the next gauntlet. No engine had a time loss, an
 illegal move or a failure. A robustness run at four search threads each was clean too
 (2026-10-26, cjus/chessengine#206): 2,000 games at 1+0.01 and 400 at 10+0.1, 2 at a time.
+Those runs were with gen1. gen2 then beat gen1 by SPRT, about +144 ± 35 (2026-10-27,
+cjus/chessengine#214), so v1.0.0 ships gen2 (Carlos), and the gauntlet and the robustness run
+are played again with it before the tag (cjus/chessengine#215).
 
 M4's levels are calibrated (2026-10-19, cjus/chessengine#106): Skill Levels 0–19 rate **629 to
 2483** at 40+0.4 (± 23 to 55), and `UCI_Elo` maps onto those ratings

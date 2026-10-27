@@ -9,9 +9,11 @@ through which Solrac, a 3D chess board that teaches, reaches it. A companion boo
 Chess Engine in Rust* (in `book/`), explains every technique as the engine gained it.
 
 **Strength:** about **3236 ± 16** on the CCRL Blitz scale (2026-10-26), from 5,600 games at
-8+0.08 against seven rated engines. It evaluates with a built-in NNUE network trained on its own
-games; with its hand-crafted evaluation it rated 2782 ± 11. The weaker reference engines say
-little at this level, so the figure rests mostly on the two strongest.
+8+0.08 against seven rated engines, with its first NNUE network; with its hand-crafted
+evaluation it rated 2782 ± 11. It now evaluates with its second network, trained on the first
+one's games, which beat the first by about 144 Elo in self-play; its own rating is being
+measured (cjus/chessengine#215). The weaker reference engines say little at this level, so the
+figure rests mostly on the two strongest.
 
 ## Download
 
@@ -26,7 +28,7 @@ holding the `cb2026` program, this README, the licences and the third-party noti
 | `cb2026-<version>-x86_64-unknown-linux-gnu.tar.gz` | Linux, x86-64 |
 
 The network is built into the program, so no other file has to sit beside it. The release also
-carries the network itself (`cb2026-gen1-256.nnue`), an opening book made from
+carries the network itself (`cb2026-gen2-256.nnue`), an opening book made from
 Lichess's games (`cb2026-lichess-2026-09.bin`, below) and `SHA256SUMS.txt`. To check what you
 downloaded, run `shasum -a 256 -c SHA256SUMS.txt --ignore-missing` in the folder holding the
 files.

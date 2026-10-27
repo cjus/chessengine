@@ -124,10 +124,11 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const AUTHOR: &str = "the cb2026 authors";
 
 // ANCHOR: builtin
-/// The default NNUE network, built into the binary: gen1, 256 wide, trained on 104 million
-/// positions of the hand-crafted evaluation's self-play. It passed its SPRT against the
-/// hand-crafted evaluation 14–0 (cjus/chessengine#195). `nets/README.md` says how it was made.
-const BUILTIN_NETWORK: &[u8] = include_bytes!("../../../nets/cb2026-gen1-256.nnue");
+/// The default NNUE network, built into the binary: gen2, 256 wide, trained on 103 million
+/// positions of gen1's self-play, where gen1 learnt from the hand-crafted evaluation's. It beat
+/// gen1 by SPRT, about +144 Elo (cjus/chessengine#214), as gen1 had beaten the hand-crafted
+/// evaluation (cjus/chessengine#195). `nets/README.md` says how both were made.
+const BUILTIN_NETWORK: &[u8] = include_bytes!("../../../nets/cb2026-gen2-256.nnue");
 
 /// What `EvalFile` shows when the built-in network is in use, and accepts to choose it.
 pub const BUILTIN_NETWORK_NAME: &str = "<built-in>";

@@ -12,9 +12,22 @@ evaluation, and `EvalFile <path>` another network. Strength levels (`Skill Level
 release carries the default network as a download too.
 
 Networks are small (a 256-wide one is 395 KB), so the default one is committed here: a release
-build must compile it in, and the release is made after the build.
+build must compile it in, and the release is made after the build. Only the default is here;
+earlier ones stay in the git history.
 
-## cb2026-gen1-256.nnue (the default)
+## cb2026-gen2-256.nnue (the default)
+
+- **SHA-256:** `1b85528690048d883ba2962f55d1081e41b5adea860f3deab532bd5c8d36d486`
+- **Shape:** 768 → 256 × 2 → 1, SCReLU, eval scale 149 (fitted from the data).
+- **Data:** 102.9 million positions from 1,288,000 games of gen1 against itself, 6,000 nodes a
+  move, balanced starts; 15.1 hours on the M3 Max (`scripts/mac-nnue-data.sh`,
+  cjus/chessengine#211).
+- **Training:** the same as gen1's (below): training loss 0.0094, validation loss 0.0097 (on
+  gen2's own data, so not comparable with gen1's). 7 minutes on the M3 Max's GPU.
+- **Strength:** an SPRT against gen1 at 8+0.08 passed after 209 games, +98 −16 =95, about +144
+  Elo ± 35 (cjus/chessengine#214).
+
+## cb2026-gen1-256.nnue (the default before gen2; in the git history)
 
 - **SHA-256:** `ff8692c9b527bb95d5b6572b7b4af2b978d8a6b5e275434756da520eeaa16309`
 - **Shape:** 768 → 256 × 2 → 1, SCReLU, eval scale 167 (fitted from the data).

@@ -642,6 +642,11 @@ stronger player goes. The figure is likely too high. An SPRT that stops this ear
 the games went well, and self-play overstates gains against other engines. gen2 is clearly
 stronger; how much stronger against other engines is a gauntlet's question.
 
+v1.0.0 wasn't tagged yet, so gen2 replaced gen1 as the built-in network before it was
+(cjus/chessengine#216). Only the weights changed, so the code the release's tests had run stayed
+the same, and the bench went from 715,827 nodes to 701,720. The gauntlet and the robustness run
+are played again with gen2 before the tag (cjus/chessengine#215).
+
 ## Pitfalls
 
 - **Trainer and engine must agree** on the numbering, the layers and the scales. They share
