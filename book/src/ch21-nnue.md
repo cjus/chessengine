@@ -633,7 +633,7 @@ Better, but short of the hand-crafted evaluation, so the `pawnless` rule stays. 
 own games hold few such endings to learn from; data with more of them is a job for the next
 generation.
 
-None of these checks says whether gen2 plays better. That takes games: an SPRT against gen1.
+None of these checks says whether gen2 plays better. That takes games: an SPRT against gen1 (cjus/chessengine#214).
 
 ## Pitfalls
 
