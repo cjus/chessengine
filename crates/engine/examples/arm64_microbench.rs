@@ -62,10 +62,21 @@ fn main() {
     let mv = pos.legal_moves()[0];
     let changes = Changes::of(&pos, mv);
     let parent = net.accumulator(&pos);
+    let mut next = pos.clone();
+    next.make_move(mv);
+    let expected = net.accumulator(&next);
     let mut child = net.empty_accumulator();
-    println!("NNUE incremental update_into + evaluation");
+    net.update_into(&parent, &mut child, &changes);
+    assert_eq!(child, expected, "incremental accumulator must match full refresh");
+    assert_eq!(net.evaluate(&child, next.side_to_move()), net.evaluate_position(&next));
+    println!("NNUE incremental update_into only");
     measure(|_| {
         net.update_into(black_box(&parent), black_box(&mut child), black_box(&changes));
-        black_box(net.evaluate(&child, pos.side_to_move()));
+        black_box(&child);
     }, rounds, 30_000);
+
+    println!("NNUE evaluation only (precomputed accumulator)");
+    measure(|_| {
+        black_box(net.evaluate(black_box(&expected), black_box(next.side_to_move())));
+    }, rounds, 100_000);
 }
