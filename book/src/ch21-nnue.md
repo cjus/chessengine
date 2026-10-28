@@ -648,7 +648,8 @@ the same, and the bench went from 715,827 nodes to 701,720. The gauntlet and the
 were played again with gen2 before the tag (cjus/chessengine#215). In the gauntlet it rated
 3286 ± 17, 50 above gen1's 3236 ± 16: about a third of what the SPRT measured, since self-play
 overstates gains against other engines. Against the two engines that carry the rating it scored
-91.6% and 78.4%, where gen1 had scored 86.8% and 75.6%.
+91.6% and 78.4%, where gen1 had scored 86.8% and 75.6%. The robustness run's 10,000 games were
+clean again.
 
 ## Pitfalls
 
