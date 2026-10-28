@@ -864,7 +864,8 @@ are played again with it before the tag (cjus/chessengine#215). With gen2, `main
 `83fa6c6`) rated **3286 ± 17** in the same gauntlet (2026-10-27, +5144 −96 =360), 50 above
 gen1: about a third of the self-play figure. It rests, as before, on Weiss 1.0 (91.6%,
 performance 3310) and Stash v27.0 (78.4%, 3273); no engine had a time loss, an illegal move
-or a failure.
+or a failure. The robustness run with gen2 was clean too: 10,000 games at `83fa6c6`, from
+1+0.01 to 40/60, with no time losses, illegal moves, failures or aborted games.
 
 M4's levels are calibrated (2026-10-19, cjus/chessengine#106): Skill Levels 0–19 rate **629 to
 2483** at 40+0.4 (± 23 to 55), and `UCI_Elo` maps onto those ratings
