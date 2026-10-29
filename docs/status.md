@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-29, 05:58 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-29, 06:02 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -209,8 +209,9 @@ with its own gauntlet.*
 | M5: larger reductions when the hash move is a capture, off the principal variation (chapter 14.1) | #179 | 749181 (754886 with them on) | Merged, off by default: −7.5 ± 8.0, 3,031 games, [0, 5] failed (M3 Max) |
 | v1.0: opening books from people's games, the `make-book` tool and `scripts/lichess-book.sh` (chapter 18) | #173 | 749181 | Merged, no functional change. The first book, from Lichess's September 2026 games: 97,432 moves from 1,499,615 games, 1.6 MB, 58 minutes on the M3 (#174) |
 
-**The M3 is free** since gen3's SPRT passed (2026-10-29, about 05:55 MDT; #222). Each generation's files stay in `~/nnue-data/genN`
-there, and in `~/engines/nets/genN` on the M1 Max.
+**The M3 is running** gen3's 512 network against its 256 by SPRT (#GEN3W), to see whether the
+wider network's better validation loss pays for its 25% fewer nodes a second. Each generation's
+files stay in `~/nnue-data/genN` there, and in `~/engines/nets/genN` on the M1 Max.
 
 **v1.0's gates have all passed.** The GUI matrix, the last, passed on 2026-10-23 (#37, recorded
 in `docs/gui-compat.md` and the PRD): En Croissant, Cute Chess, XBoard and HIARCS Chess Explorer
