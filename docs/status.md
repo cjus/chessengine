@@ -133,8 +133,9 @@ hours on the M3 Max: the gap between training and validation loss halved, sane e
 every mirrored position the same, bench 767,812 with the 256 net (gen2's 701,720), the endgame
 suite as gen2's with the rules on (one rook ending fewer at 20,000 nodes) and 41 of 60 queen
 endings without them (gen2 38, the HCE 50), #219; **gen3 beat gen2 by SPRT**, +176 −86 =333 at
-8+0.08 on the M3 Max, about +53 ± 19 in 595 games (LLR 2.95), #222; whether it replaces gen2
-before the `v1.0.0` tag or after is Carlos's call.*
+8+0.08 on the M3 Max, about +53 ± 19 in 595 games (LLR 2.95), #222; v1.0.0 ships gen2 as
+tested, and gen3 waits for v1.1 (Carlos, 2026-10-29): after the tag, a PR makes it the default,
+with its own gauntlet.*
 
 ## Stages
 
@@ -795,5 +796,6 @@ Run the full test suite on every commit you replay, not only at the tip: each be
      net, 512 against 256 (`NET=… BASE_NET=…`), and gen2 from the net's own games: trained
      and checked on 2026-10-27 (#211), and it beat gen1 by SPRT, +144 ± 35 in 209 games (#214);
      it is the default since #216. gen3, from 200.7M positions of gen2's games, trained and
-     checked on 2026-10-29 (#219), and it beat gen2 by SPRT, +53 ± 19 (#222). If gen3 becomes
+     checked on 2026-10-29 (#219), and it beat gen2 by SPRT, +53 ± 19 (#222); it becomes the
+     default after the `v1.0.0` tag, for v1.1 (Carlos, 2026-10-29). When gen3 becomes
      the default, `mac-nnue-data.sh`'s default `OUT` moves on to `~/nnue-data/gen4`.

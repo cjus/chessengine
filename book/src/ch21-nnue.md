@@ -693,7 +693,8 @@ at 8+0.08, gen3 won 176 games, lost 86 and drew 333, about +53 ± 19 Elo, and pa
 games. Each generation gains less than the one before, +144 for gen2 and +53 for gen3, as the
 networks' evaluations close in on what their games can teach them. The bench had pointed the
 other way, 767,812 nodes against gen2's 701,720: fewer nodes often means a sharper evaluation,
-but not always, and only games decide.
+but not always, and only games decide. v1.0.0 ships gen2 even so: it had been through the
+release's tests, and a gain this size waits for the next release.
 
 ## Pitfalls
 
