@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-27, 20:48 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-29, 05:58 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -128,7 +128,14 @@ default** before the tag (Carlos), bench 715827 → 701720, #216; **the gauntlet
 3286 ± 17**, 50 above gen1 (a third of the self-play figure), #215; **the robustness run with
 gen2 clean**, 10,000 games at `83fa6c6` from 1+0.01 to 40/60 with no time losses, illegal moves,
 failures or aborted games, #215; left before the tag: the GUI re-check with gen2's binary
-(#205).*
+(#205). 2026-10-29: **gen3**, from 200.7M positions of gen2's games (twice gen2's data), 29.1
+hours on the M3 Max: the gap between training and validation loss halved, sane evaluations,
+every mirrored position the same, bench 767,812 with the 256 net (gen2's 701,720), the endgame
+suite as gen2's with the rules on (one rook ending fewer at 20,000 nodes) and 41 of 60 queen
+endings without them (gen2 38, the HCE 50), #219; **gen3 beat gen2 by SPRT**, +176 −86 =333 at
+8+0.08 on the M3 Max, about +53 ± 19 in 595 games (LLR 2.95), #222; v1.0.0 ships gen2 as
+tested, and gen3 waits for v1.1 (Carlos, 2026-10-29): after the tag, a PR makes it the default,
+with its own gauntlet.*
 
 ## Stages
 
@@ -202,8 +209,8 @@ failures or aborted games, #215; left before the tag: the GUI re-check with gen2
 | M5: larger reductions when the hash move is a capture, off the principal variation (chapter 14.1) | #179 | 749181 (754886 with them on) | Merged, off by default: −7.5 ± 8.0, 3,031 games, [0, 5] failed (M3 Max) |
 | v1.0: opening books from people's games, the `make-book` tool and `scripts/lichess-book.sh` (chapter 18) | #173 | 749181 | Merged, no functional change. The first book, from Lichess's September 2026 games: 97,432 moves from 1,499,615 games, 1.6 MB, 58 minutes on the M3 (#174) |
 
-**The M3 is free** since gen2's robustness run finished clean (2026-10-27, 20:03 MDT; #215).
-gen2's files stay in `~/nnue-data/gen2` there, and in `~/engines/nets/gen2` on the M1 Max.
+**The M3 is free** since gen3's SPRT passed (2026-10-29, about 05:55 MDT; #222). Each generation's files stay in `~/nnue-data/genN`
+there, and in `~/engines/nets/genN` on the M1 Max.
 
 **v1.0's gates have all passed.** The GUI matrix, the last, passed on 2026-10-23 (#37, recorded
 in `docs/gui-compat.md` and the PRD): En Croissant, Cute Chess, XBoard and HIARCS Chess Explorer
@@ -477,7 +484,7 @@ passed; the rest wait on GUI checks, level calibration or the v1.0 work.
 | M3 Evaluation | stages 15–16 | **Passed** 2026-10-18: stage 16 rated 2669 ± 10 by gauntlet at 8+0.08 (gate ≥2400 CCRL), #36 |
 | M4 Complete engine | stages 17–20 | **Passed** 2026-10-23: levels calibrated at 40+0.4 on 2026-10-19, 629–2483 (#106); the GUI matrix passed (#37); the Lichess bot's games follow v1.0 (#191) |
 | M5 v1.0 | strength work, release | Started (the M5 branches above); release workflow merged (#40); `main` rated 2782 ± 11 by gauntlet on 2026-10-21 (#131; 2714 ± 10 on 2026-10-18, #36), above the gate (≥2400, goal 2600+), and **3236 ± 16 with the network** on 2026-10-26 (#207), **3286 ± 17 with gen2** on 2026-10-27 (#215); the robustness run clean on 2026-10-22 (#146), and again with the network as the default on 2026-10-24 (#197); the GUI matrix passed on 2026-10-23 (#37); version 1.0.0 merged (#154); the `v1.0.0` tag waits on the testing pass with the net (Carlos, 2026-10-26): #206 and #207 done with gen1; v1.0.0 ships gen2 (#216), and #215 is done (its gauntlet 3286 ± 17, its robustness run clean), so #205 is left |
-| M6 NNUE | stage 21 | SPRT gate passed 2026-10-24: gen1 (256 wide) beat the HCE +14 −0 (#195), and is the default since #196 (the HCE kept for levels, a lone king and, from #208, small pawnless endings); chapter 21 written. gen2, from the net's own games, trained and checked (#211), beat gen1 by SPRT, +144 ± 35 in 209 games (#214), and is the default since #216, before v1.0.0 |
+| M6 NNUE | stage 21 | SPRT gate passed 2026-10-24: gen1 (256 wide) beat the HCE +14 −0 (#195), and is the default since #196 (the HCE kept for levels, a lone king and, from #208, small pawnless endings); chapter 21 written. gen2, from the net's own games, trained and checked (#211), beat gen1 by SPRT, +144 ± 35 in 209 games (#214), and is the default since #216, before v1.0.0. gen3, from 200M of gen2's positions, trained and checked (#219), beat gen2 by SPRT, +53 ± 19 in 595 games (#222) |
 
 ## Waiting on Carlos
 
@@ -788,5 +795,7 @@ Run the full test suite on every commit you replay, not only at the tip: each be
      against the reference engines beside main's 2714 ± 10), the levels recalibrated with the
      net, 512 against 256 (`NET=… BASE_NET=…`), and gen2 from the net's own games: trained
      and checked on 2026-10-27 (#211), and it beat gen1 by SPRT, +144 ± 35 in 209 games (#214);
-     it is the default since #216. `mac-nnue-data.sh`'s next run makes gen3's data from gen2's
-     games, into `~/nnue-data/gen3`.
+     it is the default since #216. gen3, from 200.7M positions of gen2's games, trained and
+     checked on 2026-10-29 (#219), and it beat gen2 by SPRT, +53 ± 19 (#222); it becomes the
+     default after the `v1.0.0` tag, for v1.1 (Carlos, 2026-10-29). When gen3 becomes
+     the default, `mac-nnue-data.sh`'s default `OUT` moves on to `~/nnue-data/gen4`.

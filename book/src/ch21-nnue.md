@@ -651,6 +651,51 @@ overstates gains against other engines. Against the two engines that carry the r
 91.6% and 78.4%, where gen1 had scored 86.8% and 75.6%. The robustness run's 10,000 games were
 clean again.
 
+## The third network
+
+gen3 changed two things at once: it learnt from gen2's games, and from twice as many of them,
+200 million positions. More positions are the cheapest gain a network can get, since they need
+no new code, only time on the test Mac: 29.1 hours for these, 45 chunks of 56,000 games
+(cjus/chessengine#219). The games came out much as gen2's had: White won 40.8%, 26.2% were
+drawn and Black won 33.0%. Training took 13 minutes for a network of 256 and 24 for one of
+512, twice as long as before, since each epoch held twice the records.
+
+The extra data showed first in the losses. The gap between training and validation loss
+halved, to 0.00018 for 256 and 0.00038 for 512: with twice the positions, a network learns
+fewer of them by heart. The wider network gained more. Its validation loss pulled ahead of the
+256 network's by 0.00029, against 0.00011 with gen2's data, since a network with more weights
+needs more positions before its size pays.
+
+The same checks again, now against gen2:
+
+| Position (side to move) | Hand-crafted | gen2, 256 | gen3, 256 | gen3, 512 |
+| --- | --- | --- | --- | --- |
+| The starting position | +10 | +31 | +38 | +38 |
+| White without its queen | −931 | −844 | −849 | −766 |
+| White without a knight | −269 | −236 | −247 | −233 |
+| White without a pawn | −52 | −23 | −35 | −41 |
+| A pawn on the 7th, kings far away | +290 | +628 | +592 | +603 |
+| King and bishop against king, a dead draw | +269 | +118 | +83 | +89 |
+
+The dead draw came closer to zero again, and all 285 test positions score the same mirrored.
+The networks are settling: across those positions gen3's 256 network differs from gen2's by
+37 centipawns on average, where gen2 had differed from gen1 by 78. Its bench is 767,812 nodes,
+more than gen2's 701,720, at the same speed; the 512 network's is 868,798.
+
+In the endgame test, with the rules as shipped, gen3 converts what gen2 does at 3,000 nodes a
+move, 98 of 130, and one fewer at 20,000, 107, a rook and pawn against a rook that it drew.
+Without the rules it won a few more queen endings at 200,000 nodes: 41 of 60, against gen2's
+38 and the hand-crafted evaluation's 50. Each generation learns a little more of them, but
+slowly, so the `pawnless` rule stays.
+
+Whether gen3 plays better is again the SPRT's question. Against gen2 (cjus/chessengine#222),
+at 8+0.08, gen3 won 176 games, lost 86 and drew 333, about +53 ± 19 Elo, and passed after 595
+games. Each generation gains less than the one before, +144 for gen2 and +53 for gen3, as the
+networks' evaluations close in on what their games can teach them. The bench had pointed the
+other way, 767,812 nodes against gen2's 701,720: fewer nodes often means a sharper evaluation,
+but not always, and only games decide. v1.0.0 ships gen2 even so: it had been through the
+release's tests, and a gain this size waits for the next release.
+
 ## Pitfalls
 
 - **Trainer and engine must agree** on the numbering, the layers and the scales. They share
