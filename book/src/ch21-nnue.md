@@ -705,7 +705,7 @@ at longer time controls, where each extra ply is worth less and so a quarter few
 less; that test is for a later network.
 
 v1.0.0's tag went on the commit its tests had run on, so `main` could move on: gen3 became the
-built-in network for v1.1 (cjus/chessengine#PRG), and the bench went from 701,720 nodes to
+built-in network for v1.1 (cjus/chessengine#228), and the bench went from 701,720 nodes to
 767,812. Its gauntlet measures what the +53 is worth against other engines
 (cjus/chessengine#227).
 
