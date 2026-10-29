@@ -266,10 +266,11 @@ tail -f ~/nnue-data.log
 
 Makes an NNUE network's training data and trains on it: self-play (`datagen --format records`)
 until there are 100 million positions, about 3.2 GB and 12 hours on the M3 Max, in chunks of
-56,000 games (about half an hour each), each its own file in `~/nnue-data/gen3`. The games are
+56,000 games (about half an hour each), each its own file in `~/nnue-data/gen4`. The games are
 the built-in network's (`EVALFILE`, default `builtin`), so the data is for the next generation;
 on the M3, gen1's data in `~/nnue-data/gen1` came from the hand-crafted evaluation's games
-(`EVALFILE=none`), and gen2's in `~/nnue-data/gen2` from gen1's. Then it checks
+(`EVALFILE=none`), gen2's in `~/nnue-data/gen2` from gen1's, and gen3's in `~/nnue-data/gen3`
+(200 million, `POSITIONS=200000000`) from gen2's. Then it checks
 every record, trains networks of 256 and 512 on the GPU for 20 epochs, runs `cb2026 bench` with
 each, and posts a report; a progress comment on the issue is updated after every chunk. Started
 again after a stop, it keeps the finished chunks and redoes only the unfinished one; it won't

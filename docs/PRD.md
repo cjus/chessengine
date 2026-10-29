@@ -212,8 +212,9 @@ teaching value, and the trainer uses the Mac's GPU through Metal.
   the bench with a net from 134,000 positions, millions at depth 4 on Kiwipete with random
   weights), because a noisy evaluation prunes badly. The levels were calibrated with the HCE;
   with a net they would need calibrating again.
-- **The default net** (Carlos, 2026-10-24; gen2 from 2026-10-27, before v1.0.0): gen2's
-  256-wide net, which beat gen1 by SPRT (+98 −16 =95, about +144 ± 35, #214) as gen1 had beaten
+- **The default net** (Carlos, 2026-10-24; gen2 from 2026-10-27, which v1.0.0 ships; gen3
+  from 2026-10-29, for v1.1): gen3's 256-wide net, which beat gen2 by SPRT (+176 −86 =333,
+  about +53 ± 19, #222) as gen2 had beaten gen1 (+98 −16 =95, about +144 ± 35, #214) and gen1
   the HCE (+14 −0 =0, #195), is built into every build (`cb2026_engine::builtin_network`) and
   used unless told otherwise. `EvalFile` defaults to `<built-in>`; empty (or `none`) means the
   HCE, a path another net, the same words everywhere (`EvalChoice`: the shell's `set
@@ -226,7 +227,8 @@ teaching value, and the trainer uses the Mac's GPU through Metal.
   `pawnless_endings` switch, on, 2026-10-26), since in tablebase-won positions at 200,000 nodes
   a move the net converted K+Q against K+R 15 times in 45 and against a lone knight 9 in 15,
   where the HCE converted 32 and 15 (cjus/chessengine#208). `cb2026 bench` searches with the
-  net: 701,720 nodes (715,827 with gen1), against the HCE's 749,181 (`cb2026 bench none`). `datagen` plays with the built-in net unless given
+  net: 767,812 nodes (701,720 with gen2, 715,827 with gen1), against the HCE's 749,181
+  (`cb2026 bench none`). `datagen` plays with the built-in net unless given
   `--evalfile none`, so the next data is the net's own games.
 - **Data:** `datagen` self-play, with the HCE for the first net and each net's own games for the
   next, stores the search score as well as the game result, in a compact binary file. A first
@@ -377,7 +379,7 @@ moves ...`, every `go` parameter, `stop`, `ponderhit`, `quit`, and `info` lines 
 | OwnBook | check | false | |
 | BookFile | string | `<empty>` | |
 | Clear Hash | button | | |
-| EvalFile | string | `<built-in>` | M6: the NNUE network: `<built-in>` (the default, gen2's), a `.nnue` file, or empty (or `none`) for the HCE |
+| EvalFile | string | `<built-in>` | M6: the NNUE network: `<built-in>` (the default, gen3's; gen2's in v1.0.0), a `.nnue` file, or empty (or `none`) for the HCE |
 
 Technique switches and tuning parameters are not shown to GUIs by default; they appear only in a
 developer build or when the engine is started with `--dev`, so GUI option lists stay clean.

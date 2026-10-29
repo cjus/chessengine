@@ -5,11 +5,11 @@
 #   scripts/mac-nnue-data.sh <issue number, or - to print the reports instead>
 #
 # Self-play (`datagen --format records`: balanced starts, 6,000 nodes a move) with EVALFILE
-# (default builtin: the built-in network, gen2, so the data is for gen3; `none` repeats gen1's,
+# (default builtin: the built-in network, gen3, so the data is for gen4; `none` repeats gen1's,
 # which the hand-crafted evaluation played) until there are POSITIONS records (default
 # 100,000,000, about 3.2 GB), one game per performance core minus one. About 12 hours on the M3
 # Max, so the work is split into chunks of CHUNK_GAMES games (default 56,000, about 4.4 million
-# records and half an hour), each its own file in OUT (default ~/nnue-data/gen3). Run the same
+# records and half an hour), each its own file in OUT (default ~/nnue-data/gen4). Run the same
 # command again after a stop: it keeps the
 # finished chunks and redoes only the unfinished one. Chunk k holds the games a single long run
 # would number from k × CHUNK_GAMES, so no two chunks share a game.
@@ -29,8 +29,8 @@ TARGET="$1"
 POSITIONS="${POSITIONS:-100000000}"
 CHUNK_GAMES="${CHUNK_GAMES:-56000}"
 EVALFILE="${EVALFILE:-builtin}"
-# The built-in network is gen2, so its games make gen3's data.
-OUT="${OUT:-$HOME/nnue-data/gen3}"
+# The built-in network is gen3, so its games make gen4's data.
+OUT="${OUT:-$HOME/nnue-data/gen4}"
 WIDTHS="${WIDTHS-256 512}"
 BACKEND="${BACKEND:-gpu}"
 EPOCHS="${EPOCHS:-20}"
