@@ -696,6 +696,14 @@ other way, 767,812 nodes against gen2's 701,720: fewer nodes often means a sharp
 but not always, and only games decide. v1.0.0 ships gen2 even so: it had been through the
 release's tests, and a gain this size waits for the next release.
 
+Twice the data had helped the 512 network most, so it had its own SPRT, against gen3's 256
+(cjus/chessengine#223). After 8,180 games at 8+0.08 it stood at 1,653 wins, 1,627 losses and
+4,900 draws, about +1 ± 5 Elo, with no verdict, and was stopped. The wider network knows more
+but searches about a quarter fewer nodes a second, and at this time control the two cancel. So
+the 256 stays the candidate: as strong, and faster. Wider networks tend to do relatively better
+at longer time controls, where each extra ply is worth less and so a quarter fewer nodes costs
+less; that test is for a later network.
+
 ## Pitfalls
 
 - **Trainer and engine must agree** on the numbering, the layers and the scales. They share
