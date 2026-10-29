@@ -650,7 +650,8 @@ mod tests {
         play_san(&mut game, "a6");
         let text = game.to_pgn().to_pgn();
         assert!(
-            text.contains("1. e4 e5 2. Nf3 Nc6 3. Bb5 {+0.35/18} a6 *"),
+            // A comment between White's move and Black's: Black's is numbered again.
+            text.contains("1. e4 e5 2. Nf3 Nc6 3. Bb5 {+0.35/18} 3... a6 *"),
             "{text}"
         );
         let again = Game::from_pgn(&PgnGame::parse(&text).unwrap()).unwrap();

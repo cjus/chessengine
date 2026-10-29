@@ -14,10 +14,36 @@
 //!
 //! Writing is strict: the seven required tags first (Event, Site, Date, Round, White, Black,
 //! Result), lines under 80 characters. Reading is forgiving, because PGN from the wild bends
-//! the rules. It skips comments (`{...}` and `; ...`), variations (`(...)`, nested), numeric
-//! annotations (`$1`), annotation marks (`!?`) and escape lines (`%`), and accepts move numbers
-//! glued to moves (`1.e4`). A game that doesn't start from the initial position has a `FEN`
-//! tag. Only the first game in the text is read. Malformed input gives an error, never a panic.
+//! the rules. It skips escape lines (`%`), accepts move numbers glued to moves (`1.e4`), and
+//! drops a variation it can't read rather than the game. A game that doesn't start from the
+//! initial position has a `FEN` tag. Only the first game in the text is read. Malformed input
+//! gives an error, never a panic.
+//!
+//! ## Annotations
+//!
+//! A game read keeps everything annotated in it, and writes it back:
+//!
+//! - **Comments**, in braces or after `;` to the end of the line. A comment after a move is
+//!   that move's ([`PgnGame::comments`]); one before a line's first move is the line's own
+//!   ([`PgnGame::intro`], [`Line::intro`]). Commands inside comments (`[%clk 0:04:52]`,
+//!   `[%eval 0.31]`, `[%cal Ge2e4]`) are kept as part of the text.
+//! - **Numeric annotation glyphs** (NAGs) after a move: `$1` to `$255`, and the symbols that
+//!   stand for the common ones, glued to the move or apart: `!`, `?`, `!!`, `??`, `!?`, `?!`
+//!   for the move, and `=`, `∞`, `⩲` (or `+=`), `±` (or `+/-`), `+-` and the rest for the
+//!   position ([`glyph`], [`nag_of`]). They are written back as `$n`, as the standard's export
+//!   format asks.
+//! - **Variations** (`(...)`, nested): lines that could have been played instead of a move,
+//!   from the position before it ([`Annotations::variations`]). Each is a [`Line`], with
+//!   comments, glyphs and variations of its own.
+//!
+//! [`crate::game::Game`] keeps only the comment after each move: a game read into one and
+//! written back loses the rest. Keep the [`PgnGame`] to keep them.
+//!
+//! **Pitfalls.** A variation's move numbers repeat its parent's (`2. f4` after `2. Nf3`), and
+//! a Black move after a comment or a variation needs its number again (`2... Nc6`), or a
+//! reader can't tell whose move it is. Variations nest without limit in the standard; reading
+//! stops recursing at [`MAX_VARIATION_DEPTH`] and skips anything deeper, so a hostile file
+//! can't exhaust the stack.
 //!
 //! See the [PGN standard](https://www.saremba.de/chessgml/standards/pgn/pgn-complete.htm) and the
 //! Chess Programming Wiki, [Portable Game Notation](https://www.chessprogramming.org/Portable_Game_Notation).
@@ -32,6 +58,100 @@ const SEVEN_TAG_ROSTER: [&str; 7] = ["Event", "Site", "Date", "Round", "White", 
 /// Lines in written PGN stay shorter than this.
 const LINE_WIDTH: usize = 80;
 
+/// How deep variations are read inside one another; deeper ones are skipped.
+pub const MAX_VARIATION_DEPTH: usize = 64;
+
+/// The symbols that stand for numeric annotation glyphs, as the standard numbers them, the
+/// one shown for each first. The rest are other spellings in use: ASCII for the Unicode ones,
+/// and the minus sign or a hyphen.
+const GLYPHS: [(&str, u8); 37] = [
+    ("!", 1),
+    ("?", 2),
+    ("!!", 3),
+    ("??", 4),
+    ("!?", 5),
+    ("?!", 6),
+    ("□", 7),
+    ("=", 10),
+    ("∞", 13),
+    ("⩲", 14),
+    ("⩱", 15),
+    ("±", 16),
+    ("∓", 17),
+    ("+−", 18),
+    ("−+", 19),
+    ("⨀", 22),
+    ("⨀", 23),
+    ("⟳", 32),
+    ("⟳", 33),
+    ("↑", 36),
+    ("↑", 37),
+    ("→", 40),
+    ("→", 41),
+    ("⇆", 132),
+    ("⇆", 133),
+    ("∆", 140),
+    ("N", 146),
+    ("+=", 14),
+    ("=+", 15),
+    ("+/-", 16),
+    ("-/+", 17),
+    ("+-", 18),
+    ("-+", 19),
+    ("+/=", 14),
+    ("=/+", 15),
+    ("~", 13),
+    ("Δ", 140),
+];
+
+/// The symbol shown for numeric annotation glyph `nag` (`$16` is `±`), if it has one.
+pub fn glyph(nag: u8) -> Option<&'static str> {
+    GLYPHS
+        .iter()
+        .find(|&&(_, n)| n == nag)
+        .map(|&(symbol, _)| symbol)
+}
+
+/// The numeric annotation glyph that `symbol` stands for (`±` and `+/-` are `$16`).
+pub fn nag_of(symbol: &str) -> Option<u8> {
+    GLYPHS
+        .iter()
+        .find(|&&(s, _)| s == symbol)
+        .map(|&(_, nag)| nag)
+}
+
+/// What is annotated on a move besides the comment after it: its glyphs, and the lines that
+/// could have been played instead.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Annotations {
+    /// Numeric annotation glyphs, in order: `$1` (`!`) to `$6` (`?!`) judge the move, `$10`
+    /// to `$19` the position, and the standard names the rest up to `$139`.
+    pub nags: Vec<u8>,
+    /// Lines that could have been played instead of the move, each from the position before
+    /// it.
+    pub variations: Vec<Line>,
+}
+
+impl Annotations {
+    /// Whether nothing is annotated.
+    pub fn is_empty(&self) -> bool {
+        self.nags.is_empty() && self.variations.is_empty()
+    }
+}
+
+/// A variation: moves from a position, annotated as a game's moves are.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Line {
+    /// A comment before its first move.
+    pub intro: Option<String>,
+    /// Its moves.
+    pub moves: Vec<Move>,
+    /// A comment after each move, if any. Shorter than `moves` means none after the rest.
+    pub comments: Vec<Option<String>>,
+    /// Each move's glyphs and variations. Shorter than `moves` means none for the rest.
+    pub annotations: Vec<Annotations>,
+}
+
 /// A game: its tags, starting position, moves and their comments.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PgnGame {
@@ -41,8 +161,13 @@ pub struct PgnGame {
     pub start: Position,
     /// The moves played.
     pub moves: Vec<Move>,
-    /// A comment after each move, if any (the same length as `moves`).
+    /// A comment after each move, if any. Shorter than `moves` means none after the rest.
     pub comments: Vec<Option<String>>,
+    /// A comment before the first move: about the game.
+    pub intro: Option<String>,
+    /// Each move's glyphs and variations ([module docs](self#annotations)). Shorter than
+    /// `moves` means none for the rest.
+    pub annotations: Vec<Annotations>,
     /// The result: `1-0`, `0-1`, `1/2-1/2`, or `*` for a game still going.
     pub result: String,
 }
@@ -55,6 +180,8 @@ impl PgnGame {
             start,
             moves: Vec::new(),
             comments: Vec::new(),
+            intro: None,
+            annotations: Vec::new(),
             result: "*".to_string(),
         }
     }
@@ -102,22 +229,14 @@ impl PgnGame {
         out.push('\n');
 
         let mut words = Vec::new();
-        let mut pos = self.start.clone();
-        for (i, &mv) in self.moves.iter().enumerate() {
-            let number = pos.fullmove_number();
-            if pos.side_to_move() == Color::White {
-                words.push(format!("{number}."));
-            } else if i == 0 {
-                words.push(format!("{number}..."));
-            }
-            words.push(pos.to_san(mv));
-            if let Some(Some(comment)) = self.comments.get(i) {
-                // Braces can't nest in PGN comments.
-                let clean = comment.replace(['{', '}'], "");
-                words.push(format!("{{{clean}}}"));
-            }
-            pos.make_move(mv);
-        }
+        write_line(
+            &mut words,
+            &self.start,
+            self.intro.as_deref(),
+            &self.moves,
+            &self.comments,
+            &self.annotations,
+        );
         words.push(self.result.clone());
         let mut line = String::new();
         for word in words {
@@ -174,75 +293,246 @@ impl PgnGame {
             .collect();
         let tag_result = game.tag("Result").map(str::to_string);
 
-        let mut pos = game.start.clone();
-        let mut chars = movetext.chars().peekable();
-        let mut result = None;
-        while let Some(&c) = chars.peek() {
-            match c {
-                '{' => {
-                    chars.next();
-                    let comment: String = chars.by_ref().take_while(|&c| c != '}').collect();
-                    if let Some(last) = game.comments.last_mut() {
-                        let comment = comment.split_whitespace().collect::<Vec<_>>().join(" ");
-                        *last = Some(match last.take() {
-                            Some(earlier) => format!("{earlier} {comment}"),
-                            None => comment,
-                        });
-                    }
+        let mut reader = Reader {
+            tokens: tokens(&movetext),
+            at: 0,
+        };
+        let (line, result) = reader.line(&game.start, 0)?;
+        game.intro = line.intro;
+        game.moves = line.moves;
+        game.comments = line.comments;
+        game.annotations = line.annotations;
+        game.result = result.or(tag_result).unwrap_or_else(|| "*".to_string());
+        Ok(game)
+    }
+}
+
+/// Writes a line's movetext as words: its intro, then each move with its number, glyphs,
+/// comment and variations.
+fn write_line(
+    words: &mut Vec<String>,
+    start: &Position,
+    intro: Option<&str>,
+    moves: &[Move],
+    comments: &[Option<String>],
+    annotations: &[Annotations],
+) {
+    // Black's moves are numbered at a line's start, and after a comment or a variation.
+    let mut number_black = true;
+    if let Some(intro) = intro {
+        write_comment(words, intro);
+    }
+    let mut pos = start.clone();
+    for (i, &mv) in moves.iter().enumerate() {
+        let number = pos.fullmove_number();
+        if pos.side_to_move() == Color::White {
+            words.push(format!("{number}."));
+        } else if number_black {
+            words.push(format!("{number}..."));
+        }
+        words.push(pos.to_san(mv));
+        number_black = false;
+        let notes = annotations.get(i);
+        for nag in notes.map_or(&[][..], |notes| &notes.nags) {
+            words.push(format!("${nag}"));
+        }
+        if let Some(Some(comment)) = comments.get(i) {
+            write_comment(words, comment);
+            number_black = true;
+        }
+        for variation in notes.map_or(&[][..], |notes| &notes.variations) {
+            let mut inner = Vec::new();
+            write_line(
+                &mut inner,
+                &pos,
+                variation.intro.as_deref(),
+                &variation.moves,
+                &variation.comments,
+                &variation.annotations,
+            );
+            match inner.as_mut_slice() {
+                [] => continue,
+                [only] => *only = format!("({only})"),
+                [first, .., last] => {
+                    first.insert(0, '(');
+                    last.push(')');
                 }
-                ';' => {
-                    chars.by_ref().take_while(|&c| c != '\n').for_each(drop);
-                }
-                '(' => {
-                    let mut depth = 0;
-                    for c in chars.by_ref() {
-                        match c {
-                            '(' => depth += 1,
-                            ')' => depth -= 1,
-                            _ => {}
-                        }
-                        if depth == 0 {
-                            break;
-                        }
-                    }
-                }
-                // Whitespace, and stray closing brackets (with no opening one), are skipped.
-                c if c.is_whitespace() || c == ')' || c == '}' => {
-                    chars.next();
-                }
-                _ => {
-                    let mut token = String::new();
-                    while let Some(&c) = chars.peek() {
-                        if c.is_whitespace() || "{}();".contains(c) {
-                            break;
-                        }
-                        token.push(c);
-                        chars.next();
-                    }
-                    if let Some(r) = ["1-0", "0-1", "1/2-1/2", "*"]
-                        .into_iter()
-                        .find(|&r| token == r)
-                    {
-                        result = Some(r.to_string());
+            }
+            words.extend(inner);
+            number_black = true;
+        }
+        pos.make_move(mv);
+    }
+}
+
+/// Writes a comment in braces, as words so that it wraps with the rest. Braces can't nest in
+/// PGN comments, so any inside it are left out.
+fn write_comment(words: &mut Vec<String>, comment: &str) {
+    let clean = comment.replace(['{', '}'], "");
+    let parts: Vec<&str> = clean.split_whitespace().collect();
+    match parts.as_slice() {
+        [] => words.push("{}".to_string()),
+        [only] => words.push(format!("{{{only}}}")),
+        [first, middle @ .., last] => {
+            words.push(format!("{{{first}"));
+            words.extend(middle.iter().map(|word| word.to_string()));
+            words.push(format!("{last}}}"));
+        }
+    }
+}
+
+/// A piece of movetext.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Token {
+    /// A comment, `{...}` or `; ...`, its whitespace collapsed.
+    Comment(String),
+    /// `(`: a variation starts.
+    Open,
+    /// `)`: it ends.
+    Close,
+    /// `$n`.
+    Nag(u8),
+    /// Anything else: a move, a move number, a glyph or a result.
+    Word(String),
+}
+
+/// Splits movetext into its pieces.
+fn tokens(movetext: &str) -> Vec<Token> {
+    let collapse = |text: String| text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut tokens = Vec::new();
+    let mut chars = movetext.chars().peekable();
+    while let Some(&c) = chars.peek() {
+        match c {
+            '{' => {
+                chars.next();
+                let comment: String = chars.by_ref().take_while(|&c| c != '}').collect();
+                tokens.push(Token::Comment(collapse(comment)));
+            }
+            ';' => {
+                chars.next();
+                let comment: String = chars.by_ref().take_while(|&c| c != '\n').collect();
+                tokens.push(Token::Comment(collapse(comment)));
+            }
+            '(' => {
+                chars.next();
+                tokens.push(Token::Open);
+            }
+            ')' => {
+                chars.next();
+                tokens.push(Token::Close);
+            }
+            // Whitespace, and a stray closing brace, are skipped.
+            c if c.is_whitespace() || c == '}' => {
+                chars.next();
+            }
+            _ => {
+                let mut word = String::new();
+                while let Some(&c) = chars.peek() {
+                    if c.is_whitespace() || "{}();".contains(c) {
                         break;
                     }
-                    if token.starts_with('$') {
+                    word.push(c);
+                    chars.next();
+                }
+                match word.strip_prefix('$').map(str::parse::<u8>) {
+                    Some(Ok(nag)) => tokens.push(Token::Nag(nag)),
+                    // `$` with no number it can read: skipped, as before glyphs were kept.
+                    Some(Err(_)) => {}
+                    None => tokens.push(Token::Word(word)),
+                }
+            }
+        }
+    }
+    tokens
+}
+
+/// Reads movetext's [`Token`]s into lines, from the first unread one.
+struct Reader {
+    tokens: Vec<Token>,
+    at: usize,
+}
+
+impl Reader {
+    /// Reads a line from `start`, `depth` variations deep (0 for the game's moves), up to its
+    /// closing `)`, or for the game's moves up to the result or the end. Returns the line and
+    /// the result, if one was read.
+    fn line(&mut self, start: &Position, depth: usize) -> Result<(Line, Option<String>), String> {
+        let mut line = Line::default();
+        let mut pos = start.clone();
+        // The position before the last move read: its variations start there.
+        let mut before = start.clone();
+        while let Some(token) = self.tokens.get(self.at).cloned() {
+            self.at += 1;
+            match token {
+                Token::Comment(comment) => {
+                    let slot = match line.comments.last_mut() {
+                        Some(slot) => slot,
+                        None => &mut line.intro,
+                    };
+                    *slot = Some(match slot.take() {
+                        Some(earlier) => format!("{earlier} {comment}"),
+                        None => comment,
+                    });
+                }
+                Token::Nag(nag) => {
+                    if let Some(notes) = line.annotations.last_mut() {
+                        notes.nags.push(nag);
+                    }
+                }
+                Token::Open => {
+                    let opened = self.at;
+                    let read = (depth < MAX_VARIATION_DEPTH && !line.moves.is_empty())
+                        .then(|| self.line(&before, depth + 1));
+                    match read {
+                        Some(Ok((variation, _))) => {
+                            if let Some(notes) = line.annotations.last_mut() {
+                                notes.variations.push(variation);
+                            }
+                        }
+                        // A variation it can't read, or before any move, or too deep, is
+                        // dropped, not the game.
+                        _ => {
+                            self.at = opened;
+                            self.skip_variation();
+                        }
+                    }
+                }
+                Token::Close => {
+                    if depth > 0 {
+                        return Ok((line, None));
+                    }
+                    // A stray `)` in the game's moves is skipped.
+                }
+                Token::Word(word) => {
+                    if ["1-0", "0-1", "1/2-1/2", "*"].contains(&word.as_str()) {
+                        if depth == 0 {
+                            return Ok((line, Some(word)));
+                        }
+                        continue;
+                    }
+                    if let Some(nag) = nag_of(&word) {
+                        if let Some(notes) = line.annotations.last_mut() {
+                            notes.nags.push(nag);
+                        }
                         continue;
                     }
                     // A move number, possibly with the move glued on: `12.`, `12...`, `1.e4`.
                     // (Digits alone are a number too; `0-0` is castling.)
                     let digits =
-                        token.len() - token.trim_start_matches(|c: char| c.is_ascii_digit()).len();
-                    let after = &token[digits..];
+                        word.len() - word.trim_start_matches(|c: char| c.is_ascii_digit()).len();
+                    let after = &word[digits..];
                     let san = if digits > 0 && (after.is_empty() || after.starts_with('.')) {
                         after.trim_start_matches('.')
                     } else {
-                        token.as_str()
+                        word.as_str()
                     };
-                    if san.is_empty() || san.chars().all(|c| "!?".contains(c)) {
+                    // A glyph glued to the move: `Nf3!?`.
+                    let bare = san.trim_end_matches(['!', '?']);
+                    let suffix = nag_of(&san[bare.len()..]);
+                    if bare.is_empty() {
                         continue;
                     }
-                    let mv = pos.parse_san(san).map_err(|e| {
+                    let mv = pos.parse_san(bare).map_err(|e| {
                         format!(
                             "move {}{} {san}: {e:?}",
                             pos.fullmove_number(),
@@ -253,14 +543,34 @@ impl PgnGame {
                             }
                         )
                     })?;
+                    before = pos.clone();
                     pos.make_move(mv);
-                    game.moves.push(mv);
-                    game.comments.push(None);
+                    line.moves.push(mv);
+                    line.comments.push(None);
+                    line.annotations.push(Annotations {
+                        nags: suffix.into_iter().collect(),
+                        variations: Vec::new(),
+                    });
                 }
             }
         }
-        game.result = result.or(tag_result).unwrap_or_else(|| "*".to_string());
-        Ok(game)
+        Ok((line, None))
+    }
+
+    /// Skips the rest of a variation whose `(` was just read, to its `)` or the end.
+    fn skip_variation(&mut self) {
+        let mut depth = 1;
+        while let Some(token) = self.tokens.get(self.at) {
+            self.at += 1;
+            match token {
+                Token::Open => depth += 1,
+                Token::Close => depth -= 1,
+                _ => {}
+            }
+            if depth == 0 {
+                return;
+            }
+        }
     }
 }
 
@@ -409,6 +719,148 @@ mod tests {
             pos.to_fen(),
             "r1bqkbnr/1ppp1ppp/p1n5/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 0 4"
         );
+    }
+
+    /// The SAN of `line`'s moves, played from `start`.
+    fn sans(start: &Position, line: &Line) -> Vec<String> {
+        let mut pos = start.clone();
+        line.moves
+            .iter()
+            .map(|&mv| {
+                let san = pos.to_san(mv);
+                pos.make_move(mv);
+                san
+            })
+            .collect()
+    }
+
+    /// `game`'s moves and annotations, as a [`Line`].
+    fn main_line(game: &PgnGame) -> Line {
+        Line {
+            intro: game.intro.clone(),
+            moves: game.moves.clone(),
+            comments: game.comments.clone(),
+            annotations: game.annotations.clone(),
+        }
+    }
+
+    const ANNOTATED: &str = "\
+[Event \"Annotated\"]
+
+{A game to learn from} 1. e4 $1 {the best by test} e5!? (1... c5 {the Sicilian} 2. Nf3
+(2. c3 d5) d6 ; a rest-of-line comment
+) 2. Nf3 +/- Nc6 $14 $32 {[%clk 0:04:52] [%eval 0.31]} 3. Bb5 a6 *
+";
+
+    #[test]
+    fn reads_comments_glyphs_and_variations() {
+        let game = PgnGame::parse(ANNOTATED).unwrap();
+        let start = Position::startpos();
+        assert_eq!(game.intro.as_deref(), Some("A game to learn from"));
+        assert_eq!(
+            sans(&start, &main_line(&game)),
+            ["e4", "e5", "Nf3", "Nc6", "Bb5", "a6"]
+        );
+        assert_eq!(game.comments[0].as_deref(), Some("the best by test"));
+        assert_eq!(game.annotations[0].nags, [1]);
+        assert_eq!(game.annotations[1].nags, [5]);
+        assert_eq!(game.annotations[2].nags, [16]);
+        assert_eq!(game.annotations[3].nags, [14, 32]);
+        assert_eq!(
+            game.comments[3].as_deref(),
+            Some("[%clk 0:04:52] [%eval 0.31]")
+        );
+
+        // 1... c5 instead of 1... e5, from the position after 1. e4.
+        let [sicilian] = game.annotations[1].variations.as_slice() else {
+            panic!("{:?}", game.annotations[1]);
+        };
+        let mut after_e4 = start.clone();
+        after_e4.make_move(game.moves[0]);
+        assert_eq!(sans(&after_e4, sicilian), ["c5", "Nf3", "d6"]);
+        assert_eq!(sicilian.comments[0].as_deref(), Some("the Sicilian"));
+        assert_eq!(
+            sicilian.comments[2].as_deref(),
+            Some("a rest-of-line comment")
+        );
+        // 2. c3 inside it, instead of 2. Nf3.
+        let [alapin] = sicilian.annotations[1].variations.as_slice() else {
+            panic!("{:?}", sicilian.annotations[1]);
+        };
+        let mut after_c5 = after_e4.clone();
+        after_c5.make_move(sicilian.moves[0]);
+        assert_eq!(sans(&after_c5, alapin), ["c3", "d5"]);
+    }
+
+    #[test]
+    fn annotations_are_written_back() {
+        let game = PgnGame::parse(ANNOTATED).unwrap();
+        let pgn = game.to_pgn();
+        assert!(pgn.lines().all(|l| l.len() < LINE_WIDTH), "{pgn}");
+        let movetext = pgn.split("\n\n").nth(1).unwrap().replace('\n', " ");
+        assert_eq!(
+            movetext.trim_end(),
+            "{A game to learn from} 1. e4 $1 {the best by test} 1... e5 $5 (1... c5 \
+             {the Sicilian} 2. Nf3 (2. c3 d5) 2... d6 {a rest-of-line comment}) 2. Nf3 $16 \
+             Nc6 $14 $32 {[%clk 0:04:52] [%eval 0.31]} 3. Bb5 a6 *"
+        );
+        let back = PgnGame::parse(&pgn).unwrap();
+        assert_eq!(main_line(&back), main_line(&game));
+        assert_eq!(back.tag("Event"), Some("Annotated"));
+    }
+
+    #[test]
+    fn a_variation_it_cannot_read_is_dropped_not_the_game() {
+        // Kxe8 is illegal there; the variation goes, the game stays.
+        let game =
+            PgnGame::parse("1. e4 (1. Kxe8 {nonsense} (1. d4)) e5 2. Nf3 (2. Qh5) *").unwrap();
+        assert_eq!(game.moves.len(), 3);
+        assert!(game.annotations[0].variations.is_empty());
+        assert_eq!(game.annotations[2].variations.len(), 1);
+        // A variation before any move, and a stray `)`, are skipped.
+        let game = PgnGame::parse("(1. d4 d5) 1. e4 ) e5 *").unwrap();
+        assert_eq!(game.moves.len(), 2);
+        assert!(game.annotations.iter().all(Annotations::is_empty));
+    }
+
+    #[test]
+    fn variations_nested_too_deep_are_skipped_without_overflowing_the_stack() {
+        let depth = 10_000;
+        let text = format!(
+            "1. e4 {} {} e5 *",
+            "(1. d4 ".repeat(depth),
+            ")".repeat(depth)
+        );
+        let game = PgnGame::parse(&text).unwrap();
+        assert_eq!(game.moves.len(), 2);
+        let mut nested = 0;
+        let mut variations = &game.annotations[0].variations;
+        while let Some(variation) = variations.first() {
+            nested += 1;
+            variations = &variation.annotations[0].variations;
+        }
+        assert_eq!(nested, MAX_VARIATION_DEPTH);
+    }
+
+    #[test]
+    fn glyphs_and_their_numbers() {
+        assert_eq!(glyph(1), Some("!"));
+        assert_eq!(glyph(6), Some("?!"));
+        assert_eq!(glyph(16), Some("±"));
+        assert_eq!(glyph(14), Some("⩲"));
+        assert_eq!(glyph(200), None);
+        // A symbol for both sides (`⨀`, zugzwang, is $22 for White and $23 for Black) reads
+        // as White's.
+        for (symbol, nag) in GLYPHS {
+            assert!(
+                nag_of(symbol).is_some_and(|read| read == nag || read + 1 == nag),
+                "{symbol}"
+            );
+            assert!(glyph(nag).is_some(), "{nag}");
+        }
+        assert_eq!(nag_of("⨀"), Some(22));
+        assert_eq!(nag_of("+/-"), Some(16));
+        assert_eq!(nag_of("e4"), None);
     }
 
     #[test]
