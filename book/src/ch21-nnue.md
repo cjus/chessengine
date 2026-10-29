@@ -688,8 +688,12 @@ Without the rules it won a few more queen endings at 200,000 nodes: 41 of 60, ag
 38 and the hand-crafted evaluation's 50. Each generation learns a little more of them, but
 slowly, so the `pawnless` rule stays.
 
-Whether gen3 plays better is again the SPRT's question, against gen2
-(cjus/chessengine#222).
+Whether gen3 plays better is again the SPRT's question. Against gen2 (cjus/chessengine#222),
+at 8+0.08, gen3 won 176 games, lost 86 and drew 333, about +53 ± 19 Elo, and passed after 595
+games. Each generation gains less than the one before, +144 for gen2 and +53 for gen3, as the
+networks' evaluations close in on what their games can teach them. The bench had pointed the
+other way, 767,812 nodes against gen2's 701,720: fewer nodes often means a sharper evaluation,
+but not always, and only games decide.
 
 ## Pitfalls
 
