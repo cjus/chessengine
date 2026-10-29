@@ -26,7 +26,8 @@
 //! - **Comments**, in braces or after `;` to the end of the line. A comment after a move is
 //!   that move's ([`PgnGame::comments`]); one before a line's first move is the line's own
 //!   ([`PgnGame::intro`], [`Line::intro`]). Commands inside comments (`[%clk 0:04:52]`,
-//!   `[%eval 0.31]`, `[%cal Ge2e4]`) are kept as part of the text.
+//!   `[%eval 0.31]`, `[%cal Ge2e4]`) are kept as part of the text, and [`commands`] reads
+//!   them out of it.
 //! - **Numeric annotation glyphs** (NAGs) after a move: `$1` to `$255`, and the symbols that
 //!   stand for the common ones, glued to the move or apart: `!`, `?`, `!!`, `??`, `!?`, `?!`
 //!   for the move, and `=`, `∞`, `⩲` (or `+=`), `±` (or `+/-`), `+-` and the rest for the
@@ -574,6 +575,108 @@ impl Reader {
     }
 }
 
+/// A command embedded in a comment, as the PGN Specification Supplement (Hartwig and
+/// Langvad, 2001) writes them and lichess and chess.com export them: `[%clk 0:04:52]` is
+/// the command `clk` with the value `0:04:52`. [`Command::clock`] and [`Command::evaluation`]
+/// read the two most common; the rest (`%cal` and `%csl` for arrows and squares, `%emt`,
+/// engines' own) are left to the caller.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Command {
+    /// Its name, without the `%`: `clk`.
+    pub name: String,
+    /// Everything after the name, trimmed: `0:04:52`.
+    pub value: String,
+}
+
+/// An evaluation from a `%eval` command, from White's side.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Evaluation {
+    /// In hundredths of a pawn: `[%eval -1.25]` is -125.
+    Centipawns(i32),
+    /// Mate in this many moves, by White if it's positive: `[%eval #-3]` is -3.
+    Mate(i32),
+}
+
+/// The largest evaluation [`Command::evaluation`] reads, in pawns: anything larger isn't
+/// one, and wouldn't fit a whole number of centipawns.
+const MAX_EVALUATION_PAWNS: f64 = 100_000.0;
+
+impl Command {
+    /// The time on the clock that a `%clk` command says, `h:mm:ss` with an optional
+    /// fraction of a second (`0:04:52.3`), or `mm:ss`; `None` for any other command or value.
+    pub fn clock(&self) -> Option<std::time::Duration> {
+        if self.name != "clk" {
+            return None;
+        }
+        let parts: Vec<&str> = self.value.split(':').collect();
+        let (hours, minutes, seconds) = match parts[..] {
+            [hours, minutes, seconds] => (Some(hours.parse::<u64>().ok()?), minutes, seconds),
+            [minutes, seconds] => (None, minutes, seconds),
+            _ => return None,
+        };
+        let minutes: u64 = minutes.parse().ok()?;
+        let seconds: f64 = seconds.parse().ok()?;
+        // Without hours, the minutes may run past an hour (`90:00`).
+        if (hours.is_some() && minutes >= 60) || !(0.0..60.0).contains(&seconds) {
+            return None;
+        }
+        let hours = hours.unwrap_or(0);
+        let whole = hours.checked_mul(3600)?.checked_add(minutes * 60)?;
+        Some(std::time::Duration::from_secs(whole) + std::time::Duration::from_secs_f64(seconds))
+    }
+
+    /// The evaluation that a `%eval` command says: pawns (`0.31`, `-1.2`) or a mate
+    /// (`#3`, `#-2`), optionally followed by the depth (`0.31,20`), which is dropped. `None`
+    /// for any other command or value.
+    pub fn evaluation(&self) -> Option<Evaluation> {
+        if self.name != "eval" {
+            return None;
+        }
+        let value = self.value.split(',').next()?.trim();
+        if let Some(mate) = value.strip_prefix('#') {
+            return mate.parse().ok().map(Evaluation::Mate);
+        }
+        let pawns: f64 = value.parse().ok()?;
+        (pawns.is_finite() && pawns.abs() <= MAX_EVALUATION_PAWNS)
+            .then(|| Evaluation::Centipawns((pawns * 100.0).round() as i32))
+    }
+}
+
+/// A comment's text without its commands, and the commands, in order:
+/// `"[%clk 0:04:52] a good try"` is `"a good try"` and the command `clk`. Text that only
+/// looks like the start of one (`[%` with no `]`, or no name) is left as text. The text's
+/// spaces are collapsed and trimmed, as a comment read from PGN's are.
+pub fn commands(comment: &str) -> (String, Vec<Command>) {
+    let mut text = String::new();
+    let mut commands = Vec::new();
+    let mut rest = comment;
+    while let Some(start) = rest.find("[%") {
+        let inside = &rest[start + 2..];
+        let Some(end) = inside.find(']') else {
+            break;
+        };
+        let body = &inside[..end];
+        let (name, value) = body.split_once(char::is_whitespace).unwrap_or((body, ""));
+        let named = !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+        if !named {
+            // Not a command: keep its `[%` as text and look past it.
+            text.push_str(&rest[..start + 2]);
+            rest = inside;
+            continue;
+        }
+        text.push_str(&rest[..start]);
+        text.push(' ');
+        commands.push(Command {
+            name: name.to_string(),
+            value: value.trim().to_string(),
+        });
+        rest = &inside[end + 1..];
+    }
+    text.push_str(rest);
+    let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    (text, commands)
+}
+
 /// Splits a PGN file into its games' texts (a game starts with a tag line after the previous
 /// game's moves).
 pub fn split_games(text: &str) -> Vec<&str> {
@@ -905,5 +1008,60 @@ mod tests {
         }
         assert!(PgnGame::parse("1. e4 e5 2. Ke3").is_err());
         assert!(PgnGame::parse("[White \"x\"").is_err());
+    }
+
+    #[test]
+    fn commands_are_read_out_of_a_comment() {
+        let (text, found) = commands("[%eval 0.17] [%clk 0:04:52]  a good try [%cal Ge2e4,Rd1d8]");
+        assert_eq!(text, "a good try");
+        let names: Vec<&str> = found.iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(names, ["eval", "clk", "cal"]);
+        assert_eq!(found[2].value, "Ge2e4,Rd1d8");
+        assert_eq!(found[0].evaluation(), Some(Evaluation::Centipawns(17)));
+        assert_eq!(found[0].clock(), None);
+        assert_eq!(
+            found[1].clock(),
+            Some(std::time::Duration::from_secs(4 * 60 + 52))
+        );
+        // Text between commands stays, with its spaces collapsed; nothing but commands is
+        // no text.
+        assert_eq!(commands("before [%clk 1:00:00] after").0, "before after");
+        assert_eq!(commands("[%clk 1:00:00]").0, "");
+        // What only looks like a command is text.
+        for text in ["[% clk 1:00]", "[%clk 1:00", "50 [%] off", "a [%?] b"] {
+            let (kept, found) = commands(text);
+            assert!(found.is_empty(), "{text}");
+            assert_eq!(kept, text.split_whitespace().collect::<Vec<_>>().join(" "));
+        }
+        // A broken one doesn't hide a good one after it.
+        let (text, found) = commands("[%] [%clk 0:01:00] x");
+        assert_eq!((text.as_str(), found.len()), ("[%] x", 1));
+    }
+
+    #[test]
+    fn clocks_and_evaluations_read_as_the_supplement_writes_them() {
+        let command = |name: &str, value: &str| Command {
+            name: name.into(),
+            value: value.into(),
+        };
+        let clock = |value| command("clk", value).clock();
+        let ms = std::time::Duration::from_millis;
+        assert_eq!(clock("1:02:03"), Some(ms(3_723_000)));
+        assert_eq!(clock("0:00:09.5"), Some(ms(9_500)));
+        assert_eq!(clock("90:00"), Some(ms(5_400_000)));
+        for bad in ["", "1:60:00", "0:00:60", "a:00:00", "1:2:3:4", "-1:00"] {
+            assert_eq!(clock(bad), None, "{bad}");
+        }
+        assert_eq!(command("emt", "0:00:03").clock(), None);
+
+        let eval = |value| command("eval", value).evaluation();
+        assert_eq!(eval("0.31"), Some(Evaluation::Centipawns(31)));
+        assert_eq!(eval("-1.25,24"), Some(Evaluation::Centipawns(-125)));
+        assert_eq!(eval("#3"), Some(Evaluation::Mate(3)));
+        assert_eq!(eval("#-2"), Some(Evaluation::Mate(-2)));
+        for bad in ["", "#", "inf", "NaN", "1e9", "#x"] {
+            assert_eq!(eval(bad), None, "{bad}");
+        }
+        assert_eq!(command("clk", "0.31").evaluation(), None);
     }
 }

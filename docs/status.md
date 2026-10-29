@@ -209,6 +209,7 @@ with its own gauntlet.*
 | M5: larger reductions when the hash move is a capture, off the principal variation (chapter 14.1) | #179 | 749181 (754886 with them on) | Merged, off by default: −7.5 ± 8.0, 3,031 games, [0, 5] failed (M3 Max) |
 | v1.0: opening books from people's games, the `make-book` tool and `scripts/lichess-book.sh` (chapter 18) | #173 | 749181 | Merged, no functional change. The first book, from Lichess's September 2026 games: 97,432 moves from 1,499,615 games, 1.6 MB, 58 minutes on the M3 (#174) |
 | PGN annotations: comments before a line's first move, NAGs and their symbols (`$16`, `±`, `+/-`), and variations as lines of their own, read and written back (`pgn::Annotations`, `pgn::Line`, `pgn::glyph`); a variation it can't read is dropped, not the game; Black's move numbered again after a comment or variation, as the standard asks. For Solrac's move list (cjus/chessgui#232) | #224 | 701720 | Merged, no functional change |
+| PGN comment commands: `[%clk 0:04:52]`, `[%eval -1.25]` and the rest read out of a comment's text (`pgn::commands`, `pgn::Command`), with `%clk` as a duration and `%eval` as centipawns or a mate (`Command::clock`, `Command::evaluation`), as the PGN Specification Supplement writes them. For Solrac's move list (cjus/chessgui#232) | PR | 701720 | Open, no functional change |
 
 **The M3 is free** since gen3's SPRT passed (2026-10-29, about 05:55 MDT; #222). Each generation's files stay in `~/nnue-data/genN`
 there, and in `~/engines/nets/genN` on the M1 Max.
