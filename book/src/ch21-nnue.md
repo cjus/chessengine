@@ -689,7 +689,7 @@ Without the rules it won a few more queen endings at 200,000 nodes: 41 of 60, ag
 slowly, so the `pawnless` rule stays.
 
 Whether gen3 plays better is again the SPRT's question, against gen2
-(cjus/chessengine#GEN3PR).
+(cjus/chessengine#222).
 
 ## Pitfalls
 
