@@ -209,7 +209,7 @@ with its own gauntlet.*
 | M5: larger reductions when the hash move is a capture, off the principal variation (chapter 14.1) | #179 | 749181 (754886 with them on) | Merged, off by default: −7.5 ± 8.0, 3,031 games, [0, 5] failed (M3 Max) |
 | v1.0: opening books from people's games, the `make-book` tool and `scripts/lichess-book.sh` (chapter 18) | #173 | 749181 | Merged, no functional change. The first book, from Lichess's September 2026 games: 97,432 moves from 1,499,615 games, 1.6 MB, 58 minutes on the M3 (#174) |
 
-**The M3 is running** gen3's 512 network against its 256 by SPRT (#GEN3W), to see whether the
+**The M3 is running** gen3's 512 network against its 256 by SPRT (#223), to see whether the
 wider network's better validation loss pays for its 25% fewer nodes a second. Each generation's
 files stay in `~/nnue-data/genN` there, and in `~/engines/nets/genN` on the M1 Max.
 
