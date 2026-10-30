@@ -21,17 +21,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Check the protocol's deploy key is set
-        env:
-          KEY: ${{ secrets.CNP_DEPLOY_KEY }}
-        run: |
-          if [ -z "$KEY" ]; then
-            echo "::error::The CNP_DEPLOY_KEY secret is missing, so CI can't fetch the cnp crate from cjus/chess-node-protocol (private). See cjus/chessengine#143."
-            exit 1
-          fi
-      - uses: webfactory/ssh-agent@v0.9.1
-        with:
-          ssh-private-key: ${{ secrets.CNP_DEPLOY_KEY }}
       - name: Install the toolchain from rust-toolchain.toml
         run: rustup toolchain install
       - uses: taiki-e/install-action@v2
@@ -63,21 +52,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      # The Chess Node Protocol's crates (`cnp`, `cnp-conformance`) live in a private repository:
-      # fetch them over SSH with a read-only deploy key (cjus/chessengine#143). The key's comment is
-      # the repository's address, which the agent uses to pick it for that repository.
-      - name: Check the protocol's deploy key is set
-        env:
-          KEY: ${{ secrets.CNP_DEPLOY_KEY }}
-        run: |
-          if [ -z "$KEY" ]; then
-            echo "::error::The CNP_DEPLOY_KEY secret is missing, so CI can't fetch the cnp crate from cjus/chess-node-protocol (private). See cjus/chessengine#143."
-            exit 1
-          fi
-        shell: bash
-      - uses: webfactory/ssh-agent@v0.9.1
-        with:
-          ssh-private-key: ${{ secrets.CNP_DEPLOY_KEY }}
       - name: Install the toolchain from rust-toolchain.toml
         run: |
           rustup toolchain install

@@ -542,9 +542,10 @@ stalemate), the engine offering and accepting draws and resigning in hopeless po
 2. **Companion book (mdBook)** in `book/`: "Building a chess engine in Rust", one chapter per
    technique. Each chapter covers the idea, the code (included from the real source using mdBook
    anchors so it can't drift out of date), how to test it, the measured Elo gain, and further
-   reading. It's built and checked in CI; publishing it on GitHub Pages waits until the repo is
-   public. A print edition, the same chapters bound as one PDF and one EPUB with figures and an
-   index, is built from `book/print/` by `scripts/build-print-book.sh` when the book changes and
+   reading. It's built and checked in CI, and published on GitHub Pages
+   (cjus.github.io/chessengine) by `.github/workflows/book.yml` once the repo is public. A
+   print edition, the same chapters bound as one PDF and one EPUB with figures and an index, is
+   built from `book/print/` by `scripts/build-print-book.sh` when the book changes and
    published on the PNX Studios CDN, at `cdn.pnxstudios.com/solrac/book/latest/` and under each
    commit it was bound from; the files are never committed, so the repository doesn't grow by
    5 MB a rebuild (Carlos, 2026-10-30: public now, since the repository is close to public). It
@@ -771,9 +772,9 @@ The repository becoming public (planned, cjus/chessgui#71) makes its CI free.
   code was checked (2026-10-20, again 2026-10-21): it is all Carlos's and Claude's, except the
   Polyglot keys, which were copied from python-chess (GPL) and are now taken from the format's
   published description (`book_keys.rs`), and the Syzygy crate above.
-- **Public:** the repo starts private and goes public around October 2027 (decided
-  2026-10-10), or before Solrac is given to anyone if that comes first (cjus/chessgui#71); the
-  book is published on GitHub Pages at the same time.
+- **Public:** the repo started private and goes public soon, with the book on GitHub Pages
+  (Carlos, 2026-10-30; it was to be around October 2027, decided 2026-10-10). What is left
+  before and after the switch is cjus/chessengine#233.
 - **Dependencies:** chess logic (board, move generation, search, evaluation, book reader) is
   written from scratch, with no chess crates. Tooling crates are fine (line editing, terminal
   colour, argument parsing, property testing, benchmarks) if their licence is permissive, or
@@ -789,8 +790,9 @@ The repository becoming public (planned, cjus/chessgui#71) makes its CI free.
   `scripts/lichess-book.sh`, and are not committed (cjus/chessengine#173). The first, from
   September 2026's games, is a v1.0.0 release asset (Carlos, 2026-10-23,
   cjus/chessengine#183).
-- Name: a web search on 2026-10-10 found no chess engine called cb2026. Check the CCRL and CPW
-  engine lists and trademarks again before the repo goes public.
+- Name: web searches on 2026-10-10 and 2026-10-30 found no chess engine, Chess Programming
+  Wiki entry or trademark called cb2026 (trademark listings show only marks called "CB"). A
+  USPTO search is optional, in cjus/chessengine#233.
 
 ## Milestones
 
@@ -972,8 +974,9 @@ Recheck the version and maintenance status when stage 18 starts.
 
 **2026-10-10: Engine name**
 
-A web search for "cb2026" chess engine found no existing engine with that name. Recheck the CCRL
-and Chessprogramming wiki engine lists and trademarks before the repo goes public.
+A web search for "cb2026" chess engine found no existing engine with that name. Rechecked on
+2026-10-30, before the repo goes public: no engine, Chess Programming Wiki entry or trademark
+by that name.
 
 **2026-10-10: Test throughput (estimate, not measured)**
 
@@ -1025,7 +1028,9 @@ about 26 s, and the M1 Max played about 970 games an hour.
       (cjus/chessengine#10, 2026-10-10).
 - [x] En Croissant is installed on the test Mac and is the first GUI cb2026 is checked in, from
       M1 on (2026-10-10).
-- [x] Repo goes public around October 2027, with the book on GitHub Pages (2026-10-10).
+- [x] ~~Repo goes public around October 2027, with the book on GitHub Pages (2026-10-10).~~
+      Replaced: the repo goes public soon, with the book on GitHub Pages (Carlos, 2026-10-30,
+      cjus/chessengine#233).
 - [x] Shell `match` command (cb2026 against another UCI engine) is in v1, arriving in M4
       (cjus/chessengine#9, 2026-10-10).
 - [x] Windows: Carlos tests on a Windows machine once the Windows build runs well
@@ -1058,9 +1063,10 @@ about 26 s, and the M1 Max played about 970 games an hour.
       levels mean.
 - [x] cb2026 speaks the Chess Node Protocol (`--cnp`, or a JSON first line) for Solrac, beside
       UCI and XBoard: one search at a time, every capability but the root window, the shell's
-      switches as its techniques. The protocol's crates come from the private
-      `cjus/chess-node-protocol` by git, with a read-only deploy key in CI
-      (cjus/chessgui#98, cjus/chessengine#143, 2026-10-21).
+      switches as its techniques. The protocol's crates come from
+      `cjus/chess-node-protocol` by git (cjus/chessgui#98, cjus/chessengine#143, 2026-10-21);
+      that repository has been public since 2026-10-21, so CI no longer needs the read-only
+      deploy key it used (2026-10-30).
 
 ## Open questions
 

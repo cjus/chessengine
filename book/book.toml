@@ -7,3 +7,5 @@ src = "src"
 
 [output.html]
 git-repository-url = "https://github.com/cjus/chessengine"
+# Where GitHub Pages serves it, so the 404 page finds the book's styles.
+site-url = "/chessengine/"
