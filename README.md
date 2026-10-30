@@ -96,8 +96,11 @@ see what each one does. To run it as a Lichess bot, see [`docs/lichess.md`](docs
 The book in `book/`, *Building a Chess Engine in Rust*, has a chapter for each stage, from the
 board and move generation to the NNUE network. Each chapter gives the idea, the real code and
 what it measured. Build it with [mdBook](https://rust-lang.github.io/mdBook/): `mdbook build
-book`. Every technique can be switched off, and [`docs/elo-ledger.md`](docs/elo-ledger.md)
-records what each one gained.
+book`, or read the print edition, with figures and an index, as a
+[PDF](https://cdn.pnxstudios.com/solrac/book/latest/building-a-chess-engine-in-rust.pdf) or an
+[EPUB](https://cdn.pnxstudios.com/solrac/book/latest/building-a-chess-engine-in-rust.epub).
+Every technique can be switched off, and [`docs/elo-ledger.md`](docs/elo-ledger.md) records what
+each one gained.
 
 ## Building from source
 
