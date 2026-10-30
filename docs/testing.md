@@ -220,7 +220,7 @@ levels only, and `OPPONENTS=N` changes how many engines each plays. The default 
 games, about 1 hour 20 minutes on the M3 at 40+0.4. So the twenty levels would take about 27
 hours, and every other level (`LEVELS="0 2 4 6 8 10 12 14 16 18 19"`, the odd ones
 interpolated) about 15; at 8+0.08 all twenty took six and a half hours (#103). The games are
-saved in `target/levels/`. Until cjus/chessgui#113 the ratings fed the `UCI_Elo` mapping in
+saved in `target/levels/`. Until Solrac Chess AI #113 the ratings fed the `UCI_Elo` mapping in
 `crates/engine/src/levels.rs`. The levels are now on a human scale, fitted with the `mistakes`
 tool (below), and this script rates them against engines only for the record: the lower levels
 would now fall below every reference engine.

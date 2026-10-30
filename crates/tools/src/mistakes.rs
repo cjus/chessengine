@@ -1,5 +1,5 @@
 //! How often a strength level makes mistakes, counted as Lichess counts them, to compare
-//! cb2026's weaker levels with people (cjus/chessgui#113, [`cb2026_engine::levels`]).
+//! cb2026's weaker levels with people (Solrac Chess AI #113, [`cb2026_engine::levels`]).
 //!
 //! A level plays itself from varied openings, and a full-strength search with a fixed node
 //! count judges every move by how much it lowered the mover's **winning chances**, from −1

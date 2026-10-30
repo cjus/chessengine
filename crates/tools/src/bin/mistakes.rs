@@ -1,5 +1,5 @@
 //! Counts how often cb2026's strength levels make inaccuracies, mistakes and blunders, as
-//! Lichess counts them, to compare the levels with people (cjus/chessgui#113).
+//! Lichess counts them, to compare the levels with people (Solrac Chess AI #113).
 //!
 //! ```text
 //! cargo run --release -p cb2026-tools --bin mistakes -- \

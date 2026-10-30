@@ -1,7 +1,7 @@
 # Fuzz tests for the parsers (docs/PRD.md, "Testing and strength measurement"): every week if
 # main changed, and on demand, each target runs for a few minutes. Not a required check: a crash found here
 # becomes an issue and a regular test. Weekly rather than nightly since Actions minutes ran out
-# in October 2026 (cjus/chessgui#73): the three targets cost about 21 minutes a run.
+# in October 2026 (Solrac Chess AI #73): the three targets cost about 21 minutes a run.
 name: Fuzz
 
 on:

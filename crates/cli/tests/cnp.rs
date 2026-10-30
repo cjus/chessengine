@@ -1,5 +1,5 @@
 //! The Chess Node Protocol: every conformance session from the protocol's repository, played
-//! against the real `cb2026` binary (cjus/chessgui#98).
+//! against the real `cb2026` binary (Solrac Chess AI #98).
 //!
 //! The sessions come with the `cnp-conformance` crate ([`cnp_conformance::SESSIONS`]), so a
 //! new session there is checked here as soon as the protocol's pin is bumped. Sessions that need

@@ -109,5 +109,5 @@ few seconds.
 
 A new dependency under a licence that `scripts/notices/about.toml` doesn't accept makes the
 script fail, as `cargo deny check` would in CI; add the licence to both, if `deny.toml`'s rules
-allow it. Solrac, which is to ship cb2026 beside it (cjus/chessgui#98), is to take this
+allow it. Solrac, which is to ship cb2026 beside it (Solrac Chess AI #98), is to take this
 file with the cb2026 it ships.

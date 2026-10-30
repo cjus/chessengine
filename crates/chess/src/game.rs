@@ -1,9 +1,9 @@
 //! A game of chess: where it started, the moves played, and whether it is over.
 //!
-//! [`Game`] is the record a program plays a game on: the shell, the match tool and chessgui all
-//! keep their games in one. It holds the starting position, every move played with its SAN, its
-//! comment and the position before it, and the current position. Each move is checked against
-//! the legal moves before it is played, so a `Game` can never hold an illegal move.
+//! [`Game`] is the record a program plays a game on: the shell, the match tool and Solrac Chess
+//! AI all keep their games in one. It holds the starting position, every move played with its
+//! SAN, its comment and the position before it, and the current position. Each move is checked
+//! against the legal moves before it is played, so a `Game` can never hold an illegal move.
 //!
 //! ## When is a game over?
 //!
@@ -52,7 +52,7 @@
 //!   completion of the game), 6.9 (time) and 9 (the drawn game).
 //! - Chess Programming Wiki, [Repetitions](https://www.chessprogramming.org/Repetitions).
 //!
-//! This type started in chessgui (`chessgui-core`), and moved here so that one set of rules
+//! This type started in Solrac Chess AI's core crate, and moved here so that one set of rules
 //! decides when every game is over.
 
 use std::fmt;

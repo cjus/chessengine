@@ -40,7 +40,7 @@ cb2026-syzygy = { path = "crates/syzygy" }
 cb2026-tools = { path = "crates/tools" }
 cb2026-trainer = { path = "crates/trainer" }
 # The Chess Node Protocol, how Solrac talks to cb2026 (`crates/cnp`), and its conformance
-# sessions (cjus/chessgui#98). Pinned to a commit; bump both together.
+# sessions (Solrac Chess AI #98). Pinned to a commit; bump both together.
 cnp = { git = "https://github.com/cjus/chess-node-protocol", rev = "bafda928d0298267ebd86d753bda78f54138770c" }
 cnp-conformance = { git = "https://github.com/cjus/chess-node-protocol", rev = "bafda928d0298267ebd86d753bda78f54138770c" }
 
