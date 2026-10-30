@@ -871,6 +871,15 @@ or a failure. The robustness run with gen2 was clean too: 10,000 games at `83fa6
 v1.1, gen3 rated **3379 ± 21** in the same gauntlet (2026-10-29, at `09b55f7`, +5301 −45 =254;
 cjus/chessengine#227), 93 above gen2, more than its SPRT's +53.
 
+The testing pass ended with the GUIs, re-checked with gen2 as the default (2026-10-29,
+cjus/chessengine#205, `docs/gui-compat.md`). Carlos ran the `83fa6c6` binary on the M1 Max in
+En Croissant, Cute Chess and HIARCS Chess Explorer Pro (XBoard skipped: it has no `EvalFile`).
+Each showed `EvalFile` as `<built-in>`, used the network after its startup options (about +6.6
+at depth 16 on the test position, against the hand-crafted evaluation's +4.7 with `none`),
+played a 3+2 game at four threads that ended normally, and, where the GUI has one, stopped a
+MultiPV analysis at once. With that, every v1.0 gate has passed, and the `v1.0.0` tag on
+`83fa6c6` is next (cjus/chessengine#199).
+
 M4's levels are calibrated (2026-10-19, cjus/chessengine#106): Skill Levels 0–19 rate **629 to
 2483** at 40+0.4 (± 23 to 55), and `UCI_Elo` maps onto those ratings
 (`crates/engine/src/levels.rs`, chapter 19). Every other level played 800 games against the

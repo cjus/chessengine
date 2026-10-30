@@ -67,7 +67,8 @@ games follow the release (cjus/chessengine#191; Carlos, 2026-10-23).
 `EvalFile`, the option for an NNUE network, came after these checks (#185). It is a string
 option like `BookFile` and `SyzygyPath`, which every GUI here showed, and the protocol tests
 cover it. Its default is `<built-in>`, the network built into the engine (#196); a GUI that
-clears the field (an empty value) gets the hand-crafted evaluation.
+clears the field (an empty value) gets the hand-crafted evaluation. The re-check below covers
+it in the GUIs.
 
 **Found and fixed during the checks:**
 - **An empty string option** (`setoption name BookFile value`, which is how GUIs clear a path)
@@ -109,6 +110,55 @@ clears the field (an empty value) gets the hand-crafted evaluation.
   - Analysis is View → Analysis Explorer, with a "lines" field for MultiPV.
   - Games are under Play → New game…, with the time control, "Think on player's time" and
     Chess960 (Starting Position).
+
+### Release 1.0: the re-check with the network
+
+The checks above ran with the hand-crafted evaluation. Before the `v1.0.0` tag, Carlos
+checked again on the M1 Max on 2026-10-29 (cjus/chessengine#205), with the network as the
+default: the binary built from `83fa6c6`, which has gen2 built in (#216; bench 701,720). These
+checks were new:
+
+- **`EvalFile`** is listed with its default, `<built-in>`.
+- **The network is in use** after the GUI's startup options. On
+  `8/5pk1/6p1/3P3p/1p3P1P/1P4P1/5K2/8 w - - 0 40` at depth 16 with one thread, the network
+  gives **+6.60** and the hand-crafted evaluation (`EvalFile` set to `none`) **+4.69**. Setting
+  `EvalFile` prints `info string NNUE network 768 -> 256 x 2 -> 1, SCReLU, eval scale 149,
+  checksum 8d6aa12e7bc7aadf` or `info string no NNUE network: the hand-crafted evaluation`.
+  This matters because a GUI that sent `EvalFile` empty would quietly get the hand-crafted
+  evaluation.
+- **A 3+2 game** with Threads 4 and Hash 256: the network with several threads.
+- **A minute of analysis** with MultiPV 3 and Threads 4, then stop.
+- **En Croissant's level** (`UCI_LimitStrength`, `UCI_Elo` 1500), which uses the hand-crafted
+  evaluation.
+
+| GUI | Version | `EvalFile` shown | Depth 16: network / `none` | 3+2 game, Threads 4 | MultiPV 3 analysis, stop | Level |
+| --- | --- | --- | --- | --- | --- | --- |
+| En Croissant | 0.15.1 | ✓ | ✓ +6.60 / +4.69 | ✓ | ✓ | ✓ |
+| Cute Chess | 1.5.1 | ✓ | ✓ +7.43 / +4.35 (Threads 8) | ✓ | – | – |
+| HIARCS Chess Explorer Pro | 1.5.2 | ✓ | ✓ +6.60 / +4.69 | ✓ | ✓ | – |
+| XBoard | 4.9.1 | – | | | | – |
+
+The games ended normally, with no illegal moves, time losses or hangs, and analysis stopped at
+once. XBoard was skipped (Carlos): in XBoard mode the engine offers only Skill Level and
+MultiPV, so `EvalFile` can't be set there and the network is always in use.
+
+**Notes from the re-check:**
+
+- **The depth-16 scores hold for one thread.** With more, the search differs from run to run,
+  and so does the score. Cute Chess still had Threads 8 and Hash 64 saved, and gave +7.43 and
+  +4.35. Six runs at those settings in a terminal gave +6.90 to +7.44 with the network and
+  +4.14 to +5.50 without it, so the two never overlap. Set Threads to 1 to compare with the
+  figures above.
+- **Cute Chess:** options changed with "Configure white engine" in the New Game dialog are
+  saved to the engine's settings, not kept for that game only. `EvalFile` set to `none` there
+  stayed `none` until it was changed back under Tools → Settings → Engines. An engine entry
+  pointed at a new binary keeps the old binary's options until Detect (on the Advanced tab)
+  reads them again. Its time control dialog has a Plies limit; with Infinite and Plies 16 it
+  sends `go depth 16`, which is how to get a depth-16 score without an analysis mode.
+- **HIARCS:** its engine-match list keeps its own copy of each engine's path, so repointing
+  the engine leaves the old path there.
+- **Every build is named `cb2026 1.0.0`**, with or without a network, so the name doesn't show
+  which binary a GUI runs. The depth-16 score does.
 
 ## GUI notes
 
