@@ -31,3 +31,6 @@ syzygy-tables/
 # committed (book/print/README.md).
 book/print/*.pdf
 book/print/*.epub
+
+# macOS Finder metadata.
+.DS_Store

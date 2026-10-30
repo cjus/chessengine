@@ -97,8 +97,9 @@ see what each one does. To run it as a Lichess bot, see [`docs/lichess.md`](docs
 
 The book in `book/`, *Building a Chess Engine in Rust*, has a chapter for each stage, from the
 board and move generation to the NNUE network. Each chapter gives the idea, the real code and
-what it measured. Build it with [mdBook](https://rust-lang.github.io/mdBook/): `mdbook build
-book`, or read the print edition, with figures and an index, as a
+what it measured. Read it [online](https://cjus.github.io/chessengine/), build it with
+[mdBook](https://rust-lang.github.io/mdBook/) (`mdbook build book`), or read the print
+edition, with figures and an index, as a
 [PDF](https://cdn.pnxstudios.com/solrac/book/latest/building-a-chess-engine-in-rust.pdf) or an
 [EPUB](https://cdn.pnxstudios.com/solrac/book/latest/building-a-chess-engine-in-rust.epub).
 Every technique can be switched off, and [`docs/elo-ledger.md`](docs/elo-ledger.md) records what
@@ -111,7 +112,7 @@ cargo build --release
 ```
 
 The Rust version is pinned in `rust-toolchain.toml`. The build fetches the Chess Node Protocol
-crate from its repository, which needs access to it while that repository is private.
+crates from [their repository](https://github.com/cjus/chess-node-protocol).
 `RUSTFLAGS="-C target-cpu=native"` makes a build a little faster on the machine that built it.
 The release packages are built for each platform's baseline CPU, so they run everywhere.
 Releases are made from version tags: see [`docs/releasing.md`](docs/releasing.md).
@@ -137,4 +138,5 @@ is GPL-3.0-or-later as a whole: see
 
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion
 in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above,
-without any additional terms or conditions.
+without any additional terms or conditions. [`CONTRIBUTING.md`](CONTRIBUTING.md) says what a
+change needs, and [`SECURITY.md`](SECURITY.md) how to report a security problem privately.

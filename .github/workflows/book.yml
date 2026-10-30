@@ -1,0 +1,51 @@
+# Publishes the book (book/) on GitHub Pages, at https://cjus.github.io/chessengine/, when main
+# changes it. The chapters include code from crates/, so a change there rebuilds it too.
+#
+# Pages needs a public repository on this account's plan, so while cjus/chessengine is private
+# both jobs are skipped, which costs no Actions minutes. Pages' source must be set to "GitHub
+# Actions" once (Settings → Pages; cjus/chessengine#233).
+name: Book
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "book/**"
+      - "crates/**"
+      - ".github/workflows/book.yml"
+  workflow_dispatch:
+
+# One deployment at a time, and a running one is never cancelled halfway.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: mdbook
+      - name: Build the book
+        run: mdbook build book
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: book/book
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

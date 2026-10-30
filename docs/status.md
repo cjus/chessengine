@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-30, 09:00 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-30, 12:00 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -144,7 +144,7 @@ above gen2 (more than its SPRT's +53), #227; **the GUI re-check with gen2 passed
 #205): the `83fa6c6` binary in En Croissant, Cute Chess and HIARCS showed `EvalFile` as
 `<built-in>`, scored +6.60 with the network and +4.69 with `none` at depth 16 (one thread),
 played a 3+2 game at 4 threads and stopped a MultiPV analysis at once; XBoard skipped; so every
-v1.0 gate has passed and **the `v1.0.0` tag on `83fa6c6` is next** (#199). 2026-10-30: **the print edition**, the book bound as one PDF and one EPUB with seven figures and an index, in `book/print/`, rebuilt by `scripts/build-print-book.sh` with bookcraft's makebook (Carlos, #231); the PDF and EPUB are published on the PNX Studios CDN (`cdn.pnxstudios.com/solrac/book/latest/`) instead of committed, and Git ignores them (Carlos, #232).*
+v1.0 gate has passed and **the `v1.0.0` tag on `83fa6c6` is next** (#199). 2026-10-30: **the print edition**, the book bound as one PDF and one EPUB with seven figures and an index, in `book/print/`, rebuilt by `scripts/build-print-book.sh` with bookcraft's makebook (Carlos, #231); the PDF and EPUB are published on the PNX Studios CDN (`cdn.pnxstudios.com/solrac/book/latest/`) instead of committed, and Git ignores them (Carlos, #232); ready for the repository going public (Carlos, 2026-10-30): the Chess Node Protocol's deploy key dropped from CI, since its repository is public, the book's GitHub Pages workflow (`book.yml`, skipped while private), `SECURITY.md` and `CONTRIBUTING.md` (#234), with the last checks, two choices and the switch in #233.*
 
 ## Stages
 
@@ -503,6 +503,8 @@ passed; the rest wait on GUI checks, level calibration or the v1.0 work.
 
 The open [`needs-carlos` issues](https://github.com/cjus/chessengine/issues?q=is%3Aopen+label%3Aneeds-carlos):
 
+- #233: making the repository public: a secret scan, what to do with the links to
+  cjus/chessgui, CI once Actions is free, and the switch; then Pages and the security settings.
 - #199: the `v1.0.0` tag on `83fa6c6` (every gate passed; the GUI re-check, #205, on
   2026-10-29), then publishing the draft release with the
   book on it (#183).
