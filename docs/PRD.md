@@ -108,7 +108,7 @@ crates/
               (wgpu, Metal on the Mac). Not a dependency of the engine.
   cli/        the single `cb2026` binary: picks UCI, XBoard or shell mode.
 book/         mdBook: "Building a chess engine in Rust".
-  print/      the same book as a PDF and an EPUB, and what binds them.
+  print/      what binds the book as a PDF and an EPUB (published on the CDN).
 docs/         PRD, Elo ledger, testing guide, GUI compatibility matrix.
 tests/data/   perft suites, EPD test suites, bench positions.
 scripts/      SPRT and gauntlet runners for the test Mac, release helpers.
@@ -544,10 +544,12 @@ stalemate), the engine offering and accepting draws and resigning in hopeless po
    anchors so it can't drift out of date), how to test it, the measured Elo gain, and further
    reading. It's built and checked in CI; publishing it on GitHub Pages waits until the repo is
    public. A print edition, the same chapters bound as one PDF and one EPUB with figures and an
-   index, lives in `book/print/` and is rebuilt with `scripts/build-print-book.sh` when the book
-   changes (Carlos, 2026-10-30). It is bound by bookcraft's makebook, a Claude Code plugin from
-   the `cjus/cjus-skills` marketplace; like other tooling it is outside the engine, and its
-   licence is MIT.
+   index, is built from `book/print/` by `scripts/build-print-book.sh` when the book changes and
+   published on the PNX Studios CDN, at `cdn.pnxstudios.com/solrac/book/latest/` and under each
+   commit it was bound from; the files are never committed, so the repository doesn't grow by
+   5 MB a rebuild (Carlos, 2026-10-30: public now, since the repository is close to public). It
+   is bound by bookcraft's makebook, a Claude Code plugin from the `cjus/cjus-skills`
+   marketplace; like other tooling it is outside the engine, and its licence is MIT.
 3. **Milestone tags.** Git tags `stage-NN-<name>` mark each stage below. Every tag builds, passes
    its tests, matches its book chapter and, from stage 4 on, plays legal chess through UCI, so a learner can run
    `git checkout stage-07-quiescence` and play against that version.

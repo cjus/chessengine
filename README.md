@@ -6,7 +6,9 @@ En Croissant and Cute Chess. It comes with an interactive shell for playing game
 engine think and switching its techniques on and off. It also speaks the
 [Chess Node Protocol](https://github.com/cjus/chess-node-protocol) (CNP), the JSON protocol
 through which Solrac, a 3D chess board that teaches, reaches it. A companion book, *Building a
-Chess Engine in Rust* (in `book/`), explains every technique as the engine gained it.
+Chess Engine in Rust* (in `book/`), explains every technique as the engine gained it. Read it as
+a [PDF](https://cdn.pnxstudios.com/solrac/book/latest/building-a-chess-engine-in-rust.pdf) or an
+[EPUB](https://cdn.pnxstudios.com/solrac/book/latest/building-a-chess-engine-in-rust.epub).
 
 **Strength:** about **3379 ± 21** on the CCRL Blitz scale (2026-10-29) for `main`, from 5,600
 games at 8+0.08 against seven rated engines, with the third NNUE network it trained on its own
@@ -96,8 +98,11 @@ see what each one does. To run it as a Lichess bot, see [`docs/lichess.md`](docs
 The book in `book/`, *Building a Chess Engine in Rust*, has a chapter for each stage, from the
 board and move generation to the NNUE network. Each chapter gives the idea, the real code and
 what it measured. Build it with [mdBook](https://rust-lang.github.io/mdBook/): `mdbook build
-book`. Every technique can be switched off, and [`docs/elo-ledger.md`](docs/elo-ledger.md)
-records what each one gained.
+book`, or read the print edition, with figures and an index, as a
+[PDF](https://cdn.pnxstudios.com/solrac/book/latest/building-a-chess-engine-in-rust.pdf) or an
+[EPUB](https://cdn.pnxstudios.com/solrac/book/latest/building-a-chess-engine-in-rust.epub).
+Every technique can be switched off, and [`docs/elo-ledger.md`](docs/elo-ledger.md) records what
+each one gained.
 
 ## Building from source
 

@@ -1,29 +1,36 @@
 # The print edition
 
-`building-a-chess-engine-in-rust.pdf` and `.epub` are the book in `book/src`, bound as one
-volume: a cover, a contents page, the chapters numbered as the web book numbers them (6.1,
-14.2, ...), seven figures, and an index. The PDF has real page numbers, a linked contents page
-and index, and bookmarks; the EPUB reflows on an e-reader. Both come from
-`scripts/build-print-book.sh`, which uses the makebook skill of the bookcraft Claude Code plugin
-(marketplace `cjus/cjus-skills`).
+The book in `book/src`, bound as one volume: a cover, a contents page, the chapters numbered as
+the web book numbers them (6.1, 14.2, ...), seven figures, and an index. The PDF has real page
+numbers, a linked contents page and index, and bookmarks; the EPUB reflows on an e-reader.
+
+- [PDF](https://cdn.pnxstudios.com/solrac/book/latest/building-a-chess-engine-in-rust.pdf)
+- [EPUB](https://cdn.pnxstudios.com/solrac/book/latest/building-a-chess-engine-in-rust.epub)
+
+Each edition is also kept under the commit it was bound from, at
+`https://cdn.pnxstudios.com/solrac/book/<commit>/`, and the cover names that commit. The files
+live on the PNX Studios CDN (S3 bucket `pnxstudios-solrac`), not in the repository: a PDF is
+compressed, so Git would keep a whole new 5 MB copy of every rebuild. Git ignores them here.
 
 ## Rebuilding
 
-After the book changes, run
+After the book changes, commit the change, then run
 
 ```sh
 scripts/build-print-book.sh
 ```
 
-and commit the PDF and EPUB with the change. The cover names the commit the text and code
-excerpts come from, so build after committing the chapter changes (it says "with uncommitted
-changes" otherwise). The PDF changes on every build, if only its creation stamp, and each
-version adds about 5 MB to the repository's history, so rebuild when the book has changed, not
-on every commit.
+It builds the PDF and EPUB here in `book/print/`, then uploads them under the commit and as the
+latest edition, and invalidates the latest on CloudFront. It won't upload with uncommitted
+changes to `book/src`, `crates` or `book/print`, since the commit's copy has to be what that
+commit binds. `scripts/build-print-book.sh --no-upload` builds without publishing, to look at a
+change first; makebook options, such as `--type-size 17` for large print, need `--no-upload` too,
+so a variant never replaces the published edition.
 
-One-time setup: install bookcraft from the `cjus-skills` marketplace in Claude Code, run its
-`scripts/install.sh` (Python 3.12+, Chromium for Playwright), and `brew install poppler
-epubcheck`.
+It uses the makebook skill of the bookcraft Claude Code plugin (marketplace `cjus/cjus-skills`),
+unmodified. One-time setup: install bookcraft 1.17.0 or later in Claude Code, run its
+`scripts/install.sh` (Python 3.12+, Chromium for Playwright), `brew install poppler epubcheck`,
+and have the AWS CLI signed in with write access to the bucket (`AWS_PROFILE` picks a profile).
 
 ## What's here
 
@@ -45,7 +52,7 @@ The build stops and says so when something no longer fits:
 - **A transposed table isn't found** (`TRANSPOSE`): the same, for the chapter 19 table that is
   too wide for the page.
 
-Some things need a look by hand:
+Some things need a look by hand, best with `--no-upload` before publishing:
 
 - **The figures' facts.** If a chapter's numbers change (chapter 6's UCI output, the singular
   extension's margins in chapter 14.1), change them in `figures.py` too. `diagrams/README.md`
