@@ -17,8 +17,8 @@ merged, +5.2 ± 4.2, #82; `singular_margin` 4 failed, −1.8 ± 5.3, so it stays
 transposition table buckets failed, −8.8 ± 8.6, so they are off by default, #86; engine
 failures in matches can no longer count as draws, #91). 2026-10-17: one `Game` type in
 `cb2026-chess` decides when every game is over, for the shell, the match tool, self-play and
-chessgui, #94, merged; buckets at 40+0.4 about even, +1.6 ± 6.3 with no verdict, so they stay
-off, #92; the gauntlet reference engines chosen, built by `scripts/fetch-gauntlet-engines.sh`,
+Solrac Chess AI, #94, merged; buckets at 40+0.4 about even, +1.6 ± 6.3 with no verdict, so they
+stay off, #92; the gauntlet reference engines chosen, built by `scripts/fetch-gauntlet-engines.sh`,
 #36; double extensions merged off by default after no verdict, +3.6 ± 4.9, #96; the M2/M3
 gauntlets running on the M3, #36; **M2 passed**, stage 14 rated 2442 ± 11 by gauntlet, #36.
 2026-10-18: **M3 passed**, stage 16 rated 2669 ± 10, #36; `main` rated 2714 ± 10, #36; five
@@ -42,23 +42,23 @@ above 2026-10-18, #131; a flag falling against material that can't mate is a dra
 6,301 games, so it stays off by default, #134; double extensions at a margin of 70 failed,
 −20.5 ± 12.2, so the margin stays at 50, #138; history pruning failed, −5.3 ± 7.1, so it is off
 by default, #140; cb2026 relicensed `MIT OR Apache-2.0`, with GPL only in a binary built with
-Syzygy, the first step of Solrac's M1b (cjus/chessgui#71, #98);
+Syzygy, the first step of Solrac's M1b (Solrac Chess AI #71 and #98);
 cb2026 speaks the Chess Node Protocol (`--cnp`, `crates/cnp`), passing every conformance
-session that applies (38; the window's is skipped), M1b's step 4 (cjus/chessgui#98; CI needs
+session that applies (38; the window's is skipped), M1b's step 4 (Solrac Chess AI #98; CI needs
 the deploy key of #143); v1.0 started: `scripts/mac-robustness.sh` for the robustness run,
 #146, which follows #145; larger reductions at expected cut nodes merged on, +11.6 ± 7.7, #145; the v1.0
 robustness run running on the M3, #146; the strength levels on a human scale: many of a weaker
 level's moves now come from a person's horizon (one or two plies, no quiescence search), fitted
 so each level blunders as often as people rated 600 to 2500 on Lichess rapid do, counted in
 Lichess's own games by the new `mistakes` tool; `UCI_Elo` 600–2500 is on that scale and the CCRL
-ratings no longer hold; full strength unchanged (Carlos, cjus/chessgui#113; #151).
+ratings no longer hold; full strength unchanged (Carlos, Solrac Chess AI #113; #151).
 2026-10-22: the v1.0 robustness run clean, 10,000 games with no time losses, illegal moves or
 failures, #146; cut-node reductions of 2 plies instead of 1 merged, +8.7 ± 6.4, #155; smaller
 reductions at expected all-nodes failed, −8.5 ± 8.4, so they are off by default, #158; smaller
 reductions where the principal variation was (Stockfish's `ttPv`) had no verdict, +0.3 ± 5.2
 after 8,100 games, stopped, so they are off by default, #160;
 CNP's `engine/evaluate` answered with the shell's `eval`, term by term, so Solrac's chat can say
-why cb2026 likes a position (cjus/chessgui#145, cjus/chess-node-protocol#6); a search sent the
+why cb2026 likes a position (Solrac Chess AI #145, cjus/chess-node-protocol#6); a search sent the
 moment the last one answered is taken, no longer refused as `Busy` while the answered search's
 thread ends (found by Solrac's chat, whose review sends two searches in a row); GitHub no longer
 checks PRs, to save Actions minutes: `scripts/check.sh` checks a PR before it merges, `main`'s
@@ -192,10 +192,10 @@ v1.0 gate has passed and **the `v1.0.0` tag on `83fa6c6` is next** (#199). 2026-
 | M5: `singular_margin` 4 (chapter 14.1) | #84 | 1098926 | Merged as a record, the margin back to 3: −1.8 ± 5.3, 7,476 games, [0, 5] failed (M3 Max) |
 | M5: transposition table buckets (chapter 8.1) | #86 | 1098926 (1114877 with buckets on) | Merged, off by default: −8.8 ± 8.6, 2,685 games, [0, 5] failed (M3 Max) |
 | M5: transposition table buckets at 40+0.4 (chapter 8.1) | #92 | 1098926 (1114877 with buckets on) | Merged as a record, off by default: +1.6 ± 6.3, 4,630 games, [0, 5] at 40+0.4 no verdict (LLR −0.45), stopped (M3 Max) |
-| `cb2026_chess::game::Game`: one record of a game and one set of end-of-game rules, moved from chessgui and used by the shell, the match tool and self-play | #94 | 1098926 | Merged, no functional change; chessgui uses it from cjus/chessgui#31 |
+| `cb2026_chess::game::Game`: one record of a game and one set of end-of-game rules, moved from Solrac Chess AI and used by the shell, the match tool and self-play | #94 | 1098926 | Merged, no functional change; Solrac Chess AI uses it from its #31 |
 | M5: double extensions (chapter 14.1) | #96 | 1098926 (1248666 with double extensions on) | Merged, off by default: +3.6 ± 4.9, 8,670 games, [0, 5] no verdict (LLR 0.92), stopped (M3 Max) |
-| `Position::parse_move`: a move typed in SAN or coordinates, and `SanError::MissingPromotion` when a pawn promotes without its piece; the shell uses it, and Solrac's chat will (cjus/chessgui#38) | #113 | 1098926 | Merged, no functional change |
-| A flag falling against material that can't mate is a draw (FIDE Laws 6.9): `Position::has_mating_material`, `Outcome::TimeoutDraw`, and `Game::lose_on_time` renamed `Game::time_out`; for Solrac's clocks (cjus/chessgui M1) and the shell's | #137 | 1136500 | Merged, no functional change |
+| `Position::parse_move`: a move typed in SAN or coordinates, and `SanError::MissingPromotion` when a pawn promotes without its piece; the shell uses it, and Solrac's chat will (Solrac Chess AI #38) | #113 | 1098926 | Merged, no functional change |
+| A flag falling against material that can't mate is a draw (FIDE Laws 6.9): `Position::has_mating_material`, `Outcome::TimeoutDraw`, and `Game::lose_on_time` renamed `Game::time_out`; for Solrac's clocks (Solrac Chess AI's M1) and the shell's | #137 | 1136500 | Merged, no functional change |
 | M5: correction history (chapter 14.2) | #112 | 1065754 | Merged: +28.0 ± 13.0, 1,308 games, [0, 5] passed (M3 Max) |
 | M5: capture history (chapter 10.2) | #115 | 1065754 (943210 with capture history on) | Merged, off by default: −19.2 ± 11.9, 1,561 games, [0, 5] failed (M3 Max) |
 | M5: ProbCut (chapter 12.1) | #117 | 1065754 (963637 with ProbCut on) | Merged, off by default: −10.2 ± 9.1, 2,593 games, [0, 5] failed (M3 Max) |
@@ -217,8 +217,8 @@ v1.0 gate has passed and **the `v1.0.0` tag on `83fa6c6` is next** (#199). 2026-
 | M5: larger reductions when the hash move is a capture, as in Stockfish (chapter 14.1) | #171 | 749181 (719329 with them on) | Merged, off by default: −6.5 ± 7.7, 3,668 games, [0, 5] failed (M3 Max) |
 | M5: larger reductions when the hash move is a capture, off the principal variation (chapter 14.1) | #179 | 749181 (754886 with them on) | Merged, off by default: −7.5 ± 8.0, 3,031 games, [0, 5] failed (M3 Max) |
 | v1.0: opening books from people's games, the `make-book` tool and `scripts/lichess-book.sh` (chapter 18) | #173 | 749181 | Merged, no functional change. The first book, from Lichess's September 2026 games: 97,432 moves from 1,499,615 games, 1.6 MB, 58 minutes on the M3 (#174) |
-| PGN annotations: comments before a line's first move, NAGs and their symbols (`$16`, `±`, `+/-`), and variations as lines of their own, read and written back (`pgn::Annotations`, `pgn::Line`, `pgn::glyph`); a variation it can't read is dropped, not the game; Black's move numbered again after a comment or variation, as the standard asks. For Solrac's move list (cjus/chessgui#232) | #224 | 701720 | Merged, no functional change |
-| PGN comment commands: `[%clk 0:04:52]`, `[%eval -1.25]` and the rest read out of a comment's text (`pgn::commands`, `pgn::Command`), with `%clk` as a duration and `%eval` as centipawns or a mate (`Command::clock`, `Command::evaluation`), as the PGN Specification Supplement writes them. For Solrac's move list (cjus/chessgui#232) | #226 | 701720 | Merged, no functional change |
+| PGN annotations: comments before a line's first move, NAGs and their symbols (`$16`, `±`, `+/-`), and variations as lines of their own, read and written back (`pgn::Annotations`, `pgn::Line`, `pgn::glyph`); a variation it can't read is dropped, not the game; Black's move numbered again after a comment or variation, as the standard asks. For Solrac's move list (Solrac Chess AI #232) | #224 | 701720 | Merged, no functional change |
+| PGN comment commands: `[%clk 0:04:52]`, `[%eval -1.25]` and the rest read out of a comment's text (`pgn::commands`, `pgn::Command`), with `%clk` as a duration and `%eval` as centipawns or a mate (`Command::clock`, `Command::evaluation`), as the PGN Specification Supplement writes them. For Solrac's move list (Solrac Chess AI #232) | #226 | 701720 | Merged, no functional change |
 
 **The M3 is free** since gen3's gauntlet finished (2026-10-29, about 20:30 MDT; #227). Each
 generation's files stay in `~/nnue-data/genN` there, and in `~/engines/nets/genN` on
@@ -503,8 +503,8 @@ passed; the rest wait on GUI checks, level calibration or the v1.0 work.
 
 The open [`needs-carlos` issues](https://github.com/cjus/chessengine/issues?q=is%3Aopen+label%3Aneeds-carlos):
 
-- #233: making the repository public: a secret scan, what to do with the links to
-  cjus/chessgui, CI once Actions is free, and the switch; then Pages and the security settings.
+- #233: making the repository public: CI once Actions is free, a skim of the issues and PRs,
+  and the switch; then Pages and the security settings.
 - #199: the `v1.0.0` tag on `83fa6c6` (every gate passed; the GUI re-check, #205, on
   2026-10-29), then publishing the draft release with the
   book on it (#183).

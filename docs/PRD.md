@@ -95,7 +95,7 @@ crates/
   chess/      board, bitboards, magic tables, move generation, make/unmake,
               Zobrist hashing, FEN, SAN/UCI move notation, PGN, perft, and the
               game (`Game`: moves played, takebacks, when it is over, shared by
-              the shell, the match tool and chessgui). No dependencies.
+              the shell, the match tool and Solrac Chess AI). No dependencies.
   engine/     search, evaluation (HCE; NNUE later), transposition table,
               time management, threads (Lazy SMP), tablebases, opening book,
               strength limiting. Exposes an Engine API with an info callback.
@@ -400,15 +400,15 @@ rights both accepted. Chess960 perft and Chess960 test matches are part of the t
 
 ### Chess Node Protocol (Solrac)
 
-Solrac, the 3D board that teaches (`cjus/chessgui`), reaches cb2026 through the
+Solrac Chess AI, the 3D board that teaches, reaches cb2026 through the
 [Chess Node Protocol](https://github.com/cjus/chess-node-protocol) (CNP): JSON-RPC 2.0 over
-stdin/stdout, which Solrac's milestone M1b defines (cjus/chessgui#98). Every request carries the
+stdin/stdout, which Solrac's milestone M1b defines (Solrac Chess AI #98). Every request carries the
 whole position and every option, so cb2026 can one day be one node of a distributed engine.
 `crates/cnp` (`cb2026-cnp`) answers it. A search has the limits UCI's `go` has, plus a level,
 MultiPV, root moves, technique switches (the shell's, by the same names), a deterministic mode
 and progress reports. `engine/techniques` and `engine/levels` list the switches and the measured
 levels, and `engine/evaluate` gives a position's evaluation term by term, as the shell's `eval`
-does, so Solrac's chat can say why cb2026 likes a position (cjus/chessgui#145). Every capability is offered except a root score window. Every conformance session in the
+does, so Solrac's chat can say why cb2026 likes a position (Solrac Chess AI #145). Every capability is offered except a root score window. Every conformance session in the
 protocol's repository runs against the real binary in `cargo test` (`crates/cli/tests/cnp.rs`).
 
 ### Lichess bot (must)
@@ -527,7 +527,7 @@ stalemate), the engine offering and accepting draws and resigning in hopeless po
   and CNP's `engine/levels` names it. It is an estimate from blunders; games against people
   would confirm it. Until 2026-10-21 the levels were rated against engines on the CCRL scale
   instead (`scripts/mac-levels.sh`, kept in the book as the record), which suited engines but
-  not the people the levels are for (cjus/chessgui#113).
+  not the people the levels are for (Solrac Chess AI #113).
 - The shell's `level` and `elo` commands set the same options.
 
 ## Learning tool
@@ -738,8 +738,8 @@ check on GitHub (one job since 2026-10-21; three checks before).
 **CI cost.** GitHub Actions minutes are limited on private repos, and macOS and Windows minutes
 have historically cost 10× and 2× Linux minutes. So CI runs on Linux; macOS and Windows builds run
 weekly and on release tags. Releases build binaries for every platform in the table above. The
-account's minutes, shared with chessgui, ran out on 2026-10-21 (cjus/chessgui#73), about 1,800 of
-them having gone here in three weeks. Since then:
+account's minutes, shared with Solrac Chess AI, ran out on 2026-10-21 (Solrac Chess AI #73),
+about 1,800 of them having gone here in three weeks. Since then:
 - CI is one job (GitHub bills each job to the next whole minute).
 - GitHub checks neither PRs nor merges (since 2026-10-22, Carlos: the code is checked locally,
   with `scripts/check.sh`). `main` is checked nightly, only if it changed since the last good
@@ -747,11 +747,11 @@ them having gone here in three weeks. Since then:
 - Only `main` saves build caches.
 - Fuzzing and the macOS and Windows builds run weekly, only if `main` changed.
 
-The repository becoming public (planned, cjus/chessgui#71) makes its CI free.
+The repository becoming public (planned, Solrac Chess AI #71) makes its CI free.
 
 ## License and IP
 
-- **License: `MIT OR Apache-2.0` (decided 2026-10-20, cjus/chessgui#71; replaces GPL-3.0,
+- **License: `MIT OR Apache-2.0` (decided 2026-10-20, Solrac Chess AI #71; replaces GPL-3.0,
   decided 2026-10-10).** Carlos's rule: the open-source licence that gives us the most freedom
   while staying compliant. Solrac, the 3D board, is to be closed source and still use cb2026,
   through the Chess Node Protocol for the engine and in-process for the rules (`cb2026-chess`);
@@ -994,8 +994,8 @@ about 26 s, and the M1 Max played about 970 games an hour.
       (cjus/chessengine#7, 2026-10-10).~~ Replaced on 2026-10-20 by the next entry.
 - [x] Licence: `MIT OR Apache-2.0`, © Carlos Justiniano, so a closed-source Solrac can use
       cb2026; GPL only in a binary built with the `syzygy` feature; code adapted only from
-      permissive sources; the repo private at first (cjus/chessgui#71, 2026-10-20; done in
-      cjus/chessgui#98's first step, 2026-10-21).
+      permissive sources; the repo private at first (Solrac Chess AI #71, 2026-10-20; done in
+      Solrac Chess AI #98's first step, 2026-10-21).
 - [x] NNUE training (M6): our own trainer for its teaching value, not bullet: gradients written
       by hand, a CPU reference and a GPU backend through `wgpu` (Metal on the Mac). Inference in
       `crates/nnue`, the trainer in `crates/trainer`, outside the default build; nets published
@@ -1054,7 +1054,7 @@ about 26 s, and the M1 Max played about 970 games an hour.
 - [x] `UCI_Elo` range: 650–2450, level 0's and level 19's ratings at 40+0.4 rounded inward to
       50. It was 1000–2400 at first, then 800–2600 after the calibration at 8+0.08
       (cjus/chessengine#106, 2026-10-18).
-- [x] Levels on a human scale (Carlos, cjus/chessgui#113, 2026-10-21): played at "Elo 1050" in
+- [x] Levels on a human scale (Carlos, Solrac Chess AI #113, 2026-10-21): played at "Elo 1050" in
       Solrac, a level was "much stronger than a 1050 level player". Rated against engines on
       CCRL, it blundered 0.7 times in 40 moves where people rated about 1000 on Lichess blunder
       3.4 times. The levels now take a person's horizon on many moves and are fitted to blunder
@@ -1064,7 +1064,7 @@ about 26 s, and the M1 Max played about 970 games an hour.
 - [x] cb2026 speaks the Chess Node Protocol (`--cnp`, or a JSON first line) for Solrac, beside
       UCI and XBoard: one search at a time, every capability but the root window, the shell's
       switches as its techniques. The protocol's crates come from
-      `cjus/chess-node-protocol` by git (cjus/chessgui#98, cjus/chessengine#143, 2026-10-21);
+      `cjus/chess-node-protocol` by git (Solrac Chess AI #98, cjus/chessengine#143, 2026-10-21);
       that repository has been public since 2026-10-21, so CI no longer needs the read-only
       deploy key it used (2026-10-30).
 

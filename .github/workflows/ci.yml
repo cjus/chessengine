@@ -2,7 +2,7 @@
 # Linux only, to keep private-repo Actions minutes low; macOS and Windows run in
 # cross-platform.yml.
 #
-# Actions minutes ran out in October 2026 (cjus/chessgui#73), so since 2026-10-22 pull requests
+# Actions minutes ran out in October 2026 (Solrac Chess AI #73), so since 2026-10-22 pull requests
 # and merges aren't checked here at all: a PR is checked before it merges by `scripts/check.sh`,
 # on the machine that made it, and `main`'s ruleset no longer requires a check. What is left
 # spends as few minutes as it can:

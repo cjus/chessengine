@@ -3,7 +3,7 @@
 #
 #   scripts/check.sh
 #
-# Pull requests aren't checked on GitHub (Actions minutes, cjus/chessgui#73): run this on the
+# Pull requests aren't checked on GitHub (Actions minutes, Solrac Chess AI #73): run this on the
 # PR's latest commit before merging. It formats nothing and changes nothing; it stops at the
 # first failure. The nightly CI run (.github/workflows/ci.yml) runs the same steps on main:
 # change both together. Needs cargo-deny and mdbook (`brew install cargo-deny mdbook`).

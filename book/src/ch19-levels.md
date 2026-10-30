@@ -1,7 +1,7 @@
 # Strength levels
 
 *Stage 19 · tag `stage-19-levels` · code in `crates/engine/src/levels.rs` and `lib.rs`. A
-person's horizon and the human scale came later (cjus/chessengine#151, for cjus/chessgui#113),
+person's horizon and the human scale came later (cjus/chessengine#151, for Solrac Chess AI #113),
 with the `mistakes` tool in `crates/tools/src/mistakes.rs`.*
 
 Everything so far has made cb2026 stronger. This chapter makes it *weaker*, on purpose, for
@@ -42,7 +42,7 @@ That turned out to be too tidy. People don't only make inaccuracies: they blunde
 (below). Every candidate above comes from a search that sees the short tactics, so a level
 seldom left a piece where it could be taken, and seldom missed one left for it. Carlos played
 the level then rated 1050 and found it "much stronger than a 1050 level player"
-(cjus/chessgui#113). Counted the way Lichess counts, it blundered 0.7 times in 40 moves;
+(Solrac Chess AI #113). Counted the way Lichess counts, it blundered 0.7 times in 40 moves;
 people rated about 1000 on Lichess blunder 3.4 times.
 
 ## A person's horizon
@@ -153,7 +153,7 @@ Strength: level 7.5, about 1350 on Lichess (rapid, by blunders): 8370 nodes per 
 
 ## A human scale
 
-What rating is level 5? Until cjus/chessgui#113 the answer was a rating against other engines,
+What rating is level 5? Until Solrac Chess AI #113 the answer was a rating against other engines,
 measured in games (the next section). But a rating against engines says little about what a
 person meets: engines punish every blunder at once, people often don't, so a level that
 blunders like a person rated 1000 rates far lower against engines, and a level rated 1000
@@ -274,7 +274,7 @@ and mistakes fewer than people's at the low end, and the counts come from Liches
 analysis for people but from a search of 100,000 nodes for the levels. Only games against
 people would rate the levels for sure: as a Lichess bot, say (`docs/lichess.md`).
 
-## Calibration against engines (until cjus/chessgui#113)
+## Calibration against engines (until Solrac Chess AI #113)
 
 Before the human scale, the levels were **calibrated** against engines, as the PRD then
 required: each played games against reference engines with known ratings on the CCRL list,

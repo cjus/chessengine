@@ -8,7 +8,7 @@
 //! table of random numbers can't be covered by copyright. The 781 numbers here were checked
 //! against that page, all equal (2026-10-21), and against the format's published test hashes
 //! (see `book.rs`). They were first copied from python-chess (GPL-3.0-or-later) and are the
-//! same numbers; the page is the source cb2026 relies on (cjus/chessgui#98).
+//! same numbers; the page is the source cb2026 relies on (Solrac Chess AI #98).
 //!
 //! Layout: 768 piece-square keys (12 piece kinds × 64 squares), 4 castling keys,
 //! 8 en passant file keys, and 1 key for White to move.

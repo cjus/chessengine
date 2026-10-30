@@ -14,7 +14,7 @@
 //!
 //! Those are still a strong player's mistakes. Every candidate comes from a search that sees
 //! the short tactics, so a weak level seldom hangs a piece or misses one hung, and people find
-//! it far stronger than a person of its rating (Solrac, cjus/chessgui#113). Counted as
+//! it far stronger than a person of its rating (Solrac Chess AI #113). Counted as
 //! Lichess counts them (the `mistakes` tool in `cb2026-tools`), people blunder 2 to 4 times in
 //! 40 moves across almost the whole range of ratings, and the levels did far less: 0.7 at the
 //! level once rated 1025 on CCRL, where people rated about 1000 blunder 3.4 times.
@@ -29,7 +29,7 @@
 //! its best moves. Such a move is often fine: it is a blunder only when there was a tactic to
 //! miss, which is when people blunder too.
 //!
-//! **The levels are on a human scale** (Carlos's choice, cjus/chessgui#113): level 0 is a
+//! **The levels are on a human scale** (Carlos's choice, Solrac Chess AI #113): level 0 is a
 //! Lichess rapid rating of 600, and each level 100 more, to 2500 at level 19 ([`RATINGS`],
 //! [`RATING_SCALE`]). Each level's chance of a person's horizon ([`HORIZON_CHANCES`]) is fitted
 //! so that it blunders as often as people of its rating do ([`PEOPLE_BLUNDERS`], counted in

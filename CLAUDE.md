@@ -42,7 +42,7 @@ changes the picture.
 6. Work is on a `claude/<topic>` branch from the latest `main`, with a PR to `main`.
    `main` is protected (ruleset `main: PR`): changes land only through a PR. Never try to get
    around it. **GitHub doesn't check PRs** (since 2026-10-22: Actions minutes ran out in
-   October 2026, cjus/chessgui#73), so `scripts/check.sh` is the check: run it before merging.
+   October 2026, Solrac Chess AI #73), so `scripts/check.sh` is the check: run it before merging.
    CI checks `main` every night, only if it changed; if a nightly run fails, fixing it comes
    first. To have GitHub check a branch anyway: `gh workflow run ci.yml --ref <branch>`.
    **Claude may merge its own PRs** (granted by Carlos 2026-10-10) once `scripts/check.sh`
