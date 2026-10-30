@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 366" width="640" height="366" role="img" aria-labelledby="sg-t sg-d">
+<title id="sg-t">Where the search without the hash move scores decides between two extensions, a cutoff and a reduction</title>
+<desc id="sg-d">A number line of S, the score of the search without the hash move. Below singular_beta minus 50 the hash move is extended two plies (a double extension, off the principal variation and at most six per line). Between that and singular_beta it is extended one ply (a singular extension). At or above singular_beta it is not singular: if singular_beta is at least beta the node is cut off by multi-cut; otherwise, if the hash score is at least beta, the hash move is searched a ply shallower (a negative extension); otherwise nothing changes.</desc>
+<style>
+  .hd { font: 700 13px "Helvetica Neue", Helvetica, Arial, sans-serif; letter-spacing: .08em; fill: #1F2937; }
+  .lbl { font: 400 14px "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #1F2937; }
+  .sm { font: 400 13px "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #4B5563; }
+  .cd { font: 400 14px "SF Mono", Menlo, Consolas, monospace; fill: #1F2937; }
+  .cds { font: 400 13px "SF Mono", Menlo, Consolas, monospace; fill: #1F2937; }
+  .note { font: italic 400 13px "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #4B5563; }
+  .bad { font: italic 400 13px "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #B4261E; }
+  .pc { font: 700 14px "Helvetica Neue", Helvetica, Arial, sans-serif; }
+  .coord { font: 400 13px "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #6B7280; }
+</style>
+<defs><marker id="sg-ar" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#6B7280"/></marker><marker id="sg-ari" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#1F2937"/></marker></defs>
+<rect width="640" height="366" fill="#FFFFFF"/>
+
+<text class="lbl" x="320" y="30" text-anchor="middle">The node is searched again at half depth without the hash move, with a null</text>
+<text class="lbl" x="320" y="50" text-anchor="middle">window at singular_beta = hash score − 3 × depth. Where its score S lands:</text>
+<rect x="40" y="88" width="186" height="50" rx="5" fill="#F7D9A5" stroke="#C08A1E" stroke-width="2"/>
+<text class="hd" x="135.0" y="110" text-anchor="middle">+2 PLIES</text>
+<text class="sm" x="135.0" y="128" text-anchor="middle" style="fill:#1F2937">double extension</text>
+<rect x="234" y="88" width="162" height="50" rx="5" fill="#EBF0F6" stroke="#2F5FA0" stroke-width="2"/>
+<text class="hd" x="315.0" y="110" text-anchor="middle">+1 PLY</text>
+<text class="sm" x="315.0" y="128" text-anchor="middle" style="fill:#1F2937">singular extension</text>
+<rect x="404" y="88" width="196" height="50" rx="5" fill="#FFFFFF" stroke="#6B7280" stroke-width="1.5" stroke-dasharray="5 4"/>
+<text class="hd" x="500.0" y="110" text-anchor="middle">NOT SINGULAR</text>
+<text class="sm" x="500.0" y="128" text-anchor="middle">another move comes close</text>
+<path d="M40,150 H600" stroke="#1F2937" stroke-width="2" marker-end="url(#sg-ari)"/>
+<path d="M230,142 V158" stroke="#1F2937" stroke-width="2"/>
+<path d="M400,142 V158" stroke="#1F2937" stroke-width="2"/>
+<text class="cds" x="230" y="178" text-anchor="middle">singular_beta − 50</text>
+<text class="cds" x="400" y="178" text-anchor="middle">singular_beta</text>
+<text class="sm" x="40" y="178">lower S</text>
+<text class="sm" x="600" y="178" text-anchor="end">higher S</text>
+<text class="note" x="135.0" y="202" text-anchor="middle">off the PV, at most 6 a line</text>
+<path d="M500.0,190 V214" stroke="#6B7280" stroke-width="2" marker-end="url(#sg-ar)"/>
+<rect x="340" y="220" width="260" height="132" rx="5" fill="#F9FAFB" stroke="#D1D5DB" stroke-width="1.5"/>
+<text class="lbl" x="354" y="244">singular_beta ≥ beta?</text>
+<text class="sm" x="370" y="264" style="fill:#1F2937">yes: multi-cut, return singular_beta</text>
+<text class="lbl" x="354" y="292">else hash score ≥ beta?</text>
+<text class="sm" x="370" y="312" style="fill:#1F2937">yes: hash move a ply shallower</text>
+<text class="sm" x="370" y="332">(negative extension); no: as usual</text>
+<text class="lbl" x="40" y="246">One search, four outcomes.</text>
+<text class="lbl" x="40" y="268">singular_margin (3) moves</text>
+<text class="lbl" x="40" y="290">both ticks; the double</text>
+<text class="lbl" x="40" y="312">extension margin (50) sets</text>
+<text class="lbl" x="40" y="334">the gap between them.</text>
+
+</svg>

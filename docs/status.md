@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-29, 21:50 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-10-30, 06:30 MDT (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -144,7 +144,7 @@ above gen2 (more than its SPRT's +53), #227; **the GUI re-check with gen2 passed
 #205): the `83fa6c6` binary in En Croissant, Cute Chess and HIARCS showed `EvalFile` as
 `<built-in>`, scored +6.60 with the network and +4.69 with `none` at depth 16 (one thread),
 played a 3+2 game at 4 threads and stopped a MultiPV analysis at once; XBoard skipped; so every
-v1.0 gate has passed and **the `v1.0.0` tag on `83fa6c6` is next** (#199).*
+v1.0 gate has passed and **the `v1.0.0` tag on `83fa6c6` is next** (#199). 2026-10-30: **the print edition**, the book bound as one PDF and one EPUB with seven figures and an index, in `book/print/`, rebuilt by `scripts/build-print-book.sh` with bookcraft's makebook (Carlos, #231).*
 
 ## Stages
 
