@@ -6,7 +6,9 @@ En Croissant and Cute Chess. It comes with an interactive shell for playing game
 engine think and switching its techniques on and off. It also speaks the
 [Chess Node Protocol](https://github.com/cjus/chess-node-protocol) (CNP), the JSON protocol
 through which Solrac, a 3D chess board that teaches, reaches it. A companion book, *Building a
-Chess Engine in Rust* (in `book/`), explains every technique as the engine gained it.
+Chess Engine in Rust* (in `book/`), explains every technique as the engine gained it. Read it as
+a [PDF](https://cdn.pnxstudios.com/solrac/book/latest/building-a-chess-engine-in-rust.pdf) or an
+[EPUB](https://cdn.pnxstudios.com/solrac/book/latest/building-a-chess-engine-in-rust.epub).
 
 **Strength:** about **3379 ± 21** on the CCRL Blitz scale (2026-10-29) for `main`, from 5,600
 games at 8+0.08 against seven rated engines, with the third NNUE network it trained on its own
