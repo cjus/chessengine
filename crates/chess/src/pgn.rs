@@ -27,7 +27,8 @@
 //!   that move's ([`PgnGame::comments`]); one before a line's first move is the line's own
 //!   ([`PgnGame::intro`], [`Line::intro`]). Commands inside comments (`[%clk 0:04:52]`,
 //!   `[%eval 0.31]`, `[%cal Ge2e4]`) are kept as part of the text, and [`commands`] reads
-//!   them out of it.
+//!   them out of it: clock times, evaluations, and the arrows and squares a comment draws
+//!   on the board ([`Command::arrows`], [`Command::squares`]).
 //! - **Numeric annotation glyphs** (NAGs) after a move: `$1` to `$255`, and the symbols that
 //!   stand for the common ones, glued to the move or apart: `!`, `?`, `!!`, `??`, `!?`, `?!`
 //!   for the move, and `=`, `∞`, `⩲` (or `+=`), `±` (or `+/-`), `+-` and the rest for the
@@ -52,6 +53,7 @@
 use crate::moves::Move;
 use crate::piece::Color;
 use crate::position::Position;
+use crate::square::Square;
 
 /// The tags every PGN game has, in the order they must come.
 const SEVEN_TAG_ROSTER: [&str; 7] = ["Event", "Site", "Date", "Round", "White", "Black", "Result"];
@@ -578,8 +580,9 @@ impl Reader {
 /// A command embedded in a comment, as the PGN Specification Supplement (Hartwig and
 /// Langvad, 2001) writes them and lichess and chess.com export them: `[%clk 0:04:52]` is
 /// the command `clk` with the value `0:04:52`. [`Command::clock`] and [`Command::evaluation`]
-/// read the two most common; the rest (`%cal` and `%csl` for arrows and squares, `%emt`,
-/// engines' own) are left to the caller.
+/// read the two most common, and [`Command::arrows`] and [`Command::squares`] the arrows
+/// and squares a comment draws on the board (`%cal`, `%csl`); the rest (`%emt`, engines'
+/// own) are left to the caller.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Command {
     /// Its name, without the `%`: `clk`.
@@ -595,6 +598,53 @@ pub enum Evaluation {
     Centipawns(i32),
     /// Mate in this many moves, by White if it's positive: `[%eval #-3]` is -3.
     Mate(i32),
+}
+
+/// The colour of an arrow or a square a comment marks, as the letter before it: `G`, `R`,
+/// `Y` or `B` (`[%cal Ge2e4]`, `[%csl Rd5]`), as lichess and ChessBase write them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum MarkColor {
+    /// `G`.
+    Green,
+    /// `R`.
+    Red,
+    /// `Y`.
+    Yellow,
+    /// `B`.
+    Blue,
+}
+
+impl MarkColor {
+    /// The colour a letter stands for, in either case: `G` or `g` is green.
+    pub fn from_letter(letter: char) -> Option<MarkColor> {
+        match letter.to_ascii_uppercase() {
+            'G' => Some(MarkColor::Green),
+            'R' => Some(MarkColor::Red),
+            'Y' => Some(MarkColor::Yellow),
+            'B' => Some(MarkColor::Blue),
+            _ => None,
+        }
+    }
+}
+
+/// An arrow a comment draws on the board, from a square to another: `Ge2e4` in a `%cal`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Arrow {
+    /// Its colour.
+    pub color: MarkColor,
+    /// The square it starts on.
+    pub from: Square,
+    /// The square it points to.
+    pub to: Square,
+}
+
+/// A square a comment marks: `Rd5` in a `%csl`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct MarkedSquare {
+    /// Its colour.
+    pub color: MarkColor,
+    /// The square.
+    pub square: Square,
 }
 
 /// The largest evaluation [`Command::evaluation`] reads, in pawns: anything larger isn't
@@ -640,6 +690,54 @@ impl Command {
         (pawns.is_finite() && pawns.abs() <= MAX_EVALUATION_PAWNS)
             .then(|| Evaluation::Centipawns((pawns * 100.0).round() as i32))
     }
+
+    /// The arrows a `%cal` command draws, in order: `Ge2e4,Rd1d8` is a green arrow from e2
+    /// to e4 and a red one from d1 to d8. An entry that isn't a colour and two squares is
+    /// skipped, as is any other command's value.
+    pub fn arrows(&self) -> Vec<Arrow> {
+        if self.name != "cal" {
+            return Vec::new();
+        }
+        marks(&self.value)
+            .filter_map(|(color, squares)| {
+                let (from, to) = squares.split_at_checked(2)?;
+                Some(Arrow {
+                    color,
+                    from: from.parse().ok()?,
+                    to: to.parse().ok()?,
+                })
+            })
+            .collect()
+    }
+
+    /// The squares a `%csl` command marks, in order: `Rd5,Ge4` is d5 in red and e4 in
+    /// green. An entry that isn't a colour and a square is skipped, as is any other
+    /// command's value.
+    pub fn squares(&self) -> Vec<MarkedSquare> {
+        if self.name != "csl" {
+            return Vec::new();
+        }
+        marks(&self.value)
+            .filter_map(|(color, square)| {
+                Some(MarkedSquare {
+                    color,
+                    square: square.parse().ok()?,
+                })
+            })
+            .collect()
+    }
+}
+
+/// The entries of a `%cal` or `%csl` value, each its colour and the rest of it: `Ge2e4,Rd5`
+/// is green `e2e4` and red `d5`. Spaces round the commas are allowed; an entry without a
+/// colour is skipped.
+fn marks(value: &str) -> impl Iterator<Item = (MarkColor, &str)> {
+    value.split(',').filter_map(|entry| {
+        let entry = entry.trim();
+        let mut chars = entry.chars();
+        let color = MarkColor::from_letter(chars.next()?)?;
+        Some((color, chars.as_str()))
+    })
 }
 
 /// A comment's text without its commands, and the commands, in order:
@@ -1036,6 +1134,60 @@ mod tests {
         // A broken one doesn't hide a good one after it.
         let (text, found) = commands("[%] [%clk 0:01:00] x");
         assert_eq!((text.as_str(), found.len()), ("[%] x", 1));
+    }
+
+    #[test]
+    fn arrows_and_squares_read_as_lichess_and_chessbase_write_them() {
+        let command = |name: &str, value: &str| Command {
+            name: name.to_string(),
+            value: value.to_string(),
+        };
+        let square = |name: &str| name.parse::<Square>().unwrap();
+        assert_eq!(
+            command("cal", "Ge2e4,Rd1d8").arrows(),
+            [
+                Arrow {
+                    color: MarkColor::Green,
+                    from: square("e2"),
+                    to: square("e4"),
+                },
+                Arrow {
+                    color: MarkColor::Red,
+                    from: square("d1"),
+                    to: square("d8"),
+                },
+            ]
+        );
+        assert_eq!(
+            command("csl", "Rd5, Ye4,bh7").squares(),
+            [
+                MarkedSquare {
+                    color: MarkColor::Red,
+                    square: square("d5"),
+                },
+                MarkedSquare {
+                    color: MarkColor::Yellow,
+                    square: square("e4"),
+                },
+                MarkedSquare {
+                    color: MarkColor::Blue,
+                    square: square("h7"),
+                },
+            ]
+        );
+        // What isn't a colour and its squares is skipped, and the rest still read.
+        let arrows = command("cal", "Xe2e4,Ge2,Ge2e9,,Ge2e4x,Bé2e4,Gg1f3").arrows();
+        assert_eq!(arrows.len(), 1);
+        assert_eq!((arrows[0].from, arrows[0].to), (square("g1"), square("f3")));
+        assert!(command("csl", "Gd55,R,Qd5").squares().is_empty());
+        // Only their own commands.
+        assert!(command("csl", "Ge2e4").arrows().is_empty());
+        assert!(command("cal", "Rd5").squares().is_empty());
+        assert!(command("clk", "0:04:52").arrows().is_empty());
+        // As a comment from lichess has them.
+        let (_, found) = commands("good [%csl Gd5][%cal Gf3d4,Rc6d4]");
+        assert_eq!(found[0].squares().len(), 1);
+        assert_eq!(found[1].arrows().len(), 2);
     }
 
     #[test]
