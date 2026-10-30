@@ -8,12 +8,11 @@ engine think and switching its techniques on and off. It also speaks the
 through which Solrac, a 3D chess board that teaches, reaches it. A companion book, *Building a
 Chess Engine in Rust* (in `book/`), explains every technique as the engine gained it.
 
-**Strength:** about **3286 ± 17** on the CCRL Blitz scale (2026-10-27) for v1.0.0, from 5,600
-games at 8+0.08 against seven rated engines, with the second NNUE network it trained on its own
-games; with the first it rated 3236 ± 16, and with its hand-crafted evaluation 2782 ± 11. The
-weaker reference engines say little at this level, so the figure rests mostly on the two
-strongest. `main` now evaluates with the third network, which beat the second by about 53 Elo
-in self-play; its own rating is being measured (cjus/chessengine#227).
+**Strength:** about **3379 ± 21** on the CCRL Blitz scale (2026-10-29) for `main`, from 5,600
+games at 8+0.08 against seven rated engines, with the third NNUE network it trained on its own
+games. v1.0.0, with the second, rated **3286 ± 17**; with the first it rated 3236 ± 16, and with
+its hand-crafted evaluation 2782 ± 11. The weaker reference engines say little at this level,
+so the figures rest mostly on the two strongest.
 
 ## Download
 
