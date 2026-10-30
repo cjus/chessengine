@@ -706,8 +706,13 @@ less; that test is for a later network.
 
 v1.0.0's tag went on the commit its tests had run on, so `main` could move on: gen3 became the
 built-in network for v1.1 (cjus/chessengine#228), and the bench went from 701,720 nodes to
-767,812. Its gauntlet measures what the +53 is worth against other engines
-(cjus/chessengine#227).
+767,812. Its gauntlet (cjus/chessengine#227) rated it 3379 ± 21, 93 above gen2: more than the
+SPRT's +53, where gen2's gauntlet had shown only a third of its SPRT. Against Stash v27.0, the
+strongest reference engine, it scored 88.4%, where gen2 had scored 78.4%. One explanation,
+untested: self-play measures a network against a near-copy of itself, which shares its blind
+spots, while twice the data mostly taught gen3 to generalise (the smaller gap between its
+training and validation losses), which may count for more against engines unlike it. The
+figure is still blunt: five of the seven engines lost nearly every game, so it rests on two.
 
 ## Pitfalls
 
