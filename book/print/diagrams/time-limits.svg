@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 334" width="640" height="334" role="img" aria-labelledby="tm-t tm-d">
+<title id="tm-t">Depth 8 finished past the soft limit, so depth 9 was never started</title>
+<desc id="tm-d">A timeline from 0 to 9 seconds for a search from the starting position with 60 seconds left and a 1-second increment. Depths 5, 6 and 7 finish at 5, 40 and 194 milliseconds, all near the start. Depth 8 runs from 0.19 to 3.1 seconds, crossing the soft limit at 2.75 seconds, so depth 9, drawn dashed, is never started. The hard limit at 8.25 seconds is never reached.</desc>
+<style>
+  .hd { font: 700 13px "Helvetica Neue", Helvetica, Arial, sans-serif; letter-spacing: .08em; fill: #1F2937; }
+  .lbl { font: 400 14px "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #1F2937; }
+  .sm { font: 400 13px "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #4B5563; }
+  .cd { font: 400 14px "SF Mono", Menlo, Consolas, monospace; fill: #1F2937; }
+  .cds { font: 400 13px "SF Mono", Menlo, Consolas, monospace; fill: #1F2937; }
+  .note { font: italic 400 13px "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #4B5563; }
+  .bad { font: italic 400 13px "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #B4261E; }
+  .pc { font: 700 14px "Helvetica Neue", Helvetica, Arial, sans-serif; }
+  .coord { font: 400 13px "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #6B7280; }
+</style>
+<defs><marker id="tm-ar" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#6B7280"/></marker><marker id="tm-ari" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#1F2937"/></marker></defs>
+<rect width="640" height="334" fill="#FFFFFF"/>
+
+<path d="M235.0,48 V242" stroke="#C08A1E" stroke-width="2.5" stroke-dasharray="7 4"/>
+<text class="hd" x="229.0" y="40" text-anchor="end">SOFT LIMIT 2.75 s</text>
+<path d="M565.0,48 V242" stroke="#1F2937" stroke-width="2.5"/>
+<text class="hd" x="571.0" y="40" text-anchor="end">HARD 8.25 s</text>
+<text class="lbl" x="60" y="85" text-anchor="end">depth 5</text><rect x="70.0" y="70" width="2.0" height="20" fill="#EBF0F6" stroke="#2F5FA0" stroke-width="1.5"/><text class="sm" x="80.0" y="85">done at 5 ms</text><text class="lbl" x="60" y="117" text-anchor="end">depth 6</text><rect x="70.3" y="102" width="2.1000000000000085" height="20" fill="#EBF0F6" stroke="#2F5FA0" stroke-width="1.5"/><text class="sm" x="80.4" y="117">done at 40 ms</text><text class="lbl" x="60" y="149" text-anchor="end">depth 7</text><rect x="72.4" y="134" width="9.239999999999995" height="20" fill="#EBF0F6" stroke="#2F5FA0" stroke-width="1.5"/><text class="sm" x="89.64" y="149">done at 194 ms</text><text class="lbl" x="60" y="181" text-anchor="end">depth 8</text><rect x="81.64" y="166" width="174.12" height="20" fill="#EBF0F6" stroke="#2F5FA0" stroke-width="1.5"/><text class="sm" x="263.76" y="181">done at 3.1 s</text><text class="lbl" x="60" y="213" text-anchor="end">depth 9</text><rect x="255.76000000000002" y="198" width="354.24" height="20" fill="none" stroke="#6B7280" stroke-width="1.5" stroke-dasharray="5 4"/><text class="note" x="268.0" y="213">not started: it would take several times longer</text>
+<path d="M70,242 H610" stroke="#6B7280" stroke-width="1.5"/>
+<path d="M70.0,242 v6" stroke="#6B7280"/><text class="coord" x="70.0" y="264" text-anchor="middle">0 s</text><path d="M130.0,242 v6" stroke="#6B7280"/><text class="coord" x="130.0" y="264" text-anchor="middle">1 s</text><path d="M190.0,242 v6" stroke="#6B7280"/><text class="coord" x="190.0" y="264" text-anchor="middle">2 s</text><path d="M250.0,242 v6" stroke="#6B7280"/><text class="coord" x="250.0" y="264" text-anchor="middle">3 s</text><path d="M310.0,242 v6" stroke="#6B7280"/><text class="coord" x="310.0" y="264" text-anchor="middle">4 s</text><path d="M370.0,242 v6" stroke="#6B7280"/><text class="coord" x="370.0" y="264" text-anchor="middle">5 s</text><path d="M430.0,242 v6" stroke="#6B7280"/><text class="coord" x="430.0" y="264" text-anchor="middle">6 s</text><path d="M490.0,242 v6" stroke="#6B7280"/><text class="coord" x="490.0" y="264" text-anchor="middle">7 s</text><path d="M550.0,242 v6" stroke="#6B7280"/><text class="coord" x="550.0" y="264" text-anchor="middle">8 s</text><path d="M610.0,242 v6" stroke="#6B7280"/><text class="coord" x="610.0" y="264" text-anchor="middle">9 s</text>
+<text class="lbl" x="320" y="298" text-anchor="middle">After each depth: past the soft limit, don't start another. The hard limit</text>
+<text class="lbl" x="320" y="318" text-anchor="middle">stops a depth midway, and here was never needed. 60 s left, 1 s increment.</text>
+
+</svg>

@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 318" width="640" height="318" role="img" aria-labelledby="nn-t nn-d">
+<title id="nn-t">A move changes the accumulator by a few rows of weights instead of recomputing it</title>
+<desc id="nn-d">For the move knight g1 to f3, two rows of vectors. In White's view, the accumulator before, minus the weight row for our knight on g1, plus the row for our knight on f3, equals the accumulator after. In Black's view, with the board flipped, the same move subtracts the row for their knight on g8 and adds the row for their knight on f6. Both accumulators feed the SCReLU activation and the 512 output weights. Recomputing would add a row for every piece, up to 32 per view.</desc>
+<style>
+  .hd { font: 700 13px "Helvetica Neue", Helvetica, Arial, sans-serif; letter-spacing: .08em; fill: #1F2937; }
+  .lbl { font: 400 14px "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #1F2937; }
+  .sm { font: 400 13px "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #4B5563; }
+  .cd { font: 400 14px "SF Mono", Menlo, Consolas, monospace; fill: #1F2937; }
+  .cds { font: 400 13px "SF Mono", Menlo, Consolas, monospace; fill: #1F2937; }
+  .note { font: italic 400 13px "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #4B5563; }
+  .bad { font: italic 400 13px "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #B4261E; }
+  .pc { font: 700 14px "Helvetica Neue", Helvetica, Arial, sans-serif; }
+  .coord { font: 400 13px "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #6B7280; }
+</style>
+<defs><marker id="nn-ar" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#6B7280"/></marker><marker id="nn-ari" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#1F2937"/></marker></defs>
+<rect width="640" height="318" fill="#FFFFFF"/>
+
+<text class="lbl" x="320" y="28" text-anchor="middle">White plays Ng1–f3. Each view's 256 hidden values change by two rows of weights.</text>
+
+<text class="hd" x="30" y="70">WHITE'S VIEW</text>
+<rect x="30" y="84" width="14" height="22" fill="#EBF0F6" stroke="#2F5FA0" stroke-width="1.2"/><rect x="44" y="84" width="14" height="22" fill="#EBF0F6" stroke="#2F5FA0" stroke-width="1.2"/><rect x="58" y="84" width="14" height="22" fill="#EBF0F6" stroke="#2F5FA0" stroke-width="1.2"/><rect x="72" y="84" width="14" height="22" fill="#EBF0F6" stroke="#2F5FA0" stroke-width="1.2"/><rect x="86" y="84" width="14" height="22" fill="#EBF0F6" stroke="#2F5FA0" stroke-width="1.2"/><rect x="100" y="84" width="14" height="22" fill="#EBF0F6" stroke="#2F5FA0" stroke-width="1.2"/><text class="sm" x="72.0" y="124" text-anchor="middle">accumulator before</text>
+<text class="lbl" x="134" y="101" text-anchor="middle" style="font-size:20px">−</text>
+<rect x="148" y="84" width="14" height="22" fill="#FFFFFF" stroke="#6B7280" stroke-width="1.2" stroke-dasharray="4 3"/><rect x="162" y="84" width="14" height="22" fill="#FFFFFF" stroke="#6B7280" stroke-width="1.2" stroke-dasharray="4 3"/><rect x="176" y="84" width="14" height="22" fill="#FFFFFF" stroke="#6B7280" stroke-width="1.2" stroke-dasharray="4 3"/><rect x="190" y="84" width="14" height="22" fill="#FFFFFF" stroke="#6B7280" stroke-width="1.2" stroke-dasharray="4 3"/><rect x="204" y="84" width="14" height="22" fill="#FFFFFF" stroke="#6B7280" stroke-width="1.2" stroke-dasharray="4 3"/><rect x="218" y="84" width="14" height="22" fill="#FFFFFF" stroke="#6B7280" stroke-width="1.2" stroke-dasharray="4 3"/><text class="sm" x="190.0" y="124" text-anchor="middle">row: our N on g1</text>
+<text class="lbl" x="252" y="101" text-anchor="middle" style="font-size:20px">+</text>
+<rect x="266" y="84" width="14" height="22" fill="#F7D9A5" stroke="#C08A1E" stroke-width="1.2"/><rect x="280" y="84" width="14" height="22" fill="#F7D9A5" stroke="#C08A1E" stroke-width="1.2"/><rect x="294" y="84" width="14" height="22" fill="#F7D9A5" stroke="#C08A1E" stroke-width="1.2"/><rect x="308" y="84" width="14" height="22" fill="#F7D9A5" stroke="#C08A1E" stroke-width="1.2"/><rect x="322" y="84" width="14" height="22" fill="#F7D9A5" stroke="#C08A1E" stroke-width="1.2"/><rect x="336" y="84" width="14" height="22" fill="#F7D9A5" stroke="#C08A1E" stroke-width="1.2"/><text class="sm" x="308.0" y="124" text-anchor="middle">row: our N on f3</text>
+<text class="lbl" x="370" y="101" text-anchor="middle" style="font-size:20px">=</text>
+<rect x="384" y="84" width="14" height="22" fill="#EBF0F6" stroke="#2F5FA0" stroke-width="1.2"/><rect x="398" y="84" width="14" height="22" fill="#EBF0F6" stroke="#2F5FA0" stroke-width="1.2"/><rect x="412" y="84" width="14" height="22" fill="#EBF0F6" stroke="#2F5FA0" stroke-width="1.2"/><rect x="426" y="84" width="14" height="22" fill="#EBF0F6" stroke="#2F5FA0" stroke-width="1.2"/><rect x="440" y="84" width="14" height="22" fill="#EBF0F6" stroke="#2F5FA0" stroke-width="1.2"/><rect x="454" y="84" width="14" height="22" fill="#EBF0F6" stroke="#2F5FA0" stroke-width="1.2"/><text class="sm" x="426.0" y="124" text-anchor="middle">accumulator after</text>
+
+
+<text class="hd" x="30" y="156">BLACK'S VIEW (BOARD FLIPPED)</text>
+<rect x="30" y="170" width="14" height="22" fill="#EBF0F6" stroke="#2F5FA0" stroke-width="1.2"/><rect x="44" y="170" width="14" height="22" fill="#EBF0F6" stroke="#2F5FA0" stroke-width="1.2"/><rect x="58" y="170" width="14" height="22" fill="#EBF0F6" stroke="#2F5FA0" stroke-width="1.2"/><rect x="72" y="170" width="14" height="22" fill="#EBF0F6" stroke="#2F5FA0" stroke-width="1.2"/><rect x="86" y="170" width="14" height="22" fill="#EBF0F6" stroke="#2F5FA0" stroke-width="1.2"/><rect x="100" y="170" width="14" height="22" fill="#EBF0F6" stroke="#2F5FA0" stroke-width="1.2"/><text class="sm" x="72.0" y="210" text-anchor="middle">accumulator before</text>
+<text class="lbl" x="134" y="187" text-anchor="middle" style="font-size:20px">−</text>
+<rect x="148" y="170" width="14" height="22" fill="#FFFFFF" stroke="#6B7280" stroke-width="1.2" stroke-dasharray="4 3"/><rect x="162" y="170" width="14" height="22" fill="#FFFFFF" stroke="#6B7280" stroke-width="1.2" stroke-dasharray="4 3"/><rect x="176" y="170" width="14" height="22" fill="#FFFFFF" stroke="#6B7280" stroke-width="1.2" stroke-dasharray="4 3"/><rect x="190" y="170" width="14" height="22" fill="#FFFFFF" stroke="#6B7280" stroke-width="1.2" stroke-dasharray="4 3"/><rect x="204" y="170" width="14" height="22" fill="#FFFFFF" stroke="#6B7280" stroke-width="1.2" stroke-dasharray="4 3"/><rect x="218" y="170" width="14" height="22" fill="#FFFFFF" stroke="#6B7280" stroke-width="1.2" stroke-dasharray="4 3"/><text class="sm" x="190.0" y="210" text-anchor="middle">row: their N on g8</text>
+<text class="lbl" x="252" y="187" text-anchor="middle" style="font-size:20px">+</text>
+<rect x="266" y="170" width="14" height="22" fill="#F7D9A5" stroke="#C08A1E" stroke-width="1.2"/><rect x="280" y="170" width="14" height="22" fill="#F7D9A5" stroke="#C08A1E" stroke-width="1.2"/><rect x="294" y="170" width="14" height="22" fill="#F7D9A5" stroke="#C08A1E" stroke-width="1.2"/><rect x="308" y="170" width="14" height="22" fill="#F7D9A5" stroke="#C08A1E" stroke-width="1.2"/><rect x="322" y="170" width="14" height="22" fill="#F7D9A5" stroke="#C08A1E" stroke-width="1.2"/><rect x="336" y="170" width="14" height="22" fill="#F7D9A5" stroke="#C08A1E" stroke-width="1.2"/><text class="sm" x="308.0" y="210" text-anchor="middle">row: their N on f6</text>
+<text class="lbl" x="370" y="187" text-anchor="middle" style="font-size:20px">=</text>
+<rect x="384" y="170" width="14" height="22" fill="#EBF0F6" stroke="#2F5FA0" stroke-width="1.2"/><rect x="398" y="170" width="14" height="22" fill="#EBF0F6" stroke="#2F5FA0" stroke-width="1.2"/><rect x="412" y="170" width="14" height="22" fill="#EBF0F6" stroke="#2F5FA0" stroke-width="1.2"/><rect x="426" y="170" width="14" height="22" fill="#EBF0F6" stroke="#2F5FA0" stroke-width="1.2"/><rect x="440" y="170" width="14" height="22" fill="#EBF0F6" stroke="#2F5FA0" stroke-width="1.2"/><rect x="454" y="170" width="14" height="22" fill="#EBF0F6" stroke="#2F5FA0" stroke-width="1.2"/><text class="sm" x="426.0" y="210" text-anchor="middle">accumulator after</text>
+
+<path d="M492,99 H520 V170 H492" stroke="#6B7280" stroke-width="1.5" fill="none"/>
+<path d="M520,134 H540" stroke="#6B7280" stroke-width="2" marker-end="url(#nn-ar)"/>
+<rect x="546" y="104" width="78" height="60" rx="5" fill="#F9FAFB" stroke="#D1D5DB" stroke-width="1.5"/>
+<text class="sm" x="585" y="126" text-anchor="middle" style="fill:#1F2937">SCReLU,</text>
+<text class="sm" x="585" y="143" text-anchor="middle" style="fill:#1F2937">512 output</text>
+<text class="sm" x="585" y="159" text-anchor="middle" style="fill:#1F2937">weights</text>
+<text class="note" x="30" y="252">Columns shown: 6 of the 256. Rows of the same 768 × 256 weights serve both views.</text>
+<text class="lbl" x="30" y="282">Recomputing adds a row for every piece on the board, up to 32 per view.</text>
+<text class="lbl" x="30" y="302">A quiet move takes one row off and puts one on; a capture takes two off; castling, two of each.</text>
+
+</svg>

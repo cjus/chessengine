@@ -1,0 +1,12 @@
+{
+  "subtitle": "How cb2026 works, one technique at a time, from an empty board to master strength",
+  "byline": "The cb2026 authors",
+  "description": [
+    "Every chapter matches a stage of the engine's development and a git tag in the repository (`stage-01-board`, `stage-02-movegen`, ...), so you can check out any stage, run it, change it and measure the result.",
+    "Each chapter gives the idea, the real source, how it is tested, what it was worth in Elo, and where to read further. Chapters numbered with a decimal, such as 6.1 or 14.2, came after stage 20, as strength work towards version 1.0."
+  ],
+  "footnote": "Bound from book/src in github.com/cjus/chessengine at commit {commit}. The code excerpts are the source at that commit.",
+  "contents_note": "Chapters 1 to 21 follow the engine's stages; decimal chapters came later and sit beside the stage they build on.",
+  "code_wrap": true,
+  "code_pt": 8
+}

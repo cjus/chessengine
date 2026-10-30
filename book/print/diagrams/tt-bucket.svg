@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 380" width="640" height="380" role="img" aria-labelledby="tb-t tb-d">
+<title id="tb-t">A probe that misses the cache fetches a whole line of eight slots; buckets use all of them</title>
+<desc id="tb-d">Two rows, each showing a 128-byte cache line divided into eight 16-byte slots. Top row, buckets off: the key picks slot 5, which is read; the other seven are fetched but unused. Bottom row, buckets on: the key picks the whole line and all eight slots are read, at little extra cost since the line is already in the cache. A store goes to the slot with the same position, an empty slot, or the slot worth least, its depth less 8 for each search since it was stored.</desc>
+<style>
+  .hd { font: 700 13px "Helvetica Neue", Helvetica, Arial, sans-serif; letter-spacing: .08em; fill: #1F2937; }
+  .lbl { font: 400 14px "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #1F2937; }
+  .sm { font: 400 13px "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #4B5563; }
+  .cd { font: 400 14px "SF Mono", Menlo, Consolas, monospace; fill: #1F2937; }
+  .cds { font: 400 13px "SF Mono", Menlo, Consolas, monospace; fill: #1F2937; }
+  .note { font: italic 400 13px "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #4B5563; }
+  .bad { font: italic 400 13px "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #B4261E; }
+  .pc { font: 700 14px "Helvetica Neue", Helvetica, Arial, sans-serif; }
+  .coord { font: 400 13px "Helvetica Neue", Helvetica, Arial, sans-serif; fill: #6B7280; }
+</style>
+<defs><marker id="tb-ar" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#6B7280"/></marker><marker id="tb-ari" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0,0 L10,4 L0,8 z" fill="#1F2937"/></marker></defs>
+<rect width="640" height="380" fill="#FFFFFF"/>
+
+<text class="lbl" x="320" y="30" text-anchor="middle">One 128-byte cache line, as Apple Silicon fetches it: eight 16-byte slots.</text>
+<text class="hd" x="34" y="72">BUCKETS OFF (CHAPTER 8): THE KEY PICKS ONE SLOT</text>
+<rect x="34" y="80" width="572" height="58" rx="6" fill="#F9FAFB" stroke="#D1D5DB" stroke-width="1.5"/>
+<rect x="43" y="86" width="64" height="46" rx="3" fill="#FFFFFF" stroke="#6B7280" stroke-width="1.5" stroke-dasharray="4 3"/>
+<text class="sm" x="75.0" y="106" text-anchor="middle">slot 0</text><text class="sm" x="75.0" y="123" text-anchor="middle">unused</text>
+<rect x="113" y="86" width="64" height="46" rx="3" fill="#FFFFFF" stroke="#6B7280" stroke-width="1.5" stroke-dasharray="4 3"/>
+<text class="sm" x="145.0" y="106" text-anchor="middle">slot 1</text><text class="sm" x="145.0" y="123" text-anchor="middle">unused</text>
+<rect x="183" y="86" width="64" height="46" rx="3" fill="#FFFFFF" stroke="#6B7280" stroke-width="1.5" stroke-dasharray="4 3"/>
+<text class="sm" x="215.0" y="106" text-anchor="middle">slot 2</text><text class="sm" x="215.0" y="123" text-anchor="middle">unused</text>
+<rect x="253" y="86" width="64" height="46" rx="3" fill="#FFFFFF" stroke="#6B7280" stroke-width="1.5" stroke-dasharray="4 3"/>
+<text class="sm" x="285.0" y="106" text-anchor="middle">slot 3</text><text class="sm" x="285.0" y="123" text-anchor="middle">unused</text>
+<rect x="323" y="86" width="64" height="46" rx="3" fill="#FFFFFF" stroke="#6B7280" stroke-width="1.5" stroke-dasharray="4 3"/>
+<text class="sm" x="355.0" y="106" text-anchor="middle">slot 4</text><text class="sm" x="355.0" y="123" text-anchor="middle">unused</text>
+<rect x="393" y="86" width="64" height="46" rx="3" fill="#F7D9A5" stroke="#C08A1E" stroke-width="2"/>
+<text class="sm" x="425.0" y="106" text-anchor="middle" style="fill:#1F2937">slot 5</text><text class="sm" x="425.0" y="123" text-anchor="middle" style="fill:#1F2937">read</text>
+<rect x="463" y="86" width="64" height="46" rx="3" fill="#FFFFFF" stroke="#6B7280" stroke-width="1.5" stroke-dasharray="4 3"/>
+<text class="sm" x="495.0" y="106" text-anchor="middle">slot 6</text><text class="sm" x="495.0" y="123" text-anchor="middle">unused</text>
+<rect x="533" y="86" width="64" height="46" rx="3" fill="#FFFFFF" stroke="#6B7280" stroke-width="1.5" stroke-dasharray="4 3"/>
+<text class="sm" x="565.0" y="106" text-anchor="middle">slot 7</text><text class="sm" x="565.0" y="123" text-anchor="middle">unused</text>
+<text class="note" x="34" y="166">A miss waits for memory, which delivers all eight slots; the probe reads one.</text>
+<text class="hd" x="34" y="214">BUCKETS ON: THE KEY PICKS THE LINE</text>
+<rect x="34" y="222" width="572" height="58" rx="6" fill="#F9FAFB" stroke="#D1D5DB" stroke-width="1.5"/>
+<rect x="43" y="228" width="64" height="46" rx="3" fill="#F7D9A5" stroke="#C08A1E" stroke-width="2"/>
+<text class="sm" x="75.0" y="248" text-anchor="middle" style="fill:#1F2937">slot 0</text><text class="sm" x="75.0" y="265" text-anchor="middle" style="fill:#1F2937">read</text>
+<rect x="113" y="228" width="64" height="46" rx="3" fill="#F7D9A5" stroke="#C08A1E" stroke-width="2"/>
+<text class="sm" x="145.0" y="248" text-anchor="middle" style="fill:#1F2937">slot 1</text><text class="sm" x="145.0" y="265" text-anchor="middle" style="fill:#1F2937">read</text>
+<rect x="183" y="228" width="64" height="46" rx="3" fill="#F7D9A5" stroke="#C08A1E" stroke-width="2"/>
+<text class="sm" x="215.0" y="248" text-anchor="middle" style="fill:#1F2937">slot 2</text><text class="sm" x="215.0" y="265" text-anchor="middle" style="fill:#1F2937">read</text>
+<rect x="253" y="228" width="64" height="46" rx="3" fill="#F7D9A5" stroke="#C08A1E" stroke-width="2"/>
+<text class="sm" x="285.0" y="248" text-anchor="middle" style="fill:#1F2937">slot 3</text><text class="sm" x="285.0" y="265" text-anchor="middle" style="fill:#1F2937">read</text>
+<rect x="323" y="228" width="64" height="46" rx="3" fill="#F7D9A5" stroke="#C08A1E" stroke-width="2"/>
+<text class="sm" x="355.0" y="248" text-anchor="middle" style="fill:#1F2937">slot 4</text><text class="sm" x="355.0" y="265" text-anchor="middle" style="fill:#1F2937">read</text>
+<rect x="393" y="228" width="64" height="46" rx="3" fill="#F7D9A5" stroke="#C08A1E" stroke-width="2"/>
+<text class="sm" x="425.0" y="248" text-anchor="middle" style="fill:#1F2937">slot 5</text><text class="sm" x="425.0" y="265" text-anchor="middle" style="fill:#1F2937">read</text>
+<rect x="463" y="228" width="64" height="46" rx="3" fill="#F7D9A5" stroke="#C08A1E" stroke-width="2"/>
+<text class="sm" x="495.0" y="248" text-anchor="middle" style="fill:#1F2937">slot 6</text><text class="sm" x="495.0" y="265" text-anchor="middle" style="fill:#1F2937">read</text>
+<rect x="533" y="228" width="64" height="46" rx="3" fill="#F7D9A5" stroke="#C08A1E" stroke-width="2"/>
+<text class="sm" x="565.0" y="248" text-anchor="middle" style="fill:#1F2937">slot 7</text><text class="sm" x="565.0" y="265" text-anchor="middle" style="fill:#1F2937">read</text>
+<text class="note" x="34" y="308">The other seven reads cost a few instructions each: the line is already in cache.</text>
+<text class="lbl" x="34" y="342">A store takes the slot holding this position, else an empty one, else the</text>
+<text class="lbl" x="34" y="362">one worth least: depth − 8 × searches since it was stored.</text>
+
+</svg>

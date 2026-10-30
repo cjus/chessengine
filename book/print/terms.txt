@@ -1,0 +1,187 @@
+# Curated index for "Building a Chess Engine in Rust".
+# Bare terms match case-insensitively with plurals and hyphens; ! is case-sensitive.
+
+# Part I: the rules of chess
+bitboard
+mailbox
+!FEN
+!X-FEN
+Shredder-FEN
+Chess960
+castling rights
+en passant
+check mask
+pin | \bpin(?:s|ned)?\b
+pseudo-legal
+legal move generation | \blegal moves?\b
+perft
+divide | \bdivide\b
+bulk counting
+copy-make | \bcopy\W{0,3}make\b
+magic bitboards
+magic number
+!PEXT
+black magics
+Zobrist hashing | \bZobrist\b
+!SAN
+!UCI
+XBoard
+!CECP
+Engine API
+
+# Part II: searching
+minimax
+negamax
+alpha-beta
+beta cutoff
+centipawn
+mate score
+repetition
+fifty-move rule
+bench
+iterative deepening
+effective branching factor
+soft limit
+hard limit
+!Move Overhead
+best-move stability | \bbest[- ]move stability\b
+horizon effect
+quiescence search
+stand pat
+!MVV-LVA
+seldepth
+transposition table
+TT cutoff
+lower bound
+upper bound
+replacement strategy
+graph history interaction
+hashfull
+cache line
+bucket
+piece-square table
+tapered evaluation
+game phase
+killer move | \bkillers?( moves?)?\b
+countermove
+history heuristic
+history table
+gravity
+move picker
+staged generation
+continuation history
+capture history
+principal variation search
+principal variation
+null window
+aspiration window
+search instability
+fail high | \bfails? high\b
+fail low | \bfails? low\b
+null-move pruning
+zugzwang
+verification search
+ProbCut
+late move reductions
+!LMR
+late move pruning
+!LMP
+history pruning
+static exchange evaluation
+!SEE
+x-ray
+reverse futility pruning
+razoring
+futility pruning
+delta pruning
+check extension
+singular extension
+!singular_beta
+multi-cut
+negative extension
+double extension
+internal iterative reductions
+!IIR
+internal iterative deepening
+improving | \bimproving\b
+cut node
+all-node
+!ttPv
+cutoff count | \bmany fail highs\b
+correction history
+pawn key
+
+# Part III: evaluation
+hand-crafted evaluation
+mobility
+doubled pawn
+isolated pawn
+passed pawn
+bishop pair
+open file
+king safety
+pawn shield
+king zone
+tempo
+Texel tuning | \bTexel\b
+sigmoid
+overfitting
+regularisation
+validation set
+Adam | \bAdamW?\b
+gradient
+
+# Part IV: a complete engine
+Lazy SMP
+lockless hashing
+helper thread
+Syzygy
+!WDL
+!DTZ
+cursed win
+blessed loss
+tablebase
+!shakmaty-syzygy
+Polyglot
+opening book
+Lichess
+strength level | \b(?:strength|skill) levels?\b
+!MultiPV
+!UCI_Elo
+person's horizon
+blunder
+pondering
+ponder hit | \bponder ?hits?\b
+feature negotiation
+conformance tests
+lichess-bot
+
+# Part V: neural networks
+!NNUE
+accumulator
+!SCReLU
+!CReLU
+eval scale
+king buckets
+marlinformat
+balanced starts
+epoch
+!WGSL
+wgpu
+kernel
+workgroup
+counting sort
+
+# Testing and sources
+!SPRT
+!Elo
+!LLR
+gauntlet
+self-play
+Kiwipete
+Stockfish
+Caissa
+Fruit
+Crafty
+Deep Thought
+Chess Programming Wiki
