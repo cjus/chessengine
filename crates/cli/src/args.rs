@@ -12,7 +12,7 @@ pub enum Command {
     /// network in this file, or with none (`none`, the hand-crafted evaluation), if given; with
     /// the built-in network otherwise.
     Bench(Option<String>),
-    /// Print the engine name and version.
+    /// Print the engine name and version, with the commit it was built from.
     Version,
     /// Print usage.
     Help,

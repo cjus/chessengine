@@ -5,7 +5,9 @@
 //! Where UCI sends a position and `go`, CNP sends one request that carries everything: the
 //! position, its limits, a level, which techniques are on, root moves, MultiPV. Every answer
 //! says whether a score is exact, and the engine's techniques and levels can be listed, and a
-//! position's evaluation had term by term (`engine/evaluate`).
+//! position's evaluation had term by term (`engine/evaluate`). Its `initialize` names the
+//! version with the commit it was built from ([`build_version`], `1.0.0+f1638bcb6851`), so a
+//! client that keeps what the engine said, as Solrac's game review does, can tell builds apart.
 //! `cb2026 --cnp` speaks it, and so does a plain `cb2026` whose first input line is JSON.
 //!
 //! ```text
@@ -78,7 +80,7 @@ use cb2026_engine::eval::{self, EvalParams, MAX_PHASE};
 use cb2026_engine::levels::{ELO_RANGE, FULL_STRENGTH, RATINGS};
 use cb2026_engine::search::MAX_PLY;
 use cb2026_engine::tablebase::TablebaseLoader;
-use cb2026_engine::{AUTHOR, Engine, Limits, NAME, Score, SearchInfo, SearchResult, VERSION};
+use cb2026_engine::{AUTHOR, Engine, Limits, NAME, Score, SearchInfo, SearchResult, build_version};
 use cb2026_shell::SWITCHES;
 use cnp::engine::{
     EloRange, EngineCapabilities, EngineProgress, Evaluate, EvaluateParams, EvaluateResult, Level,
@@ -370,7 +372,7 @@ impl Node {
             protocol,
             node: NodeInfo {
                 name: NAME.to_string(),
-                version: VERSION.to_string(),
+                version: build_version(),
                 author: Some(AUTHOR.to_string()),
                 license: self.config.license.to_string(),
                 source: Some(SOURCE.to_string()),

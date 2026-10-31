@@ -24,7 +24,8 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args::parse(&args) {
         Ok(Command::Version) => {
-            println!("{}", cb2026_engine::id_name());
+            // With the commit, so a build can be told from another of the same version.
+            println!("{} {}", cb2026_engine::NAME, cb2026_engine::build_version());
             ExitCode::SUCCESS
         }
         Ok(Command::Help) => {
