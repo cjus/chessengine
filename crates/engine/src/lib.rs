@@ -233,6 +233,36 @@ impl Limits {
             ..Limits::default()
         }
     }
+
+    // ANCHOR: pondering
+    /// What a ponder search searches with until its hit: these limits' depth, node and mate
+    /// limits, but no time, since a ponder search's time and clock only count from the hit
+    /// (the opponent's time is free). A depth or node limit it reaches before the hit ends the
+    /// search early and it waits: the hit would end it at once anyway. With no such limit it
+    /// searches as deep as it can.
+    ///
+    /// Not `infinite`, which means analysis: at a strength level, an infinite search leaves out
+    /// the level's horizon (see [`levels`]), and a pondered move would be stronger than the
+    /// level. The caller still has to wait for the hit before it answers, since the search may
+    /// end early.
+    pub fn pondering(&self) -> Limits {
+        let mut pondering = Limits {
+            movetime: None,
+            time: [None; 2],
+            increment: [None; 2],
+            moves_to_go: None,
+            ..self.clone()
+        };
+        if !pondering.infinite
+            && pondering.depth.is_none()
+            && pondering.nodes.is_none()
+            && pondering.mate.is_none()
+        {
+            pondering.depth = Some(MAX_PLY);
+        }
+        pondering
+    }
+    // ANCHOR_END: pondering
 }
 
 /// A search score.
@@ -981,6 +1011,34 @@ mod tests {
             float.output_weights[5 + t] = -worth;
         }
         float.quantize().unwrap()
+    }
+
+    #[test]
+    fn a_ponder_search_keeps_its_depth_and_node_limits_but_no_time() {
+        let clock = Limits {
+            movetime: Some(Duration::from_secs(1)),
+            time: [Some(Duration::from_secs(60)); 2],
+            increment: [Some(Duration::from_secs(1)); 2],
+            moves_to_go: Some(20),
+            ..Limits::default()
+        };
+        let limits = clock.pondering();
+        assert_eq!(
+            (limits.movetime, limits.time, limits.moves_to_go),
+            (None, [None; 2], None)
+        );
+        // With nothing else to stop it, as deep as it can.
+        assert_eq!(limits.depth, Some(MAX_PLY));
+        // Its depth, node and mate limits stay: reaching one before the hit, it waits.
+        let deep = Limits {
+            nodes: Some(5000),
+            ..clock.clone()
+        };
+        assert_eq!(deep.pondering().depth, None);
+        assert_eq!(deep.pondering().nodes, Some(5000));
+        assert_eq!(Limits::depth(7).pondering().depth, Some(7));
+        // Never infinite unless asked to be: that would leave out a level's horizon.
+        assert!(!clock.pondering().infinite);
     }
 
     #[test]

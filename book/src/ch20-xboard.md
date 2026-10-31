@@ -128,6 +128,35 @@ clears the ponder flag and starts the timer, as in UCI, and the same search goes
 the next move. A miss stops the thread without a move and starts a fresh search. Each search
 gets its own stop flag, so a timer left over from one search can never stop the next.
 
+### In the Chess Node Protocol
+
+Solrac Chess AI talks to cb2026 through the Chess Node Protocol (CNP, `crates/cnp`), which
+ponders as UCI does with JSON messages. A search with `"ponder": true` has the expected reply
+already played, and the limits it should keep to once that reply is on the board, the clock
+included. Until `engine/ponderHit` it keeps to none of them and doesn't answer. On a miss the
+client cancels it and sends the real position.
+
+cb2026's node gives the engine the search's depth, node and mate limits but no time. It
+doesn't make the search `infinite`, as UCI and XBoard do: that means analysis, and at a
+strength level an infinite search leaves out the level's horizon, so a pondered move would be
+stronger than the level:
+
+```rust,ignore
+{{#include ../../crates/engine/src/lib.rs:pondering}}
+```
+
+The time is left to the watchdog thread that every CNP search has. The hit records the moment
+it came, and the watchdog stops the search once the time manager's budget has passed since
+then:
+
+```rust,ignore
+{{#include ../../crates/cnp/src/lib.rs:ponder}}
+```
+
+A depth limit reached before the hit doesn't waste the wait: the search has stopped and is
+only waiting, so the hit answers at once, as the protocol asks. The answer says how much of
+its time was pondering (`ponderMs`), so a client can see what the head start was worth.
+
 ## Conformance tests: standing in for the GUIs
 
 Every GUI drives engines a little differently, and the differences are where engines break.

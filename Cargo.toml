@@ -41,8 +41,8 @@ cb2026-tools = { path = "crates/tools" }
 cb2026-trainer = { path = "crates/trainer" }
 # The Chess Node Protocol, how Solrac talks to cb2026 (`crates/cnp`), and its conformance
 # sessions (Solrac Chess AI #98). Pinned to a commit; bump both together.
-cnp = { git = "https://github.com/cjus/chess-node-protocol", rev = "bafda928d0298267ebd86d753bda78f54138770c" }
-cnp-conformance = { git = "https://github.com/cjus/chess-node-protocol", rev = "bafda928d0298267ebd86d753bda78f54138770c" }
+cnp = { git = "https://github.com/cjus/chess-node-protocol", rev = "968e7770a7d1021a243f4ddef1f87d64e78355cb" }
+cnp-conformance = { git = "https://github.com/cjus/chess-node-protocol", rev = "968e7770a7d1021a243f4ddef1f87d64e78355cb" }
 
 # Lints shared by every crate (each crate opts in with `[lints] workspace = true`).
 [workspace.lints.rust]
