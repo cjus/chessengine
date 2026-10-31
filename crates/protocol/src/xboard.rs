@@ -678,6 +678,10 @@ mod tests {
         }
     }
 
+    /// How long [`session_until_move`] waits for the engine's move: far longer than a search
+    /// to a small depth takes, even in a debug build on a busy machine.
+    const MOVE_DEADLINE: Duration = Duration::from_secs(120);
+
     /// Runs a script, waiting `pause` milliseconds after each line so searches can finish.
     fn session(script: &[&str], pause: u64) -> Vec<String> {
         let captured = Captured::default();
@@ -689,12 +693,38 @@ mod tests {
             thread::sleep(Duration::from_millis(pause));
         }
         session.stop_search();
-        let bytes = captured.0.lock().unwrap().clone();
-        String::from_utf8(bytes)
-            .unwrap()
-            .lines()
-            .map(str::to_string)
-            .collect()
+        captured.lines()
+    }
+
+    /// Runs a script, then waits for the engine's `move` line (up to [`MOVE_DEADLINE`]) rather
+    /// than a fixed pause, which a search can overrun (cjus/chessengine#225): a stopped search
+    /// sends no move.
+    fn session_until_move(script: &[&str]) -> Vec<String> {
+        let captured = Captured::default();
+        let mut session = Session::new(Box::new(captured.clone()), Engine::new());
+        for line in script {
+            if !session.handle(line) {
+                break;
+            }
+        }
+        let deadline = std::time::Instant::now() + MOVE_DEADLINE;
+        while moves(&captured.lines()).is_empty() && std::time::Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(10));
+        }
+        session.stop_search();
+        captured.lines()
+    }
+
+    impl Captured {
+        /// What the session has written so far, line by line.
+        fn lines(&self) -> Vec<String> {
+            let bytes = self.0.lock().unwrap().clone();
+            String::from_utf8(bytes)
+                .unwrap()
+                .lines()
+                .map(str::to_string)
+                .collect()
+        }
     }
 
     fn moves(lines: &[String]) -> Vec<String> {
@@ -784,10 +814,7 @@ mod tests {
 
     #[test]
     fn multipv_sends_each_depths_lines_best_last() {
-        let lines = session(
-            &["new", "force", "option MultiPV=3", "post", "sd 5", "go"],
-            1000,
-        );
+        let lines = session_until_move(&["new", "force", "option MultiPV=3", "post", "sd 5", "go"]);
         let played = moves(&lines);
         assert_eq!(played.len(), 1, "{lines:?}");
         // Thinking lines (depth score time nodes pv), grouped by depth in the order sent.
