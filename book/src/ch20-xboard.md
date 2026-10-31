@@ -102,7 +102,7 @@ cores), which is why the `match` tool leaves it off.
 ### In UCI
 
 The GUI manages pondering. After `bestmove e7e5 ponder g1f3` it sends
-`position ... e7e5 g1f3` and `go ponder wtime ...`. The engine searches as if with no limit
+`position ... e7e5 g1f3` and `go ponder wtime ...`. The engine searches with no time limit
 until either `ponderhit` (the opponent played g1f3: switch to the real clock) or `stop` (they
 didn't: report a move, which the GUI ignores, and wait for a new `position`):
 
@@ -110,22 +110,38 @@ didn't: report a move, which the GUI ignores, and wait for a new `position`):
 {{#include ../../crates/protocol/src/uci.rs:ponder}}
 ```
 
+The search keeps its other limits. `Limits::pondering` drops the clock and keeps the depth,
+node and mate limits; with none of those it searches as deep as it can:
+
+```rust,ignore
+{{#include ../../crates/engine/src/lib.rs:pondering}}
+```
+
+It would be simpler to make the ponder search `infinite`, and cb2026 did until #241. But
+`infinite` means analysis, and at a strength level an infinite search leaves out the level's
+horizon (chapter 19): a level that ponders would play every move after a ponder hit without
+the person's horizon, and so above its rating. A search that ends early, at a depth limit or
+at the horizon, just waits for `ponderhit`; so does one whose move came from the opening book,
+which a ponder search now consults as any game search does.
+
 On `ponderhit` a timer starts with the time the search would have been given for this move.
-The pondering time is a bonus on top, not counted against it.
+The pondering time is a bonus on top, not counted against it. Without a clock, a depth, node
+or mate limit ends the search by itself.
 
 ### In XBoard
 
 XBoard leaves pondering to the engine: `hard` turns it on, `easy` off. After printing its
 move, cb2026's search thread carries on by itself. It plays the expected reply on its own
-board and searches with no limit:
+board and searches it with the move's limits less the clock (`Limits::pondering`), so `sd`
+still holds:
 
 ```rust,ignore
 {{#include ../../crates/protocol/src/xboard.rs:ponder}}
 ```
 
 When the opponent's `usermove` arrives, the session compares it with the expected move. A hit
-clears the ponder flag and starts the timer, as in UCI, and the same search goes on to produce
-the next move. A miss stops the thread without a move and starts a fresh search. Each search
+clears the ponder flag and starts the timer, as in UCI (with `sd` and no clock, the search ends
+at that depth by itself), and the same search goes on to produce the next move. A miss stops the thread without a move and starts a fresh search. Each search
 gets its own stop flag, so a timer left over from one search can never stop the next.
 
 ### In the Chess Node Protocol
@@ -136,16 +152,7 @@ already played, and the limits it should keep to once that reply is on the board
 included. Until `engine/ponderHit` it keeps to none of them and doesn't answer. On a miss the
 client cancels it and sends the real position.
 
-cb2026's node gives the engine the search's depth, node and mate limits but no time. It
-doesn't make the search `infinite`, as UCI and XBoard do: that means analysis, and at a
-strength level an infinite search leaves out the level's horizon, so a pondered move would be
-stronger than the level:
-
-```rust,ignore
-{{#include ../../crates/engine/src/lib.rs:pondering}}
-```
-
-The time is left to the watchdog thread that every CNP search has. The hit records the moment
+cb2026's node searches with `Limits::pondering`, as UCI and XBoard do. The time is left to the watchdog thread that every CNP search has. The hit records the moment
 it came, and the watchdog stops the search once the time manager's budget has passed since
 then:
 

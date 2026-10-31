@@ -535,10 +535,9 @@ impl Session {
                 }
                 shared.pondering = Some(reply);
                 shared.stop = Arc::new(AtomicBool::new(false));
-                limits = Limits {
-                    infinite: true,
-                    ..Limits::default()
-                };
+                // No time until the hit, but the depth limit (`sd`) stays; and not `infinite`,
+                // which means analysis and would leave out a strength level's horizon.
+                limits = limits.pondering();
             }
             // ANCHOR_END: ponder
             engine
@@ -572,15 +571,13 @@ impl Session {
         let mut shared = lock(&search.shared);
         shared.pondering = None;
         let stop = Arc::clone(&shared.stop);
-        match time::budget(&limits, side, &search.time_params).soft {
-            Some(time) => {
-                thread::spawn(move || {
-                    thread::sleep(time);
-                    stop.store(true, Ordering::Relaxed);
-                });
-            }
-            // A depth limit and no clock: the ponder search has gone deep enough.
-            None => stop.store(true, Ordering::Relaxed),
+        // With no clock there is a depth limit (`limits` gives a second otherwise), and the
+        // ponder search kept it: it ends there by itself.
+        if let Some(time) = time::budget(&limits, side, &search.time_params).soft {
+            thread::spawn(move || {
+                thread::sleep(time);
+                stop.store(true, Ordering::Relaxed);
+            });
         }
     }
 
@@ -861,6 +858,34 @@ mod tests {
             thread::sleep(Duration::from_millis(10));
         }
         false
+    }
+
+    #[test]
+    fn a_ponder_search_keeps_the_depth_limit() {
+        // With `sd 2` and no clock, the ponder search stops at depth 2, as the move's search
+        // did, rather than searching on as an infinite search would; the hit then plays.
+        let captured = Captured::default();
+        let mut session = Session::new(Box::new(captured.clone()), Engine::new());
+        let output = || String::from_utf8(captured.0.lock().unwrap().clone()).unwrap();
+        let played = || output().lines().filter(|l| l.starts_with("move ")).count();
+        for line in ["new", "hard", "post", "sd 2", "usermove e2e4"] {
+            session.handle(line);
+        }
+        assert!(wait_until(|| played() == 1));
+        session.handle("ping 1");
+        let expected = session.pondering().expect("pondering after its move");
+        thread::sleep(Duration::from_millis(500));
+        let text = output();
+        let after_move = text.split("move ").nth(1).unwrap();
+        let depths: Vec<u32> = after_move
+            .lines()
+            .skip(1)
+            .filter_map(|l| l.split(' ').next()?.parse().ok())
+            .collect();
+        assert!(!depths.is_empty(), "no thinking while pondering: {text}");
+        assert!(depths.iter().all(|&d| d <= 2), "past sd 2: {depths:?}");
+        session.handle(&format!("usermove {}", expected.to_uci(false)));
+        assert!(wait_until(|| played() == 2), "{}", output());
     }
 
     #[test]

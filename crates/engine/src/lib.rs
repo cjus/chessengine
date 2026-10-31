@@ -244,7 +244,7 @@ impl Limits {
     /// Not `infinite`, which means analysis: at a strength level, an infinite search leaves out
     /// the level's horizon (see [`levels`]), and a pondered move would be stronger than the
     /// level. The caller still has to wait for the hit before it answers, since the search may
-    /// end early.
+    /// end early. UCI, XBoard and the Chess Node Protocol all ponder with it.
     pub fn pondering(&self) -> Limits {
         let mut pondering = Limits {
             movetime: None,

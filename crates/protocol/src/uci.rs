@@ -458,9 +458,11 @@ impl Session {
         let history = self.history.clone();
         let chess960 = self.options.chess960;
         // ANCHOR: ponder
-        // Pondering: think on the opponent's time, with no limit, until the GUI says
+        // Pondering: think on the opponent's time, with no time limit, until the GUI says
         // `ponderhit` (the opponent played the expected move: switch to the real clock) or
-        // `stop` (it didn't). The move must not be reported before either.
+        // `stop` (it didn't). The move must not be reported before either. The search keeps
+        // its depth, node and mate limits (`Limits::pondering`), and isn't `infinite`, which
+        // means analysis: at a strength level that would leave out the level's horizon.
         let pondering = args.contains(&"ponder");
         let ponder_flag = Arc::new(AtomicBool::new(pondering));
         let ponder = pondering.then(|| {
@@ -471,14 +473,11 @@ impl Session {
             )
         });
         let limits = if pondering {
-            Limits {
-                infinite: true,
-                ..limits
-            }
+            limits.pondering()
         } else {
             limits
         };
-        let infinite = limits.infinite && !pondering;
+        let infinite = limits.infinite;
         // ANCHOR_END: ponder
 
         let handle = thread::spawn(move || {
@@ -526,8 +525,13 @@ impl Session {
                 thread::sleep(think);
                 stop.store(true, Ordering::Relaxed);
             });
-        } else if limits.depth.is_none() && limits.nodes.is_none() && !limits.infinite {
-            // No clock and no other limit: stop now.
+        } else if limits.depth.is_none()
+            && limits.nodes.is_none()
+            && limits.mate.is_none()
+            && !limits.infinite
+        {
+            // No clock and no other limit: stop now. A depth, node or mate limit ends the
+            // search by itself, as the ponder search kept it.
             search.stop.store(true, Ordering::Relaxed);
         }
     }
@@ -1031,6 +1035,82 @@ mod tests {
             lines.iter().any(|l| l.starts_with("bestmove ")),
             "{lines:?}"
         );
+    }
+
+    /// The deepest `info depth` of each search in `lines`, one per `bestmove`.
+    fn depth_per_search(lines: &[String]) -> Vec<u32> {
+        let mut depths = Vec::new();
+        let mut deepest = 0;
+        for line in lines {
+            if let Some(rest) = line.strip_prefix("info depth ") {
+                let depth = rest.split(' ').next().and_then(|d| d.parse().ok());
+                deepest = deepest.max(depth.unwrap_or(0));
+            } else if line.starts_with("bestmove ") {
+                depths.push(deepest);
+                deepest = 0;
+            }
+        }
+        depths
+    }
+
+    #[test]
+    fn a_ponder_search_at_a_level_keeps_its_horizon() {
+        // Level 7 searches about 6,800 nodes, well past depth 1, but 46% of its moves come from
+        // a person's horizon of one ply (`levels::HORIZON_CHANCES`). An infinite search would
+        // leave the horizon out (analysis). Of 20 ponder searches, some keep to it: all 20
+        // missing it has odds of 0.54^20, about 4 in a million. And some don't: 0.46^20.
+        const SEARCHES: usize = 20;
+        let mut parts = vec![(
+            "setoption name Skill Level value 7\nposition startpos moves e2e4\n",
+            0,
+        )];
+        for _ in 0..SEARCHES {
+            parts.push(("go ponder wtime 60000 btime 60000\n", 250));
+            parts.push(("stop\n", 0));
+        }
+        parts.push(("isready\n", 0));
+        let lines = session_with_pauses(&parts);
+        let depths = depth_per_search(&lines);
+        assert_eq!(depths.len(), SEARCHES, "{lines:?}");
+        assert!(depths.contains(&1), "no horizon in {depths:?}");
+        assert!(depths.iter().any(|&d| d > 1), "only horizons in {depths:?}");
+    }
+
+    #[test]
+    fn the_book_answers_a_ponder_search_after_its_hit() {
+        // A one-entry book, 1. a3 from the start: a move the search wouldn't choose.
+        let mut bytes = cb2026_engine::book::polyglot_key(&Position::startpos())
+            .to_be_bytes()
+            .to_vec();
+        let a3 = (cb2026_chess::Square::A2.index() << 6 | cb2026_chess::Square::A3.index()) as u16;
+        bytes.extend(a3.to_be_bytes());
+        bytes.extend(1u16.to_be_bytes());
+        bytes.extend([0; 4]);
+        let path =
+            std::env::temp_dir().join(format!("cb2026-uci-ponder-{}.bin", std::process::id()));
+        std::fs::write(&path, bytes).unwrap();
+        let setup = format!(
+            "setoption name OwnBook value true\nsetoption name BookFile value {}\nposition startpos\ngo ponder wtime 60000 btime 60000\n",
+            path.display()
+        );
+        // The book move is found at once, but not reported before the hit.
+        let lines = session_with_pauses(&[
+            (&setup, 200),
+            ("isready\n", 100),
+            ("ponderhit\n", 300),
+            ("isready\n", 0),
+        ]);
+        std::fs::remove_file(&path).unwrap();
+        let ready: Vec<usize> = (0..lines.len())
+            .filter(|&i| lines[i] == "readyok")
+            .collect();
+        let best = lines
+            .iter()
+            .position(|l| l.starts_with("bestmove "))
+            .unwrap();
+        assert_eq!(ready.len(), 2, "{lines:?}");
+        assert!(ready[0] < best && best < ready[1], "{lines:?}");
+        assert!(lines[best].starts_with("bestmove a2a3"), "{lines:?}");
     }
 
     #[test]
