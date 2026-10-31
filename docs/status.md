@@ -150,7 +150,7 @@ then to the time it would have had, keeping its tree, passing `ponder-hit`, `pon
 `ponder-hit-crossing`, for Solrac's pondering switch (cjus/chessgui#319; #242); UCI and XBoard ponder with the same
 `Limits::pondering`, no longer `infinite`, so a strength level keeps its horizon while pondering
 (it lost it on every move after a ponder hit), XBoard keeps `sd`, and the book answers a ponder
-search (#241).*
+search (#243).*
 
 ## Stages
 
@@ -228,7 +228,7 @@ search (#241).*
 | PGN comment arrows and squares: `[%cal Ge2e4,Rd1d8]` and `[%csl Rd5]` read as coloured arrows and squares (`Command::arrows`, `Command::squares`, `pgn::Arrow`, `pgn::MarkedSquare`, `pgn::MarkColor`), as lichess and ChessBase write them. For Solrac's move list (Solrac Chess AI #232) | #237 | 767812 | Merged, no functional change |
 | The build's commit: CNP's `initialize` and `cb2026 --version` name the version with the commit it was built from, `1.0.0+f1638bcb685b` (`build_version`, `COMMIT`, from `crates/engine/build.rs`), so Solrac's game review can say which build judged a game; UCI's `id name` and XBoard's `myname` stay `cb2026 1.0.0`. For Solrac's game review (Solrac Chess AI #174) | #238 | 767812 | Merged, no functional change |
 | CNP pondering: capability `ponder`, a search with `"ponder": true` and `engine/ponderHit` (spec 7.7). A ponder search searches with its depth, node and mate limits but no time and doesn't answer before the hit, a stop or a cancel; from the hit the watchdog gives it the time manager's budget (`timeMs`, or its share of the clock), and its answer has `ponderMs`. The `cnp` pin moves to cjus/chess-node-protocol `968e777`. For Solrac's pondering switch (cjus/chessgui#319) | #242 | 767812 | Merged, no functional change |
-| UCI and XBoard ponder with `Limits::pondering` instead of an `infinite` search: no time until the hit, but the depth, node and mate limits stay, so a strength level keeps its person's horizon on pondered moves, XBoard keeps `sd` while pondering, and the opening book answers a ponder search (it waits for the hit). A UCI `ponderhit` with no clock lets a mate limit end the search too. Full strength unchanged | #241 | 767812 | Built, no functional change at full strength |
+| UCI and XBoard ponder with `Limits::pondering` instead of an `infinite` search: no time until the hit, but the depth, node and mate limits stay, so a strength level keeps its person's horizon on pondered moves, XBoard keeps `sd` while pondering, and the opening book answers a ponder search (it waits for the hit). A UCI `ponderhit` with no clock lets a mate limit end the search too. Full strength unchanged | #243 | 767812 | Built, no functional change at full strength |
 
 **The M3 is free** since gen3's gauntlet finished (2026-10-29, about 20:30 MDT; #227). Each
 generation's files stay in `~/nnue-data/genN` there, and in `~/engines/nets/genN` on
