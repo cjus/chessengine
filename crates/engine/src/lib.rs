@@ -120,6 +120,10 @@ pub const NAME: &str = "cb2026";
 /// The engine's version, taken from the workspace `Cargo.toml`.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// The commit this build is from, its first twelve hex digits, when it was built from a git
+/// repository (`build.rs`); `None` otherwise, as from a source archive.
+pub const COMMIT: Option<&str> = option_env!("CB2026_COMMIT");
+
 /// The engine's authors, as reported to GUIs (`id author` in UCI).
 pub const AUTHOR: &str = "the cb2026 authors";
 
@@ -180,6 +184,21 @@ impl EvalChoice<'_> {
 /// know exactly which build played a game.
 pub fn id_name() -> String {
     format!("{NAME} {VERSION}")
+}
+
+/// The version with the commit it was built from as semver build metadata, for example
+/// `1.0.0+f1638bcb6851`, or the plain [`VERSION`] when the commit isn't known.
+///
+/// Every build between two releases is `1.0.0`, so a client that keeps what an engine said,
+/// such as Solrac's game review (Solrac Chess AI #174), needs the commit to tell them apart.
+/// Build metadata doesn't change a version's precedence (semver 2.0.0, item 10), so a client
+/// comparing versions still can. [`id_name`] stays plain: GUIs and tournament managers show it,
+/// and the version is what testers need there.
+pub fn build_version() -> String {
+    match COMMIT {
+        Some(commit) => format!("{VERSION}+{commit}"),
+        None => VERSION.to_string(),
+    }
 }
 
 /// When the search should stop. Every field is optional; with none set, the search decides
@@ -1503,6 +1522,15 @@ mod tests {
     #[test]
     fn id_name_is_name_then_version() {
         assert_eq!(id_name(), format!("cb2026 {VERSION}"));
+    }
+
+    #[test]
+    fn the_build_version_names_the_commit_it_was_built_from() {
+        // The tests run in the repository, so the build script found the commit.
+        let commit = COMMIT.expect("built from a git repository");
+        assert_eq!(commit.len(), 12);
+        assert!(commit.bytes().all(|b| b.is_ascii_hexdigit()), "{commit}");
+        assert_eq!(build_version(), format!("{VERSION}+{commit}"));
     }
 
     #[test]

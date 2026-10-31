@@ -59,3 +59,43 @@ fn a_json_first_line_starts_the_protocol_without_a_flag() {
         .expect("the session loads");
     assert_eq!(run_session(&sessions[0], &node(&[])), Outcome::Passed);
 }
+
+#[test]
+fn initialize_and_version_name_the_commit_cb2026_was_built_from() {
+    use std::io::{BufRead, BufReader, Write};
+    use std::process::{Command, Stdio};
+
+    let version = cb2026_engine::build_version();
+    assert!(version.contains('+'), "{version} has no commit");
+    let printed = Command::new(env!("CARGO_BIN_EXE_cb2026"))
+        .arg("--version")
+        .output()
+        .expect("cb2026 runs");
+    assert_eq!(
+        String::from_utf8_lossy(&printed.stdout).trim(),
+        format!("cb2026 {version}")
+    );
+
+    let mut node = Command::new(env!("CARGO_BIN_EXE_cb2026"))
+        .arg("--cnp")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("cb2026 starts");
+    let mut stdin = node.stdin.take().expect("its input");
+    writeln!(
+        stdin,
+        r#"{{"jsonrpc":"2.0","id":1,"method":"initialize","params":{{"protocol":"1.0","client":{{"name":"test","version":"0"}}}}}}"#
+    )
+    .expect("initialize is sent");
+    drop(stdin);
+    let mut answer = String::new();
+    BufReader::new(node.stdout.take().expect("its output"))
+        .read_line(&mut answer)
+        .expect("cb2026 answers");
+    node.wait().expect("cb2026 ends when its input does");
+    assert!(
+        answer.contains(&format!(r#""version":"{version}""#)),
+        "{answer}"
+    );
+}
