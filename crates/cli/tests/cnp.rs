@@ -3,7 +3,8 @@
 //!
 //! The sessions come with the `cnp-conformance` crate ([`cnp_conformance::SESSIONS`]), so a
 //! new session there is checked here as soon as the protocol's pin is bumped. Sessions that need
-//! a capability cb2026 doesn't offer (a search window) are skipped, and the test says which.
+//! an engine capability cb2026 doesn't offer (a search window), or that are for a node without
+//! one it does (pondering), are skipped, and the test says which.
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -21,6 +22,12 @@ fn node(args: &[&str]) -> Vec<String> {
         .collect()
 }
 
+/// Whether a capability a session needs (`engine.ponder`, `!engine.ponder`, `games.read`) is
+/// in the engine domain.
+fn is_engine(need: &str) -> bool {
+    need.trim_start_matches('!').split('.').next() == Some("engine")
+}
+
 fn run_all(command: &[String]) -> (Vec<String>, Vec<String>) {
     let mut sessions = session::load(&[PathBuf::from(SESSIONS)]).expect("the sessions load");
     assert!(sessions.len() >= 40, "only {} sessions", sessions.len());
@@ -32,8 +39,9 @@ fn run_all(command: &[String]) -> (Vec<String>, Vec<String>) {
     for session in &sessions {
         let needs = missing(session, &offered);
         if !needs.is_empty() {
-            // cb2026 is an engine node: the voice sessions are for voice nodes.
-            if !needs.iter().any(|need| need == "voice") {
+            // cb2026 is an engine node: the other domains' sessions (voice, and Solrac's own
+            // games, preferences and backups) are for other nodes.
+            if needs.iter().all(|need| is_engine(need)) {
                 skipped.push(format!("{} (needs {})", session.name, needs.join(", ")));
             }
             continue;
@@ -49,8 +57,15 @@ fn run_all(command: &[String]) -> (Vec<String>, Vec<String>) {
 fn cb2026_passes_every_conformance_session_that_applies() {
     let (failed, skipped) = run_all(&node(&["--cnp"]));
     assert!(failed.is_empty(), "failed:\n{}", failed.join("\n\n"));
-    // Of the engine's sessions, only the window's needs a capability cb2026 doesn't offer.
-    assert_eq!(skipped, vec!["window (needs engine.window)".to_string()]);
+    // Of the engine's sessions, only the window's needs a capability cb2026 doesn't offer, and
+    // only one is for a node that doesn't ponder.
+    assert_eq!(
+        skipped,
+        vec![
+            "ponder-unsupported (needs !engine.ponder)".to_string(),
+            "window (needs engine.window)".to_string(),
+        ]
+    );
 }
 
 #[test]

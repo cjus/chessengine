@@ -8,6 +8,8 @@
 //! position's evaluation had term by term (`engine/evaluate`). Its `initialize` names the
 //! version with the commit it was built from ([`build_version`], `1.0.0+f1638bcb6851`), so a
 //! client that keeps what the engine said, as Solrac's game review does, can tell builds apart.
+//! It ponders: a search with `"ponder": true` runs on the opponent's time until
+//! `engine/ponderHit` (spec 7.7).
 //! `cb2026 --cnp` speaks it, and so does a plain `cb2026` whose first input line is JSON.
 //!
 //! ```text
@@ -36,13 +38,26 @@
 //! - **The node's limits bound every search.** An infinite search waits for `engine/stop` or
 //!   `$/cancelRequest`, as UCI's waits for `stop`, and a watchdog ends it after `maxTimeMs`.
 //!   A search with no limits at all gets [`DEFAULT_SEARCH_MS`].
+//! - **A ponder search keeps to no time until its hit.** Its position has the expected reply
+//!   played and its limits are the ones for after the hit, the clock included. It searches with
+//!   its depth, node and mate limits but no time, and as deep as it can if it has none of those
+//!   ([`Limits::pondering`]), and doesn't answer until `engine/ponderHit`, `engine/stop` or a cancel,
+//!   even when it has nothing left to search. The hit records its moment, and the watchdog
+//!   stops the search once the time the time manager would have given it (`timeMs`, or a share
+//!   of the clock) has passed since then: the pondering was a bonus. A depth or node limit it
+//!   reached before the hit ends it at once, since it has stopped and is only waiting. It is
+//!   the same search throughout, so it keeps its tree, and its answer says how long it pondered
+//!   (`ponderMs`). On a miss the client cancels it, and the next search is taken at once, as
+//!   after any cancel. UCI's `go ponder` and `ponderhit` work the same way (`cb2026-protocol`).
 //!
 //! ## What it offers
 //!
 //! Every engine capability except `window`: cb2026's search always starts with an open window
-//! at the root. Its techniques are the shell's switches ([`cb2026_shell::SWITCHES`]), by the
-//! names the shell's `set` uses. Its levels are [`RATINGS`], whole numbers only, since a level's
-//! settings are whole steps. A rating within [`ELO_RANGE`] picks a level as `UCI_Elo` does.
+//! at the root. Pondering included. None of the other domains: voice, and the games, preferences
+//! and backups that Solrac's own node keeps. Its techniques are the shell's switches
+//! ([`cb2026_shell::SWITCHES`]), by the names the shell's `set` uses. Its levels are [`RATINGS`],
+//! whole numbers only, since a level's settings are whole steps. A rating within [`ELO_RANGE`]
+//! picks a level as `UCI_Elo` does.
 //! `engine/evaluate` answers with the shell's `eval`: [`eval::trace`]'s eight terms ([`TERMS`]),
 //! each blended for the position's phase as the evaluation blends its total.
 //!
@@ -63,6 +78,13 @@
 //!   chat does, for a review's two searches). That search must be taken, not refused as
 //!   `Busy`: nothing runs any more. So the thread says it has answered just before it sends,
 //!   and a new search waits the moment it takes to end.
+//! - **A hit can cross with the search's end.** The client may send `engine/ponderHit` just as
+//!   a stop, a cancel or the node's `maxTimeMs` ends the search, or twice. Such a hit, or one
+//!   for a search that never existed, answers `null` and does nothing; only a hit for a running
+//!   search that isn't pondering is `InvalidParams` (spec 7.7).
+//! - **A ponder search's time counts from the hit, not from the request.** Taken from the
+//!   request, a long ponder would use up the move's time before the move was even known, and
+//!   the hit would end the search at once.
 //! - **Castling notation follows the position.** cb2026 reads both notations. It writes the
 //!   king's two-square move, or king-takes-rook when the position says `chess960`.
 
@@ -71,7 +93,7 @@
 use std::collections::BTreeMap;
 use std::io::{self, BufRead, Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
@@ -80,12 +102,13 @@ use cb2026_engine::eval::{self, EvalParams, MAX_PHASE};
 use cb2026_engine::levels::{ELO_RANGE, FULL_STRENGTH, RATINGS};
 use cb2026_engine::search::MAX_PLY;
 use cb2026_engine::tablebase::TablebaseLoader;
+use cb2026_engine::time;
 use cb2026_engine::{AUTHOR, Engine, Limits, NAME, Score, SearchInfo, SearchResult, build_version};
 use cb2026_shell::SWITCHES;
 use cnp::engine::{
     EloRange, EngineCapabilities, EngineProgress, Evaluate, EvaluateParams, EvaluateResult, Level,
-    Levels, LevelsResult, Line, Progress, Search, SearchParams, SearchStats, Stop, Technique,
-    Techniques, TechniquesResult, Term,
+    Levels, LevelsResult, Line, PonderHit, Progress, Search, SearchParams, SearchStats, Stop,
+    Technique, Techniques, TechniquesResult, Term,
 };
 use cnp::lifecycle::{
     CancelRequest, Capabilities, IncompatibleVersionData, Initialize, InitializeResult,
@@ -228,8 +251,21 @@ struct Running {
     /// Set by the search thread just before it sends its answer: from then on it only has to
     /// give the engine back, so a new search waits for it rather than being `Busy`.
     answered: Arc<AtomicBool>,
+    /// For a ponder search, when its `engine/ponderHit` came (set once, by the command loop).
+    /// `None` for any other search.
+    hit: Option<Arc<OnceLock<Instant>>>,
     /// The thread, which gives the engine back when it ends.
     handle: JoinHandle<Engine>,
+}
+
+impl Running {
+    /// Whether the search has finished, answered, or been told to stop: it has at most a few
+    /// milliseconds left, and no message changes what it answers.
+    fn ending(&self) -> bool {
+        self.handle.is_finished()
+            || self.answered.load(Ordering::Acquire)
+            || self.stop.load(Ordering::Relaxed)
+    }
 }
 
 /// The state of one CNP session.
@@ -267,6 +303,8 @@ struct Prepared {
     progress: Option<Duration>,
     game: Option<String>,
     chess960: bool,
+    /// A ponder search: `limits` count from its hit (spec 7.7).
+    ponder: bool,
 }
 
 impl Node {
@@ -316,6 +354,13 @@ impl Node {
                     }
                     Response::ok::<Stop>(id, &())
                 }
+                Err(e) => Response::error(Some(id), e),
+            },
+            (State::Running, PonderHit::NAME) => match request
+                .params::<PonderHit>()
+                .and_then(|params| self.ponder_hit(&params.id))
+            {
+                Ok(()) => Response::ok::<PonderHit>(id, &()),
                 Err(e) => Response::error(Some(id), e),
             },
             (State::Running, Techniques::NAME) => {
@@ -390,8 +435,12 @@ impl Node {
                     chess960: true,
                     progress: true,
                     evaluate: true,
+                    ponder: true,
                 }),
                 voice: None,
+                preferences: None,
+                games: None,
+                backups: None,
             },
             limits: NodeLimits {
                 max_depth: Some(MAX_PLY),
@@ -410,12 +459,9 @@ impl Node {
         let params = request.params::<Search>()?;
         let prepared = prepare(&params)?;
         if let Some(running) = self.search.take() {
-            if running.handle.is_finished()
-                || running.answered.load(Ordering::Acquire)
-                || running.stop.load(Ordering::Relaxed)
-            {
-                // Finished, answered and ending, or winding down after a stop or a cancel: a
-                // few milliseconds at most.
+            if running.ending() {
+                // Finished, answered and ending, or winding down after a stop or a cancel (a
+                // ponder miss's among them): a few milliseconds at most.
                 self.reclaim(running);
             } else {
                 self.search = Some(running);
@@ -430,11 +476,14 @@ impl Node {
             .take()
             .expect("the engine is back when no search runs");
         self.configure(&mut engine, &prepared);
+        // Taken here, before the thread starts, so a hit can never come before it.
+        let start = Instant::now();
         let flags = Flags {
             stop: Arc::new(AtomicBool::new(false)),
             stopped: Arc::new(AtomicBool::new(false)),
             cancelled: Arc::new(AtomicBool::new(false)),
             answered: Arc::new(AtomicBool::new(false)),
+            hit: prepared.ponder.then(|| Arc::new(OnceLock::new())),
         };
         let id = request.id.clone();
         let running = Running {
@@ -443,13 +492,38 @@ impl Node {
             stopped: Arc::clone(&flags.stopped),
             cancelled: Arc::clone(&flags.cancelled),
             answered: Arc::clone(&flags.answered),
+            hit: flags.hit.clone(),
             handle: {
                 let output = Arc::clone(&self.output);
-                thread::spawn(move || search_thread(engine, prepared, id, flags, output))
+                thread::spawn(move || search_thread(engine, prepared, id, start, flags, output))
             },
         };
         self.search = Some(running);
         Ok(())
+    }
+
+    /// `engine/ponderHit`: the move the ponder search `id` expected was played, so from now on
+    /// it keeps to its limits (the watchdog times it from this moment). A hit that crosses with
+    /// the search's end, or names no running search, or comes twice, does nothing (spec 7.7).
+    fn ponder_hit(&self, id: &Id) -> Result<(), ResponseError> {
+        let Some(running) = self
+            .search
+            .as_ref()
+            .filter(|running| running.id == *id && !running.ending())
+        else {
+            return Ok(());
+        };
+        match &running.hit {
+            Some(hit) => {
+                // A second hit finds it set and leaves the first moment.
+                let _ = hit.set(Instant::now());
+                Ok(())
+            }
+            None => Err(ResponseError::new(
+                code::INVALID_PARAMS,
+                format!("search {id} isn't a ponder search"),
+            )),
+        }
     }
 
     /// Sets the engine up for one search: every option back to its default, then the
@@ -535,6 +609,14 @@ struct Flags {
     stopped: Arc<AtomicBool>,
     cancelled: Arc<AtomicBool>,
     answered: Arc<AtomicBool>,
+    hit: Option<Arc<OnceLock<Instant>>>,
+}
+
+impl Flags {
+    /// When the ponder search's hit came, if it has.
+    fn hit_at(&self) -> Option<Instant> {
+        self.hit.as_ref().and_then(|hit| hit.get().copied())
+    }
 }
 
 /// Checks a search's params and turns them into the engine's terms.
@@ -653,6 +735,7 @@ fn prepare(params: &SearchParams) -> Result<Prepared, ResponseError> {
         progress: params.progress_ms.map(Duration::from_millis),
         game: params.game.clone(),
         chess960: params.position.chess960,
+        ponder: params.ponder,
     })
 }
 
@@ -661,19 +744,35 @@ fn search_thread(
     mut engine: Engine,
     prepared: Prepared,
     id: Id,
+    start: Instant,
     flags: Flags,
     output: Output,
 ) -> Engine {
-    let start = Instant::now();
     let finished = Arc::new(AtomicBool::new(false));
-    // The node's maxTimeMs bounds every search, infinite ones included.
+    // ANCHOR: ponder
+    // A ponder search searches with no time; its time counts from the hit, as long as the time
+    // manager would give it then (`timeMs`, or its share of the clock). The tree it built while
+    // pondering is kept: it is the same search.
+    let (limits, after_hit) = if prepared.ponder {
+        let side = prepared.position.side_to_move();
+        let think = time::budget(&prepared.limits, side, &engine.time).soft;
+        (prepared.limits.pondering(), think)
+    } else {
+        (prepared.limits.clone(), None)
+    };
+    // The node's maxTimeMs bounds every search, infinite and ponder ones included, from the
+    // request; and a ponder search's time runs out `after_hit`.
     let watchdog = {
         let stop = Arc::clone(&flags.stop);
         let finished = Arc::clone(&finished);
+        let hit = flags.hit.clone();
         thread::spawn(move || {
             let deadline = Duration::from_millis(MAX_TIME_MS);
             while !finished.load(Ordering::Relaxed) {
-                if start.elapsed() >= deadline {
+                let out_of_time = after_hit
+                    .zip(hit.as_ref().and_then(|hit| hit.get()))
+                    .is_some_and(|(think, at)| at.elapsed() >= think);
+                if start.elapsed() >= deadline || out_of_time {
                     stop.store(true, Ordering::Relaxed);
                     return;
                 }
@@ -681,6 +780,7 @@ fn search_thread(
             }
         })
     };
+    // ANCHOR_END: ponder
     let chess960 = prepared.chess960;
     // The latest report of each line, by its MultiPV number.
     let mut lines: BTreeMap<u32, SearchInfo> = BTreeMap::new();
@@ -701,13 +801,16 @@ fn search_thread(
         engine.search(
             &prepared.position,
             &prepared.history,
-            &prepared.limits,
+            &limits,
             &flags.stop,
             &mut on_info,
         )
     };
-    // An infinite search waits for `engine/stop` or a cancel (or the watchdog).
-    while prepared.limits.infinite && !flags.stop.load(Ordering::Relaxed) {
+    // An infinite search waits for `engine/stop` or a cancel (or the watchdog), and a ponder
+    // search for its hit too, even when it has nothing left to search.
+    while (prepared.limits.infinite || (prepared.ponder && flags.hit_at().is_none()))
+        && !flags.stop.load(Ordering::Relaxed)
+    {
         thread::sleep(WAIT_POLL);
     }
     finished.store(true, Ordering::Relaxed);
@@ -728,7 +831,12 @@ fn search_thread(
         Response::error(Some(id), ResponseError::new(code::CANCELLED, "cancelled"))
     } else {
         let stopped = flags.stopped.load(Ordering::Relaxed);
-        let answer = answer(&result, &lines, &prepared, start.elapsed(), stopped);
+        let elapsed = start.elapsed();
+        // How long it pondered: until the hit, or all of it if none came.
+        let pondered = prepared
+            .ponder
+            .then(|| millis(flags.hit_at().map_or(elapsed, |at| at - start)));
+        let answer = answer(&result, &lines, &prepared, elapsed, pondered, stopped);
         Response::ok::<Search>(id, &answer)
     };
     // Before the answer goes: once the client has it, it may send the next search at once.
@@ -743,6 +851,7 @@ fn answer(
     lines: &BTreeMap<u32, SearchInfo>,
     prepared: &Prepared,
     elapsed: Duration,
+    ponder_ms: Option<u64>,
     stopped: bool,
 ) -> cnp::engine::SearchResult {
     let chess960 = prepared.chess960;
@@ -767,6 +876,7 @@ fn answer(
         sel_depth: best.map_or(0, |info| info.seldepth),
         nodes: result.stats.nodes + result.stats.qnodes,
         time_ms: millis(elapsed),
+        ponder_ms,
         stopped,
         lines: if prepared.multipv > 1 {
             lines
@@ -900,7 +1010,11 @@ fn short_name(description: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cnp::engine::{Clock, Position as CnpPosition, SearchLimits, SideClock, Strength, Window};
+    use cb2026_engine::time::TimeParams;
+    use cnp::engine::{
+        Clock, PonderHitParams, Position as CnpPosition, SearchLimits, SideClock, StopParams,
+        Strength, Window,
+    };
 
     fn search(fen: &str) -> SearchParams {
         SearchParams::new(CnpPosition::fen(fen))
@@ -1098,6 +1212,7 @@ mod tests {
             stopped: Arc::new(AtomicBool::new(false)),
             cancelled: Arc::new(AtomicBool::new(false)),
             answered: Arc::new(AtomicBool::new(true)),
+            hit: None,
             handle: thread::spawn(move || {
                 thread::sleep(ending);
                 Engine::new()
@@ -1116,6 +1231,7 @@ mod tests {
             stopped: Arc::new(AtomicBool::new(false)),
             cancelled: Arc::new(AtomicBool::new(false)),
             answered: Arc::new(AtomicBool::new(false)),
+            hit: None,
             handle: thread::spawn(move || {
                 let _ = wait.recv();
                 Engine::new()
@@ -1126,6 +1242,146 @@ mod tests {
         assert_eq!(busy.unwrap_err().code, code::BUSY);
         release.send(()).unwrap();
         node.engine = engine;
+        node.finish();
+    }
+
+    /// Output that a test can read back.
+    #[derive(Clone, Default)]
+    struct Capture(Arc<Mutex<Vec<u8>>>);
+
+    impl Write for Capture {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl Capture {
+        /// The response to request `id`, if it has been sent.
+        fn response(&self, id: i64) -> Option<Response> {
+            let bytes = self.0.lock().unwrap().clone();
+            let mut input = io::Cursor::new(bytes);
+            while let Ok(Some(message)) = read_message(&mut input, usize::MAX) {
+                if let Message::Response(response) = message
+                    && response.id == Some(Id::Number(id))
+                {
+                    return Some(response);
+                }
+            }
+            None
+        }
+
+        /// Waits up to `timeout` for the response to request `id`.
+        fn wait_for(&self, id: i64, timeout: Duration) -> Option<Response> {
+            let start = Instant::now();
+            while start.elapsed() < timeout {
+                if let Some(response) = self.response(id) {
+                    return Some(response);
+                }
+                thread::sleep(Duration::from_millis(5));
+            }
+            None
+        }
+    }
+
+    /// A node past `initialize`, writing to `capture`.
+    fn running_node(capture: &Capture) -> Node {
+        let mut node = Node::new(
+            Arc::new(Mutex::new(Box::new(capture.clone()))),
+            Engine::new(),
+            Config {
+                license: "MIT OR Apache-2.0",
+            },
+        );
+        node.state = State::Running;
+        node
+    }
+
+    fn ponder_search(limits: SearchLimits) -> SearchParams {
+        let mut params = start();
+        params.position = CnpPosition::start().with_moves(["e2e4", "e7e5"]);
+        params.limits = limits;
+        params.ponder = true;
+        params
+    }
+
+    #[test]
+    fn a_ponder_search_s_time_counts_from_its_hit() {
+        let capture = Capture::default();
+        let mut node = running_node(&capture);
+        let think = 300;
+        let params = ponder_search(SearchLimits {
+            time_ms: Some(think),
+            ..SearchLimits::default()
+        });
+        node.request(Request::new::<Search>(1, &params));
+        // Well past its time, and no answer: its time hasn't started.
+        thread::sleep(Duration::from_millis(2 * think));
+        assert!(capture.response(1).is_none(), "answered before its hit");
+        let hit = Instant::now();
+        node.request(Request::new::<PonderHit>(
+            2,
+            &PonderHitParams { id: Id::Number(1) },
+        ));
+        assert_eq!(capture.response(2).unwrap().result::<PonderHit>(), Ok(()));
+        let answer = capture
+            .wait_for(1, Duration::from_secs(10))
+            .expect("an answer after the hit");
+        let after_hit = hit.elapsed();
+        let result = answer.result::<Search>().unwrap();
+        assert!(result.best_move.is_some());
+        assert!(!result.stopped);
+        let pondered = result
+            .ponder_ms
+            .expect("a ponder search says how long it pondered");
+        assert!(pondered >= 2 * think, "pondered {pondered} ms");
+        // Its timeMs from the hit, less the move overhead, give or take the watchdog's poll.
+        let overhead = millis(TimeParams::default().move_overhead);
+        assert!(
+            after_hit >= Duration::from_millis(think - overhead),
+            "answered {after_hit:?} after the hit"
+        );
+        assert!(result.time_ms >= pondered + think - overhead, "{result:?}");
+        node.finish();
+    }
+
+    #[test]
+    fn a_ponder_search_stopped_before_its_hit_pondered_all_its_time() {
+        let capture = Capture::default();
+        let mut node = running_node(&capture);
+        let params = ponder_search(SearchLimits {
+            clock: Some(Clock {
+                white: SideClock {
+                    time_ms: 60_000,
+                    increment_ms: 0,
+                },
+                black: SideClock {
+                    time_ms: 60_000,
+                    increment_ms: 0,
+                },
+                moves_to_go: None,
+            }),
+            ..SearchLimits::default()
+        });
+        node.request(Request::new::<Search>(1, &params));
+        thread::sleep(Duration::from_millis(100));
+        node.request(Request::new::<Stop>(2, &StopParams { id: Id::Number(1) }));
+        let result = capture
+            .wait_for(1, Duration::from_secs(10))
+            .expect("an answer after the stop")
+            .result::<Search>()
+            .unwrap();
+        assert!(result.stopped);
+        assert_eq!(result.ponder_ms, Some(result.time_ms));
+        // A second hit, for a search that has answered, does nothing.
+        node.request(Request::new::<PonderHit>(
+            3,
+            &PonderHitParams { id: Id::Number(1) },
+        ));
+        assert_eq!(capture.response(3).unwrap().result::<PonderHit>(), Ok(()));
         node.finish();
     }
 

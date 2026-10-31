@@ -214,7 +214,7 @@ checksum = "f079e83a288787bcd14a6aea84cee5c87a67c5a3e660c30f557a3d24761b3527"
 [[package]]
 name = "cnp"
 version = "0.1.0"
-source = "git+https://github.com/cjus/chess-node-protocol?rev=bafda928d0298267ebd86d753bda78f54138770c#bafda928d0298267ebd86d753bda78f54138770c"
+source = "git+https://github.com/cjus/chess-node-protocol?rev=968e7770a7d1021a243f4ddef1f87d64e78355cb#968e7770a7d1021a243f4ddef1f87d64e78355cb"
 dependencies = [
  "serde",
  "serde_json",
@@ -223,7 +223,7 @@ dependencies = [
 [[package]]
 name = "cnp-conformance"
 version = "0.1.0"
-source = "git+https://github.com/cjus/chess-node-protocol?rev=bafda928d0298267ebd86d753bda78f54138770c#bafda928d0298267ebd86d753bda78f54138770c"
+source = "git+https://github.com/cjus/chess-node-protocol?rev=968e7770a7d1021a243f4ddef1f87d64e78355cb#968e7770a7d1021a243f4ddef1f87d64e78355cb"
 dependencies = [
  "cnp",
  "serde_json",
