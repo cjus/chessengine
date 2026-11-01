@@ -150,7 +150,15 @@ then to the time it would have had, keeping its tree, passing `ponder-hit`, `pon
 `ponder-hit-crossing`, for Solrac's pondering switch (cjus/chessgui#319; #242); UCI and XBoard ponder with the same
 `Limits::pondering`, no longer `infinite`, so a strength level keeps its horizon while pondering
 (it lost it on every move after a ponder hit), XBoard keeps `sd`, and the book answers a ponder
-search (#243).*
+search (#243). 2026-11-01: **CNP's `engine/evaluate` settles captures and values pieces by
+the network** (capabilities `quiet` and `pieces`, cjus/chess-node-protocol#21), for Solrac's
+Engine Mind (cjus/chessgui#340): its terms are the hand-crafted evaluation's, which ordered
+three reported lines as the search did in 0 of 10 positions where the network did in 5, so the
+answer now also has the network's score (`searchScore`) and, asked, each piece's value to it
+(`Engine::piece_values`, the network's score without the piece, through
+`Changes::removing`); with `quiet` it first plays the quiescence search's line
+(`Engine::quiet_line`), since a line can end mid-exchange (2 lines in 30). An evaluator engine
+of the node's own answers, cleared before each request; no functional change to the search.*
 
 ## Stages
 

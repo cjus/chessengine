@@ -609,7 +609,7 @@ fn fnv1a(bytes: &[u8]) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use cb2026_chess::{Move, STARTING_FEN};
+    use cb2026_chess::{Move, STARTING_FEN, Square};
 
     use super::*;
     use crate::float::WEIGHT_LIMIT;
@@ -770,6 +770,27 @@ mod tests {
         }
         assert!(
             format!("{net:?}").starts_with("Network(768 -> 64 x 2 -> 1, SCReLU, eval scale 146")
+        );
+    }
+
+    #[test]
+    fn taking_a_piece_off_matches_the_position_without_it() {
+        let net = random_network(64, Activation::SquaredClippedRelu, 21);
+        let start = Position::from_fen(STARTING_FEN).unwrap();
+        let without_queen =
+            Position::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNB1KBNR w KQkq - 0 1").unwrap();
+        let d1 = Square::from_index(3).unwrap();
+        let queen = start.piece_at(d1).unwrap();
+        let mut child = net.empty_accumulator();
+        net.update_into(
+            &net.accumulator(&start),
+            &mut child,
+            &Changes::removing(queen, d1),
+        );
+        assert_eq!(child, net.accumulator(&without_queen));
+        assert_eq!(
+            net.evaluate(&child, Color::White),
+            net.evaluate_position(&without_queen)
         );
     }
 

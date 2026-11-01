@@ -408,7 +408,10 @@ whole position and every option, so cb2026 can one day be one node of a distribu
 MultiPV, root moves, technique switches (the shell's, by the same names), a deterministic mode
 and progress reports. `engine/techniques` and `engine/levels` list the switches and the measured
 levels, and `engine/evaluate` gives a position's evaluation term by term, as the shell's `eval`
-does, so Solrac's chat can say why cb2026 likes a position (Solrac Chess AI #145). A search can
+does, so Solrac's chat can say why cb2026 likes a position (Solrac Chess AI #145). Since the
+search evaluates with the network and the terms are the hand-crafted evaluation's, its answer
+also gives the network's score and, asked, what each piece is worth to it, and can first settle
+captures as a search's leaf does (`quiet`), for Solrac's Engine Mind (cjus/chessgui#340). A search can
 ponder (`"ponder": true` and `engine/ponderHit`), as UCI's `go ponder` does, for Solrac's
 pondering switch (cjus/chess-node-protocol#18, cjus/chessgui#319). Every engine capability is
 offered except a root score window. Every conformance session in the

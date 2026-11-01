@@ -59,7 +59,13 @@
 //! whole numbers only, since a level's settings are whole steps. A rating within [`ELO_RANGE`]
 //! picks a level as `UCI_Elo` does.
 //! `engine/evaluate` answers with the shell's `eval`: [`eval::trace`]'s eight terms ([`TERMS`]),
-//! each blended for the position's phase as the evaluation blends its total.
+//! each blended for the position's phase as the evaluation blends its total. Those are the
+//! hand-crafted evaluation's, while the search usually evaluates with the network, so its answer
+//! also says the network's score (`searchScore`) and, asked, what each piece is worth to it
+//! (`pieces`, [`Engine::piece_values`]). With `quiet` it first plays out the quiescence search's
+//! line ([`Engine::quiet_line`]), which is where a search's score comes from when its line ends
+//! mid-exchange. An engine of its own answers these ([`EVALUATOR_HASH_MB`]), cleared before each
+//! request, so an evaluation is the same whether or not a search is running.
 //!
 //! ## Pitfalls
 //!
@@ -98,7 +104,7 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use cb2026_chess::{Move, Position};
-use cb2026_engine::eval::{self, EvalParams, MAX_PHASE};
+use cb2026_engine::eval::{self, MAX_PHASE};
 use cb2026_engine::levels::{ELO_RANGE, FULL_STRENGTH, RATINGS};
 use cb2026_engine::search::MAX_PLY;
 use cb2026_engine::tablebase::TablebaseLoader;
@@ -107,8 +113,8 @@ use cb2026_engine::{AUTHOR, Engine, Limits, NAME, Score, SearchInfo, SearchResul
 use cb2026_shell::SWITCHES;
 use cnp::engine::{
     EloRange, EngineCapabilities, EngineProgress, Evaluate, EvaluateParams, EvaluateResult, Level,
-    Levels, LevelsResult, Line, PonderHit, Progress, Search, SearchParams, SearchStats, Stop,
-    Technique, Techniques, TechniquesResult, Term,
+    Levels, LevelsResult, Line, PieceValue, PonderHit, Progress, Search, SearchParams, SearchStats,
+    Stop, Technique, Techniques, TechniquesResult, Term,
 };
 use cnp::lifecycle::{
     CancelRequest, Capabilities, IncompatibleVersionData, Initialize, InitializeResult,
@@ -132,6 +138,10 @@ pub const RATING_SCALE: &str = cb2026_engine::levels::RATING_SCALE;
 
 /// Where cb2026's source is.
 pub const SOURCE: &str = "https://github.com/cjus/chessengine";
+
+/// The hash table of the engine that answers `engine/evaluate`, in megabytes. Its quiescence
+/// search never reads the table, so the smallest size does.
+pub const EVALUATOR_HASH_MB: usize = 1;
 
 /// The evaluation's terms as `engine/evaluate` names them: each one's id and what it measures,
 /// in [`eval::EvalTrace::terms`]' order (whose names are the terms' names).
@@ -281,9 +291,9 @@ struct Node {
     threads: usize,
     /// Each switch's default, read once from a new engine (in [`SWITCHES`]' order).
     defaults: Vec<bool>,
-    /// The evaluation's parameters as the engine came configured, for `engine/evaluate` while a
-    /// search owns the engine.
-    eval_params: EvalParams,
+    /// The engine that answers `engine/evaluate`, configured as the engine came, with a small
+    /// hash table: the main engine may be busy with a search.
+    evaluator: Engine,
     /// The running search, if any.
     search: Option<Running>,
     /// The `game` hint of the last search, whose hash table the engine still holds.
@@ -311,13 +321,18 @@ impl Node {
     fn new(output: Output, engine: Engine, config: Config) -> Node {
         let mut fresh = Engine::new();
         let defaults = SWITCHES.iter().map(|s| *(s.flag)(&mut fresh)).collect();
+        let mut evaluator = fresh;
+        evaluator.set_hash_size(EVALUATOR_HASH_MB);
+        evaluator.params = engine.params.clone();
+        evaluator.techniques = engine.techniques;
+        evaluator.network = engine.network.clone();
         Node {
             output,
             config,
             state: State::Starting,
             tablebase_loader: engine.tablebase_loader,
             threads: engine.threads,
-            eval_params: engine.params.clone(),
+            evaluator,
             engine: Some(engine),
             defaults,
             search: None,
@@ -369,7 +384,7 @@ impl Node {
             (State::Running, Levels::NAME) => Response::ok::<Levels>(id, &levels()),
             (State::Running, Evaluate::NAME) => match request
                 .params::<Evaluate>()
-                .and_then(|params| evaluate(&params, &self.eval_params))
+                .and_then(|params| evaluate(&params, &mut self.evaluator))
             {
                 Ok(result) => Response::ok::<Evaluate>(id, &result),
                 Err(e) => Response::error(Some(id), e),
@@ -435,6 +450,8 @@ impl Node {
                     chess960: true,
                     progress: true,
                     evaluate: true,
+                    quiet: true,
+                    pieces: true,
                     ponder: true,
                 }),
                 voice: None,
@@ -938,11 +955,24 @@ fn read_position(wanted: &cnp::engine::Position) -> Result<(Position, Vec<u64>),
 
 /// `engine/evaluate`: the position's evaluation, term by term, each term blended for the
 /// position's phase as [`eval::trace`] blends the total (the shell's `eval` shows the same).
+/// With `quiet`, of the position at the end of the quiescence search's line; the search's own
+/// score when it evaluates with the network; and with `pieces`, each piece's value to it.
 fn evaluate(
     params: &EvaluateParams,
-    eval_params: &EvalParams,
+    evaluator: &mut Engine,
 ) -> Result<EvaluateResult, ResponseError> {
-    let (position, _) = read_position(&params.position)?;
+    let (mut position, history) = read_position(&params.position)?;
+    let quiet = params.quiet.then(|| {
+        // From a clean slate, so the answer doesn't depend on earlier requests.
+        evaluator.new_game();
+        let line = evaluator.quiet_line(&position, &history).moves;
+        for &mv in &line {
+            position.make_move(mv);
+        }
+        moves(&line, params.position.chess960)
+    });
+    let mated = position.in_check() && position.legal_moves().is_empty();
+    let eval_params = &evaluator.params;
     let trace = eval::trace(&position, eval_params);
     let blend = |(mg, eg): (i32, i32)| {
         if eval_params.tapered {
@@ -963,9 +993,30 @@ fn evaluate(
             black: blend(black),
         })
         .collect();
+    // Only `quiet` promises a mate (spec 7.6); a plain evaluation stays static, as before.
+    let score = if quiet.is_some() && mated {
+        cnp::engine::Score::mate(0)
+    } else {
+        cnp::engine::Score::cp(eval::evaluate(&position, eval_params))
+    };
+    let search = evaluator.search_evaluation(&position);
+    let search_score = (search.network && !mated).then(|| cnp::engine::Score::cp(search.score));
+    let pieces = (params.pieces && !mated).then(|| {
+        evaluator
+            .piece_values(&position)
+            .into_iter()
+            .map(|piece| PieceValue {
+                square: piece.square.to_string(),
+                value: piece.value,
+            })
+            .collect()
+    });
     Ok(EvaluateResult {
-        score: cnp::engine::Score::cp(eval::evaluate(&position, eval_params)),
+        score,
         terms,
+        quiet,
+        search_score,
+        pieces,
     })
 }
 
@@ -1156,10 +1207,8 @@ mod tests {
     fn an_evaluation_is_the_shell_s_eval_term_by_term() {
         // The Two Knights, as the spec's example has it: the shell's `eval` shows the same.
         let fen = "r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4";
-        let params = EvaluateParams {
-            position: CnpPosition::fen(fen),
-        };
-        let result = evaluate(&params, &EvalParams::default()).unwrap();
+        let params = EvaluateParams::new(CnpPosition::fen(fen));
+        let result = evaluate(&params, &mut Engine::new()).unwrap();
         assert_eq!(result.score, cnp::engine::Score::cp(-1));
         let ids: Vec<&str> = result.terms.iter().map(|t| t.id.as_str()).collect();
         assert_eq!(ids, TERMS.map(|(id, _)| id));
@@ -1177,21 +1226,80 @@ mod tests {
 
     #[test]
     fn an_evaluation_of_an_illegal_position_is_refused() {
-        let params = |position| EvaluateParams { position };
+        let params = EvaluateParams::new;
         let illegal = params(CnpPosition::start().with_moves(["e2e5"]));
         let bad_fen = params(CnpPosition::fen("not a fen"));
         for wanted in [illegal, bad_fen] {
-            let error = evaluate(&wanted, &EvalParams::default()).unwrap_err();
+            let error = evaluate(&wanted, &mut Engine::new()).unwrap_err();
             assert_eq!(error.code, code::INVALID_POSITION);
         }
         // From Black's side, the score is Black's.
         let after_e4 = params(CnpPosition::start().with_moves(["e2e4"]));
-        let result = evaluate(&after_e4, &EvalParams::default()).unwrap();
+        let result = evaluate(&after_e4, &mut Engine::new()).unwrap();
         let net: i32 = result.terms.iter().map(|t| t.black - t.white).sum();
         let cnp::engine::ScoreValue::Centipawns(cp) = result.score.value else {
             panic!("an evaluation is in centipawns");
         };
         assert!((net - cp).abs() <= TERMS.len() as i32, "{net} against {cp}");
+    }
+
+    #[test]
+    fn an_evaluation_settles_captures_and_values_pieces_by_the_network() {
+        // The spec's example: after 1.e4 d5 2.exd5, Black's queen takes back.
+        let mut evaluator = Engine::new();
+        let mut params =
+            EvaluateParams::new(CnpPosition::start().with_moves(["e2e4", "d7d5", "e4d5"]));
+        params.quiet = true;
+        params.pieces = true;
+        let result = evaluate(&params, &mut evaluator).unwrap();
+        assert_eq!(result.quiet, Some(vec!["d8d5".to_string()]));
+        // The hand-crafted evaluation and its terms, of the position after 2...Qxd5.
+        assert_eq!(result.score, cnp::engine::Score::cp(-17));
+        let term = |id: &str| {
+            let term = result.terms.iter().find(|t| t.id == id).unwrap();
+            (term.white, term.black)
+        };
+        assert_eq!(term("material"), (3850, 3850));
+        assert_eq!(term("mobility"), (-89, -75));
+        // The network the search evaluates with sees it otherwise.
+        assert_eq!(result.search_score, Some(cnp::engine::Score::cp(34)));
+        let pieces = result.pieces.as_ref().unwrap();
+        assert_eq!(pieces.len(), 28);
+        let value = |square: &str| pieces.iter().find(|p| p.square == square).unwrap().value;
+        assert_eq!((value("d1"), value("d5"), value("f1")), (918, 912, 338));
+        assert!(pieces.iter().all(|p| p.square != "e1" && p.square != "e8"));
+        // The same request gives the same answer, whatever came before.
+        let quiet_only = EvaluateParams {
+            pieces: false,
+            ..params.clone()
+        };
+        let first = evaluate(&quiet_only, &mut evaluator).unwrap();
+        assert_eq!(first.pieces, None);
+        assert_eq!(evaluate(&params, &mut evaluator).unwrap(), result);
+        // Not asked to settle: the position as it stands, a pawn down for Black, and no line.
+        let as_it_stands = EvaluateParams::new(params.position.clone());
+        let unsettled = evaluate(&as_it_stands, &mut evaluator).unwrap();
+        assert_eq!(unsettled.quiet, None);
+        assert!(unsettled.search_score.is_some());
+    }
+
+    #[test]
+    fn an_evaluation_settled_into_mate_is_mate_in_0_with_no_pieces() {
+        let mut params =
+            EvaluateParams::new(CnpPosition::start().with_moves(["f2f3", "e7e5", "g2g4", "d8h4"]));
+        params.quiet = true;
+        params.pieces = true;
+        let result = evaluate(&params, &mut Engine::new()).unwrap();
+        assert_eq!(result.quiet, Some(vec![]));
+        assert_eq!(result.score, cnp::engine::Score::mate(0));
+        assert_eq!((result.search_score, result.pieces), (None, None));
+        // Without `quiet` the score stays static, as it always was.
+        params.quiet = false;
+        let plain = evaluate(&params, &mut Engine::new()).unwrap();
+        assert!(matches!(
+            plain.score.value,
+            cnp::engine::ScoreValue::Centipawns(_)
+        ));
     }
 
     #[test]
