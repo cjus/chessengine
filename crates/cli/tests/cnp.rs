@@ -4,7 +4,7 @@
 //! The sessions come with the `cnp-conformance` crate ([`cnp_conformance::SESSIONS`]), so a
 //! new session there is checked here as soon as the protocol's pin is bumped. Sessions that need
 //! an engine capability cb2026 doesn't offer (a search window), or that are for a node without
-//! one it does (pondering), are skipped, and the test says which.
+//! one it does (pondering, the search tree), are skipped, and the test says which.
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -69,13 +69,14 @@ fn cb2026_passes_every_conformance_session_that_applies() {
     let (failed, skipped) = run_all(&node(&["--cnp"]));
     assert!(failed.is_empty(), "failed:\n{}", failed.join("\n\n"));
     // Of the engine's sessions, only the window's needs a capability cb2026 doesn't offer, and
-    // two are for nodes without capabilities it has: pondering, and an evaluation's quiet line
-    // and piece values.
+    // three are for nodes without capabilities it has: pondering, an evaluation's quiet line
+    // and piece values, and the search tree.
     assert_eq!(
         skipped,
         vec![
             "evaluate-quiet-pieces-unsupported (needs !engine.quiet, !engine.pieces)".to_string(),
             "ponder-unsupported (needs !engine.ponder)".to_string(),
+            "tree-unsupported (needs !engine.tree)".to_string(),
             "window (needs engine.window)".to_string(),
         ]
     );

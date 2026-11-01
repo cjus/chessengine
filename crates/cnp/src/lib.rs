@@ -9,7 +9,9 @@
 //! version with the commit it was built from ([`build_version`], `1.0.0+f1638bcb6851`), so a
 //! client that keeps what the engine said, as Solrac's game review does, can tell builds apart.
 //! It ponders: a search with `"ponder": true` runs on the opponent's time until
-//! `engine/ponderHit` (spec 7.7).
+//! `engine/ponderHit` (spec 7.7). And it keeps search trees (spec 7.8): `engine/tree` records a
+//! search's decisions near the root and `engine/treeNode` reads them a node at a time, so
+//! Solrac's Engine Mind can say why cb2026 set a move aside (the `tree` module).
 //! `cb2026 --cnp` speaks it, and so does a plain `cb2026` whose first input line is JSON.
 //!
 //! ```text
@@ -49,11 +51,16 @@
 //!   the same search throughout, so it keeps its tree, and its answer says how long it pondered
 //!   (`ponderMs`). On a miss the client cancels it, and the next search is taken at once, as
 //!   after any cancel. UCI's `go ponder` and `ponderhit` work the same way (`cb2026-protocol`).
+//! - **A tree has an engine and a thread of its own** (the `tree` module), so it is answered while a
+//!   search runs, and is the same tree each time it is asked for. One at a time
+//!   (`maxConcurrentTrees` 1). The trees are kept for [`TREE_EXPIRY_MS`] after their last use,
+//!   at most [`MAX_TREES_KEPT`] of them, and `engine/treeNode` is answered in the loop, at once.
 //!
 //! ## What it offers
 //!
 //! Every engine capability except `window`: cb2026's search always starts with an open window
-//! at the root. Pondering included. None of the other domains: voice, and the games, preferences
+//! at the root. Pondering and the search tree included, the tree to [`MAX_TREE_DEPTH`] and
+//! [`MAX_TREE_PLIES`]. None of the other domains: voice, and the games, preferences
 //! and backups that Solrac's own node keeps. Its techniques are the shell's switches
 //! ([`cb2026_shell::SWITCHES`]), by the names the shell's `set` uses. Its levels are [`RATINGS`],
 //! whole numbers only, since a level's settings are whole steps. A rating within [`ELO_RANGE`]
@@ -96,6 +103,8 @@
 
 #![forbid(unsafe_code)]
 
+mod tree;
+
 use std::collections::BTreeMap;
 use std::io::{self, BufRead, Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -114,7 +123,7 @@ use cb2026_shell::SWITCHES;
 use cnp::engine::{
     EloRange, EngineCapabilities, EngineProgress, Evaluate, EvaluateParams, EvaluateResult, Level,
     Levels, LevelsResult, Line, PieceValue, PonderHit, Progress, Search, SearchParams, SearchStats,
-    Stop, Technique, Techniques, TechniquesResult, Term,
+    Stop, Technique, Techniques, TechniquesResult, Term, Tree, TreeNodePage,
 };
 use cnp::lifecycle::{
     CancelRequest, Capabilities, IncompatibleVersionData, Initialize, InitializeResult,
@@ -122,6 +131,11 @@ use cnp::lifecycle::{
 };
 use cnp::stdio::{ReadError, read_message, write_message};
 use cnp::{Id, Message, Notification, Request, RequestMethod, Response, ResponseError, code};
+
+pub use tree::{
+    MAX_TREE_DEPTH, MAX_TREE_ENTRIES_KEPT, MAX_TREE_PLIES, MAX_TREES_KEPT, TREE_EXPIRY_MS,
+    TREE_HASH_MB, TREE_MAX_EVENTS,
+};
 
 /// The longest search the node runs, infinite ones included: an hour.
 pub const MAX_TIME_MS: u64 = 60 * 60 * 1000;
@@ -298,6 +312,12 @@ struct Node {
     search: Option<Running>,
     /// The `game` hint of the last search, whose hash table the engine still holds.
     last_game: Option<String>,
+    /// What each tree's engine is made from.
+    tree_setup: tree::TreeSetup,
+    /// The tree being recorded, if any.
+    recording: Option<tree::Recording>,
+    /// The trees kept for `engine/treeNode`, shared with the recording thread.
+    trees: Arc<Mutex<tree::TreeStore>>,
 }
 
 /// A search request, checked and turned into the engine's terms.
@@ -320,7 +340,8 @@ struct Prepared {
 impl Node {
     fn new(output: Output, engine: Engine, config: Config) -> Node {
         let mut fresh = Engine::new();
-        let defaults = SWITCHES.iter().map(|s| *(s.flag)(&mut fresh)).collect();
+        let defaults: Vec<bool> = SWITCHES.iter().map(|s| *(s.flag)(&mut fresh)).collect();
+        let tree_setup = tree::TreeSetup::new(&engine, &defaults);
         let mut evaluator = fresh;
         evaluator.set_hash_size(EVALUATOR_HASH_MB);
         evaluator.params = engine.params.clone();
@@ -337,6 +358,9 @@ impl Node {
             defaults,
             search: None,
             last_game: None,
+            tree_setup,
+            recording: None,
+            trees: Arc::default(),
         }
     }
 
@@ -389,6 +413,17 @@ impl Node {
                 Ok(result) => Response::ok::<Evaluate>(id, &result),
                 Err(e) => Response::error(Some(id), e),
             },
+            (State::Running, Tree::NAME) => match self.start_tree(&request) {
+                Ok(()) => return,
+                Err(e) => Response::error(Some(id), e),
+            },
+            (State::Running, TreeNodePage::NAME) => match request
+                .params::<TreeNodePage>()
+                .and_then(|params| tree::node_page(&self.trees, &params))
+            {
+                Ok(result) => Response::ok::<TreeNodePage>(id, &result),
+                Err(e) => Response::error(Some(id), e),
+            },
             (State::Running, method) => error(
                 code::METHOD_NOT_FOUND,
                 &format!("cb2026 has no method {method}"),
@@ -408,6 +443,10 @@ impl Node {
         if let Some(running) = self.search.as_ref().filter(|r| r.id == params.id) {
             running.cancelled.store(true, Ordering::Relaxed);
             running.stop.store(true, Ordering::Relaxed);
+        }
+        if let Some(recording) = self.recording.as_ref().filter(|r| r.id == params.id) {
+            recording.cancelled.store(true, Ordering::Relaxed);
+            recording.stop.store(true, Ordering::Relaxed);
         }
     }
 
@@ -453,6 +492,7 @@ impl Node {
                     quiet: true,
                     pieces: true,
                     ponder: true,
+                    tree: true,
                 }),
                 voice: None,
                 preferences: None,
@@ -466,6 +506,9 @@ impl Node {
                 max_multipv: Some(MAX_MULTIPV),
                 max_concurrent_searches: Some(1),
                 max_message_bytes: None,
+                max_tree_depth: Some(MAX_TREE_DEPTH),
+                max_tree_plies: Some(MAX_TREE_PLIES),
+                max_concurrent_trees: Some(1),
             },
         };
         Response::ok::<Initialize>(id, &result)
@@ -592,13 +635,46 @@ impl Node {
         }
     }
 
-    /// Cancels the running search, if any, and waits for it to answer.
+    /// Checks a tree request and starts recording it on its own thread, or says why not.
+    fn start_tree(&mut self, request: &Request) -> Result<(), ResponseError> {
+        let params = request.params::<Tree>()?;
+        let prepared = tree::prepare(&params)?;
+        if let Some(recording) = self.recording.take() {
+            if recording.ending() {
+                // Answered and ending, or winding down after a cancel: a few milliseconds.
+                recording.join(&self.output);
+            } else {
+                self.recording = Some(recording);
+                return Err(ResponseError::new(
+                    code::BUSY,
+                    "cb2026 records one tree at a time",
+                ));
+            }
+        }
+        self.recording = Some(tree::start(
+            &self.tree_setup,
+            prepared,
+            request.id.clone(),
+            &self.output,
+            &self.trees,
+        ));
+        Ok(())
+    }
+
+    /// Cancels the running search and the tree being recorded, if any, waits for them to
+    /// answer, and forgets the kept trees.
     fn finish(&mut self) {
         if let Some(running) = self.search.take() {
             running.cancelled.store(true, Ordering::Relaxed);
             running.stop.store(true, Ordering::Relaxed);
             self.reclaim(running);
         }
+        if let Some(recording) = self.recording.take() {
+            recording.cancelled.store(true, Ordering::Relaxed);
+            recording.stop.store(true, Ordering::Relaxed);
+            recording.join(&self.output);
+        }
+        tree::lock(&self.trees).clear();
     }
 
     /// The switchable techniques: the shell's switches, under the names `set` uses.
@@ -1064,7 +1140,7 @@ mod tests {
     use cb2026_engine::time::TimeParams;
     use cnp::engine::{
         Clock, PonderHitParams, Position as CnpPosition, SearchLimits, SideClock, StopParams,
-        Strength, Window,
+        Strength, TreeNodeParams, TreeParams, Window,
     };
 
     fn search(fen: &str) -> SearchParams {
@@ -1490,6 +1566,181 @@ mod tests {
             &PonderHitParams { id: Id::Number(1) },
         ));
         assert_eq!(capture.response(3).unwrap().result::<PonderHit>(), Ok(()));
+        node.finish();
+    }
+
+    /// A tree request of the start position after `moves`.
+    fn tree_of(moves: &[&str], depth: u32, plies: u32) -> TreeParams {
+        TreeParams {
+            plies: Some(plies),
+            ..TreeParams::new(
+                CnpPosition::start().with_moves(moves.iter().copied()),
+                depth,
+            )
+        }
+    }
+
+    /// The error code of request `id`'s response.
+    fn error_code(capture: &Capture, id: i64) -> i64 {
+        capture.response(id).unwrap().outcome.unwrap_err().code
+    }
+
+    #[test]
+    fn a_tree_is_answered_while_a_search_runs_and_read_a_node_at_a_time() {
+        let capture = Capture::default();
+        let mut node = running_node(&capture);
+        let mut infinite = start();
+        infinite.limits = SearchLimits::infinite();
+        node.request(Request::new::<Search>(1, &infinite));
+        let params = TreeParams {
+            limit: Some(3),
+            ..tree_of(&["e2e4", "e7e5"], 6, 2)
+        };
+        node.request(Request::new::<Tree>(2, &params));
+        let result = capture
+            .wait_for(2, Duration::from_secs(60))
+            .expect("the tree answers while the search runs")
+            .result::<Tree>()
+            .unwrap();
+        assert!(capture.response(1).is_none(), "the search still runs");
+        assert_eq!((result.depth, result.recorded.plies), (6, 2));
+        assert!(!result.recorded.truncated);
+        assert_eq!(result.pv.first(), result.best_move.as_ref());
+        // The root: every legal move entered, and the result's score, exact.
+        assert_eq!(result.root.mv, None);
+        assert_eq!(result.root.child_count, 29);
+        assert_eq!(result.root.score, result.score);
+        assert_eq!(result.root.score.unwrap().bound, cnp::engine::Bound::Exact);
+        assert_eq!(result.recorded.nodes, result.root.subtree + 1);
+        assert_eq!(result.children.len(), 3);
+        // A child's window is from its own side to move, below its parent's turned round.
+        let first = &result.children[0];
+        assert_eq!(first.depth, 5);
+        assert!(first.score.is_some());
+
+        // The first child, read again, with a page of its own children.
+        let mv = first.mv.clone().unwrap();
+        let page = TreeNodeParams {
+            offset: Some(1),
+            limit: Some(2),
+            ..TreeNodeParams::new(result.tree.clone(), [mv.clone()])
+        };
+        node.request(Request::new::<TreeNodePage>(3, &page));
+        let read = capture
+            .response(3)
+            .unwrap()
+            .result::<TreeNodePage>()
+            .unwrap();
+        assert_eq!(&read.node, first);
+        let all = TreeNodeParams::new(result.tree.clone(), [mv.clone()]);
+        node.request(Request::new::<TreeNodePage>(4, &all));
+        let every = capture
+            .response(4)
+            .unwrap()
+            .result::<TreeNodePage>()
+            .unwrap();
+        assert_eq!(every.children.len() as u32, first.child_count);
+        let expected: Vec<_> = every.children.iter().skip(1).take(2).cloned().collect();
+        assert_eq!(read.children, expected);
+        // Past the last child, an empty page; a limit of 0, the node alone.
+        let past = TreeNodeParams {
+            offset: Some(first.child_count),
+            ..all.clone()
+        };
+        node.request(Request::new::<TreeNodePage>(5, &past));
+        let past = capture
+            .response(5)
+            .unwrap()
+            .result::<TreeNodePage>()
+            .unwrap();
+        assert!(past.children.is_empty());
+
+        // A path the tree doesn't hold, and a handle it never gave.
+        let nowhere = TreeNodeParams::new(result.tree.clone(), [mv.as_str(), "e1e8"]);
+        node.request(Request::new::<TreeNodePage>(6, &nowhere));
+        assert_eq!(error_code(&capture, 6), code::INVALID_PARAMS);
+        node.request(Request::new::<TreeNodePage>(
+            7,
+            &TreeNodeParams::new("t99", [""; 0]),
+        ));
+        assert_eq!(error_code(&capture, 7), code::EXPIRED);
+
+        // The same request records the same tree: its own engine, cleared, on one thread.
+        node.request(Request::new::<Tree>(8, &params));
+        let again = capture
+            .wait_for(8, Duration::from_secs(60))
+            .unwrap()
+            .result::<Tree>()
+            .unwrap();
+        assert_ne!(again.tree, result.tree);
+        assert_eq!(
+            (again.root, again.children, again.nodes, again.pv),
+            (result.root, result.children, result.nodes, result.pv)
+        );
+        node.request(Request::new::<Stop>(9, &StopParams { id: Id::Number(1) }));
+        assert!(capture.wait_for(1, Duration::from_secs(60)).is_some());
+        node.finish();
+    }
+
+    #[test]
+    fn a_cancelled_tree_answers_cancelled_and_the_next_isn_t_busy() {
+        let capture = Capture::default();
+        let mut node = running_node(&capture);
+        // Deep enough to be running when the cancel comes, and the next while it runs.
+        let deep = tree_of(&[], MAX_TREE_DEPTH, 2);
+        node.request(Request::new::<Tree>(1, &deep));
+        node.request(Request::new::<Tree>(2, &deep));
+        assert_eq!(error_code(&capture, 2), code::BUSY);
+        node.notification(&Notification::new::<CancelRequest>(
+            &cnp::lifecycle::CancelParams { id: Id::Number(1) },
+        ));
+        node.request(Request::new::<Tree>(3, &tree_of(&[], 2, 1)));
+        assert_eq!(error_code(&capture, 1), code::CANCELLED);
+        let next = capture.wait_for(3, Duration::from_secs(60)).unwrap();
+        assert!(next.result::<Tree>().is_ok(), "{next:?}");
+        node.finish();
+        // `shutdown` forgets the trees.
+        node.request(Request::new::<TreeNodePage>(
+            4,
+            &TreeNodeParams::new("t1", [""; 0]),
+        ));
+        assert_eq!(error_code(&capture, 4), code::EXPIRED);
+    }
+
+    #[test]
+    fn a_tree_beyond_the_limits_or_of_an_illegal_position_is_refused() {
+        let capture = Capture::default();
+        let mut node = running_node(&capture);
+        let cases = [
+            (tree_of(&[], 0, 2), code::INVALID_PARAMS),
+            (tree_of(&[], 4, 0), code::INVALID_PARAMS),
+            (tree_of(&[], MAX_TREE_DEPTH + 1, 2), code::LIMIT_EXCEEDED),
+            (tree_of(&[], 4, MAX_TREE_PLIES + 1), code::LIMIT_EXCEEDED),
+            (tree_of(&["e2e5"], 4, 2), code::INVALID_POSITION),
+        ];
+        for (id, (params, expected)) in (1..).zip(cases) {
+            node.request(Request::new::<Tree>(id, &params));
+            assert_eq!(error_code(&capture, id), expected, "{params:?}");
+        }
+    }
+
+    #[test]
+    fn a_tree_of_a_position_with_no_legal_move_is_its_root_alone() {
+        let capture = Capture::default();
+        let mut node = running_node(&capture);
+        let mated = tree_of(&["f2f3", "e7e5", "g2g4", "d8h4"], 8, 2);
+        node.request(Request::new::<Tree>(1, &mated));
+        let result = capture
+            .wait_for(1, Duration::from_secs(60))
+            .unwrap()
+            .result::<Tree>()
+            .unwrap();
+        assert_eq!(
+            (result.best_move, result.score, result.depth),
+            (None, None, 0)
+        );
+        assert_eq!((result.root.child_count, result.recorded.nodes), (0, 1));
+        assert!(result.children.is_empty());
         node.finish();
     }
 
