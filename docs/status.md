@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-10-31, 10:00 MDT (M5: the check extension, IIR and three versions of
+*Last updated 2026-11-01, 15:30 MST (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -147,12 +147,12 @@ played a 3+2 game at 4 threads and stopped a MultiPV analysis at once; XBoard sk
 v1.0 gate has passed and **the `v1.0.0` tag on `83fa6c6` is next** (#199). 2026-10-30: **the print edition**, the book bound as one PDF and one EPUB with seven figures and an index, in `book/print/`, rebuilt by `scripts/build-print-book.sh` with bookcraft's makebook (Carlos, #231); the PDF and EPUB are published on the PNX Studios CDN (`cdn.pnxstudios.com/solrac/book/latest/`) instead of committed, and Git ignores them (Carlos, #232); ready for the repository going public (Carlos, 2026-10-30): the Chess Node Protocol's deploy key dropped from CI, since its repository is public, the book's GitHub Pages workflow (`book.yml`, skipped while private), `SECURITY.md` and `CONTRIBUTING.md` (#234), with the last checks, two choices and the switch in #233. 2026-10-31: the nightly run's one failure, the flaky XBoard MultiPV test, fixed: it waits for the engine's move instead of a fixed second, which a debug build's search could overrun (#225); **cb2026's CNP node ponders** (capability
 `ponder`, `engine/ponderHit`, spec 7.7): a ponder search keeps to no time until its hit and
 then to the time it would have had, keeping its tree, passing `ponder-hit`, `ponder-miss` and
-`ponder-hit-crossing`, for Solrac's pondering switch (cjus/chessgui#319; #242); UCI and XBoard ponder with the same
+`ponder-hit-crossing`, for Solrac's pondering switch (Solrac Chess AI #319; #242); UCI and XBoard ponder with the same
 `Limits::pondering`, no longer `infinite`, so a strength level keeps its horizon while pondering
 (it lost it on every move after a ponder hit), XBoard keeps `sd`, and the book answers a ponder
 search (#243). 2026-11-01: **CNP's `engine/evaluate` settles captures and values pieces by
 the network** (capabilities `quiet` and `pieces`, cjus/chess-node-protocol#21), for Solrac's
-Engine Mind (cjus/chessgui#340): its terms are the hand-crafted evaluation's, which ordered
+Engine Mind (Solrac Chess AI #340): its terms are the hand-crafted evaluation's, which ordered
 three reported lines as the search did in 0 of 10 positions where the network did in 5, so the
 answer now also has the network's score (`searchScore`) and, asked, each piece's value to it
 (`Engine::piece_values`, the network's score without the piece, through
@@ -246,7 +246,7 @@ version there and still require the commit in a checkout; no functional change.*
 | PGN comment commands: `[%clk 0:04:52]`, `[%eval -1.25]` and the rest read out of a comment's text (`pgn::commands`, `pgn::Command`), with `%clk` as a duration and `%eval` as centipawns or a mate (`Command::clock`, `Command::evaluation`), as the PGN Specification Supplement writes them. For Solrac's move list (Solrac Chess AI #232) | #226 | 701720 | Merged, no functional change |
 | PGN comment arrows and squares: `[%cal Ge2e4,Rd1d8]` and `[%csl Rd5]` read as coloured arrows and squares (`Command::arrows`, `Command::squares`, `pgn::Arrow`, `pgn::MarkedSquare`, `pgn::MarkColor`), as lichess and ChessBase write them. For Solrac's move list (Solrac Chess AI #232) | #237 | 767812 | Merged, no functional change |
 | The build's commit: CNP's `initialize` and `cb2026 --version` name the version with the commit it was built from, `1.0.0+f1638bcb685b` (`build_version`, `COMMIT`, from `crates/engine/build.rs`), so Solrac's game review can say which build judged a game; UCI's `id name` and XBoard's `myname` stay `cb2026 1.0.0`. For Solrac's game review (Solrac Chess AI #174) | #238 | 767812 | Merged, no functional change |
-| CNP pondering: capability `ponder`, a search with `"ponder": true` and `engine/ponderHit` (spec 7.7). A ponder search searches with its depth, node and mate limits but no time and doesn't answer before the hit, a stop or a cancel; from the hit the watchdog gives it the time manager's budget (`timeMs`, or its share of the clock), and its answer has `ponderMs`. The `cnp` pin moves to cjus/chess-node-protocol `968e777`. For Solrac's pondering switch (cjus/chessgui#319) | #242 | 767812 | Merged, no functional change |
+| CNP pondering: capability `ponder`, a search with `"ponder": true` and `engine/ponderHit` (spec 7.7). A ponder search searches with its depth, node and mate limits but no time and doesn't answer before the hit, a stop or a cancel; from the hit the watchdog gives it the time manager's budget (`timeMs`, or its share of the clock), and its answer has `ponderMs`. The `cnp` pin moves to cjus/chess-node-protocol `968e777`. For Solrac's pondering switch (Solrac Chess AI #319) | #242 | 767812 | Merged, no functional change |
 | UCI and XBoard ponder with `Limits::pondering` instead of an `infinite` search: no time until the hit, but the depth, node and mate limits stay, so a strength level keeps its person's horizon on pondered moves, XBoard keeps `sd` while pondering, and the opening book answers a ponder search (it waits for the hit). A UCI `ponderhit` with no clock lets a mate limit end the search too. Full strength unchanged | #243 | 767812 | Built, no functional change at full strength |
 
 **The M3 is free** since gen3's gauntlet finished (2026-10-29, about 20:30 MDT; #227). Each

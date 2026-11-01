@@ -411,9 +411,9 @@ levels, and `engine/evaluate` gives a position's evaluation term by term, as the
 does, so Solrac's chat can say why cb2026 likes a position (Solrac Chess AI #145). Since the
 search evaluates with the network and the terms are the hand-crafted evaluation's, its answer
 also gives the network's score and, asked, what each piece is worth to it, and can first settle
-captures as a search's leaf does (`quiet`), for Solrac's Engine Mind (cjus/chessgui#340). A search can
+captures as a search's leaf does (`quiet`), for Solrac's Engine Mind (Solrac Chess AI #340). A search can
 ponder (`"ponder": true` and `engine/ponderHit`), as UCI's `go ponder` does, for Solrac's
-pondering switch (cjus/chess-node-protocol#18, cjus/chessgui#319). Every engine capability is
+pondering switch (cjus/chess-node-protocol#18, Solrac Chess AI #319). Every engine capability is
 offered except a root score window. Every conformance session in the
 protocol's repository runs against the real binary in `cargo test` (`crates/cli/tests/cnp.rs`).
 
