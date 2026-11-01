@@ -3,10 +3,11 @@
 #
 #   scripts/check.sh
 #
-# Pull requests aren't checked on GitHub (Actions minutes, Solrac Chess AI #73): run this on the
-# PR's latest commit before merging. It formats nothing and changes nothing; it stops at the
-# first failure. The nightly CI run (.github/workflows/ci.yml) runs the same steps on main:
-# change both together. Needs cargo-deny and mdbook (`brew install cargo-deny mdbook`).
+# Run this on the PR's latest commit before merging; GitHub's `CI` check
+# (.github/workflows/ci.yml) runs the same steps on every PR and on main each night, so change
+# both together. This run also covers the Mac: the GPU tests run on Metal here. It formats
+# nothing and changes nothing; it stops at the first failure. Needs cargo-deny and mdbook
+# (`brew install cargo-deny mdbook`).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -28,7 +29,7 @@ fi
 step cargo fmt --all --check
 step cargo clippy --workspace --all-targets --locked -- -D warnings
 # The trainer's GPU backend sits behind its `gpu` feature, so it is checked on its own. Its tests
-# run on the GPU (Metal on a Mac); with no GPU (the nightly Linux CI) they say so and pass.
+# run on the GPU (Metal on a Mac); with no GPU (Linux CI) they say so and pass.
 step cargo clippy -p cb2026-trainer --features gpu --all-targets --locked -- -D warnings
 step cargo test --workspace --locked
 step cargo test -p cb2026-trainer --features gpu --locked gpu::

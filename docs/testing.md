@@ -12,9 +12,9 @@ cargo test --workspace                     # unit tests, perft up to 1M nodes pe
 cargo run --release -p cb2026-tools --bin perft-suite   # every perft depth, with speed
 ```
 
-`scripts/check.sh` runs all of these, and the docs, licence and book checks, as CI did on
-every pull request until 2026-10-22: run it before a PR merges. CI now runs the same steps on
-`main` each night, if it changed.
+`scripts/check.sh` runs all of these, and the docs, licence and book checks: run it before a PR
+merges. CI runs the same steps on Linux on every pull request (the `CI` check `main`'s ruleset
+requires) and on `main` each night.
 
 ## Fuzzing
 
