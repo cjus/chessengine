@@ -899,8 +899,19 @@ impl Techniques {
 
 /// Converts an internal score to a [`Score`], turning mate scores into "mate in N moves".
 pub fn to_score(value: i32) -> Score {
+    to_score_at(value, 0)
+}
+
+/// [`to_score`] for a node `ply` plies from the root, with a mate counted from that node.
+///
+/// The search scores a mate by its distance from the root (`MATE - ply` where it happens), at
+/// every node, so that scores from different depths compare. A node's own mate is nearer than
+/// the root's by the plies played to reach it: mated four plies from the root is mated in two
+/// moves at the root, but in one at the node two plies down. Used to show the nodes of a
+/// search tree ([`crate::tree`]).
+pub fn to_score_at(value: i32, ply: u32) -> Score {
     if value.abs() >= MATE - MAX_PLY as i32 {
-        let plies = MATE - value.abs();
+        let plies = (MATE - value.abs() - ply as i32).max(0);
         let moves = (plies + 1) / 2;
         Score::Mate(if value > 0 { moves } else { -moves })
     } else {
@@ -1207,6 +1218,12 @@ impl<'a> Searcher<'a> {
     /// Reports a decision to the statistics and, when one is being recorded, the search tree.
     fn note(&mut self, note: Note) {
         self.stats.count(note);
+        self.record(note);
+    }
+
+    /// Writes `note` to the search tree being recorded, if any, and not to the statistics: for
+    /// what only a tree needs, such as the root search's own brackets.
+    fn record(&mut self, note: Note) {
         if let Some(tree) = &mut self.tree {
             tree.record(&self.path, note);
         }
@@ -2234,6 +2251,10 @@ impl<'a> Searcher<'a> {
         };
         let mut child_pv = Vec::new();
         self.keys.push(pos.hash());
+        // A recorded tree brackets each search of the root, as `negamax` does every other node,
+        // so that an aspiration re-search shows (`crate::tree`). Not counted: the root isn't a
+        // `negamax` node, and the statistics stay as they were.
+        self.record(Note::Enter { depth, alpha, beta });
         for (index, &mv) in root_moves.iter().enumerate() {
             let mut child = pos.clone();
             child.make_move(mv);
@@ -2271,6 +2292,9 @@ impl<'a> Searcher<'a> {
             }
         }
         self.keys.pop();
+        self.record(Note::Exit {
+            score: result.score,
+        });
         result.nodes = self.nodes;
         result.seldepth = self.seldepth;
         result.complete = !self.aborted;

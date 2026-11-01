@@ -413,8 +413,11 @@ search evaluates with the network and the terms are the hand-crafted evaluation'
 also gives the network's score and, asked, what each piece is worth to it, and can first settle
 captures as a search's leaf does (`quiet`), for Solrac's Engine Mind (Solrac Chess AI #340). A search can
 ponder (`"ponder": true` and `engine/ponderHit`), as UCI's `go ponder` does, for Solrac's
-pondering switch (cjus/chess-node-protocol#18, Solrac Chess AI #319). Every engine capability is
-offered except a root score window. Every conformance session in the
+pondering switch (cjus/chess-node-protocol#18, Solrac Chess AI #319). And it keeps search trees
+(`engine/tree`, `engine/treeNode`): a search's decisions near the root, recorded on an engine of
+the tree's own, kept a few minutes under a handle and read a node at a time, each decision said
+in alpha-beta's terms with the switch behind it, so Solrac's Engine Mind can answer "why not that
+move?" (Solrac Chess AI #350). Every engine capability is offered except a root score window. Every conformance session in the
 protocol's repository runs against the real binary in `cargo test` (`crates/cli/tests/cnp.rs`).
 
 ### Lichess bot (must)

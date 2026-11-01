@@ -27,7 +27,9 @@ use cb2026_chess::Move;
 /// [`SearchTree`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Note {
-    /// A main-search node is entered, `depth` plies to go, with the window `[alpha, beta]`.
+    /// A main-search node is entered, `depth` plies to go, with the window `[alpha, beta]`. A
+    /// recorded tree also brackets each search of the root with `Enter` and [`Note::Exit`],
+    /// which aren't counted.
     Enter {
         /// Remaining depth.
         depth: u32,

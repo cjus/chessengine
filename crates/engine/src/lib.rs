@@ -87,6 +87,7 @@ pub mod see;
 pub mod stats;
 pub mod tablebase;
 pub mod time;
+pub mod tree;
 pub mod tt;
 pub mod tuned;
 pub mod tuning;
@@ -733,8 +734,13 @@ impl Engine {
 
     /// Searches `position` to `depth` on one thread and records the search tree of the last
     /// iteration, for nodes up to `max_ply` plies from the root (at most `max_events`
-    /// decisions; see [`stats`]). The earlier iterations run first, unrecorded, so the move
-    /// ordering is what a real search would have. Returns the tree and the iteration's result.
+    /// decisions; see [`stats`], and [`tree::FoldedTree`] for its nodes). The earlier
+    /// iterations run first, unrecorded, so the move ordering is what a real search would
+    /// have. Returns the tree and the iteration's result.
+    ///
+    /// Setting `stop` ends the search early, from another thread (a cancelled request): the
+    /// tree and the result are then incomplete, and the caller, which set it, knows to drop
+    /// them.
     pub fn search_tree(
         &mut self,
         position: &Position,
@@ -742,9 +748,9 @@ impl Engine {
         depth: u32,
         max_ply: usize,
         max_events: usize,
+        stop: &AtomicBool,
     ) -> (SearchTree, SearchInfo) {
         let start = Instant::now();
-        let stop = AtomicBool::new(false);
         let mut root_moves: Vec<Move> = position.legal_moves().iter().copied().collect();
         if self.techniques.mvv_lva {
             ordering::order_moves(position, &mut root_moves);
@@ -759,7 +765,7 @@ impl Engine {
             &mut self.ordering,
             self.techniques,
             StopConditions {
-                stop: &stop,
+                stop,
                 deadline: None,
                 max_nodes: None,
             },
@@ -1680,7 +1686,7 @@ mod tests {
     fn search_trees_record_the_last_iteration() {
         let pos = Position::startpos();
         let mut engine = Engine::new();
-        let (tree, info) = engine.search_tree(&pos, &[], 3, 1, 10_000);
+        let (tree, info) = engine.search_tree(&pos, &[], 3, 1, 10_000, &AtomicBool::new(false));
         assert_eq!(info.depth, 3);
         assert!(!tree.truncated);
         // Every root move is entered at depth 2, and nothing deeper is recorded.

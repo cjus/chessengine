@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-11-01, 16:20 MST (M5: the check extension, IIR and three versions of
+*Last updated 2026-11-01, 17:30 MST (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -177,7 +177,19 @@ since 2026-10-30, so Actions is free. `scripts/check.sh` stays the local check (
 with the GPU tests on a GPU). Also from #233: a skim of what's public found the account details
 in #61's text (removed, and its old revision deleted) and #242 and #244's links to Solrac's
 private repository (unlinked again, #247), and #157, the pnxfarm draft, is closed; no functional
-change.*
+change.
+**cb2026's CNP node keeps search trees** (capability `tree`, `engine/tree` and `engine/treeNode`,
+spec 7.8, cjus/chess-node-protocol#22), for the search-tree panel of Solrac's
+Engine Mind (Solrac Chess AI #350): each tree is recorded by `Engine::search_tree` on an engine
+and a thread of its own, so it is answered while a search runs and is the same tree every time,
+then folded into its nodes (`cb2026_engine::tree::FoldedTree`): each node is its last search
+(window, score, children and decisions), after the decisions that say how it came to be
+searched that way, and the notes are said in alpha-beta's terms (cutoff, table, null move, a
+node or a move pruned, reduced, extended, searched again), each naming the switch behind it.
+Trees are kept five minutes after their last use, eight at most; up to depth 24 (11–15 s) and
+six plies. `search_tree` takes a stop flag, so a tree can be cancelled, and a recorded tree
+brackets the root's searches, so an aspiration re-search shows; no functional change. The
+`cnp` pin moves to cjus/chess-node-protocol#22's merge, `deeab77` (#249).*
 
 ## Stages
 
@@ -256,6 +268,7 @@ change.*
 | The build's commit: CNP's `initialize` and `cb2026 --version` name the version with the commit it was built from, `1.0.0+f1638bcb685b` (`build_version`, `COMMIT`, from `crates/engine/build.rs`), so Solrac's game review can say which build judged a game; UCI's `id name` and XBoard's `myname` stay `cb2026 1.0.0`. For Solrac's game review (Solrac Chess AI #174) | #238 | 767812 | Merged, no functional change |
 | CNP pondering: capability `ponder`, a search with `"ponder": true` and `engine/ponderHit` (spec 7.7). A ponder search searches with its depth, node and mate limits but no time and doesn't answer before the hit, a stop or a cancel; from the hit the watchdog gives it the time manager's budget (`timeMs`, or its share of the clock), and its answer has `ponderMs`. The `cnp` pin moves to cjus/chess-node-protocol `968e777`. For Solrac's pondering switch (Solrac Chess AI #319) | #242 | 767812 | Merged, no functional change |
 | UCI and XBoard ponder with `Limits::pondering` instead of an `infinite` search: no time until the hit, but the depth, node and mate limits stay, so a strength level keeps its person's horizon on pondered moves, XBoard keeps `sd` while pondering, and the opening book answers a ponder search (it waits for the hit). A UCI `ponderhit` with no clock lets a mate limit end the search too. Full strength unchanged | #243 | 767812 | Built, no functional change at full strength |
+| CNP search trees: capability `tree`, `engine/tree` and `engine/treeNode` (spec 7.8). A tree is recorded by `Engine::search_tree` (which now takes a stop flag) on a fresh engine and thread of its own, folded into nodes by `cb2026_engine::tree` (each node its last search; decisions in alpha-beta's terms, each with its switch), kept five minutes after its last use (eight at most), and read a node and a page of children at a time; to depth 24 and six plies. The `cnp` pin moves to cjus/chess-node-protocol#22's merge, `deeab77`. For Solrac's Engine Mind (Solrac Chess AI #350) | #249 | 767812 | Merged, no functional change |
 
 **The M3 is free** since gen3's gauntlet finished (2026-10-29, about 20:30 MDT; #227). Each
 generation's files stay in `~/nnue-data/genN` there, and in `~/engines/nets/genN` on

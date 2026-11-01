@@ -618,6 +618,7 @@ impl Shell {
             depth,
             plies,
             TREE_MAX_EVENTS,
+            &AtomicBool::new(false),
         );
         let mut out = format!(
             "Search tree of the depth-{depth} iteration (the earlier ones ran first), {plies} plies shown.\n\
