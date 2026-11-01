@@ -301,8 +301,8 @@ teaching value, and the trainer uses the Mac's GPU through Metal.
 - **Build and tests:** the trainer is not among the workspace's default members (done
   2026-10-23), so `cargo build` and the `cb2026` binary never compile wgpu. `scripts/check.sh`
   checks it with the rest, and checks the `gpu` feature on its own (clippy, the GPU tests, the
-  docs); the GPU tests run on Metal on the Mac, and on the nightly Linux CI, which has no GPU,
-  they say so and pass.
+  docs); the GPU tests run on Metal on the Mac, and on Linux CI, which has no GPU, they say so
+  and pass.
 - **Nets:** the default net is committed, in `nets/` with a README saying how it was made
   (Carlos, 2026-10-24): every build compiles it in, and a release's build runs before the
   release exists, so the file can't come from the release. It is small (395 KB for 256 wide).
@@ -603,10 +603,10 @@ bitboard views from stage 2–3, `eval` and `explain` from stage 9 on.
 
 | Layer | What it proves | Runs where |
 | --- | --- | --- |
-| Unit and property tests | make/unmake restores the position; incremental hash equals a full recompute; FEN round-trips; SAN parsing | `scripts/check.sh` before every PR merges; nightly CI; Claude in session |
-| Perft suites | Move generation is exactly right (standard and Chess960) | Every depth: `scripts/check.sh` and nightly CI |
+| Unit and property tests | make/unmake restores the position; incremental hash equals a full recompute; FEN round-trips; SAN parsing | `scripts/check.sh` before every PR merges; CI on every PR and nightly; Claude in session |
+| Perft suites | Move generation is exactly right (standard and Chess960) | Every depth: `scripts/check.sh` and CI |
 | Fuzzing (`cargo fuzz`) | The FEN, SAN, UCI and XBoard parsers never panic on bad input | Locally and weekly |
-| Protocol conformance | Correct UCI/XBoard behaviour, including GUI quirks | `scripts/check.sh`; nightly CI |
+| Protocol conformance | Correct UCI/XBoard behaviour, including GUI quirks | `scripts/check.sh`; CI |
 | Bench | Search didn't change by accident: same node count = same search | Locally; recorded in every commit message |
 | Tactical suites (EPD) | Sanity check: e.g. most WAC positions solved in 1 s | Before tags |
 | SPRT self-play | Did this change gain Elo? | Claude's session (short), Carlos's Mac (long) |
@@ -738,25 +738,27 @@ and short SPRT matches itself. What Claude can't do is look at GUIs or run long 
 
 **Workflow:** `claude/<topic>` branches from the latest `main`, one PR each;
 `scripts/check.sh` (fmt, clippy, tests, every perft depth, conformance, docs, licences and
-advisories, book build) must pass before it merges; the PR states bench and SPRT results. Each
-stage ends with a tag, a book chapter and an Elo ledger entry. `main` is protected by the
-ruleset `main: PR`: every change arrives through a PR, and force pushes and branch deletion are
-blocked. From 2026-10-10 to 2026-10-22 it was `main: PR + CI` and also required a passing `CI`
-check on GitHub (one job since 2026-10-21; three checks before).
+advisories, book build) must pass before it merges, and so must GitHub's `CI` check, which runs
+the same steps on Linux; the PR states bench and SPRT results. Each stage ends with a tag, a
+book chapter and an Elo ledger entry. `main` is protected by the ruleset `main: PR + CI`: every
+change arrives through a PR whose `CI` check passed, and force pushes and branch deletion are
+blocked. It was `main: PR + CI` from 2026-10-10 (three checks, one job since 2026-10-21), and
+`main: PR` with no check from 2026-10-22 to 2026-11-01, while the Actions minutes were out.
 
 **CI cost.** GitHub Actions minutes are limited on private repos, and macOS and Windows minutes
 have historically cost 10× and 2× Linux minutes. So CI runs on Linux; macOS and Windows builds run
 weekly and on release tags. Releases build binaries for every platform in the table above. The
 account's minutes, shared with Solrac Chess AI, ran out on 2026-10-21 (Solrac Chess AI #73),
-about 1,800 of them having gone here in three weeks. Since then:
-- CI is one job (GitHub bills each job to the next whole minute).
-- GitHub checks neither PRs nor merges (since 2026-10-22, Carlos: the code is checked locally,
-  with `scripts/check.sh`). `main` is checked nightly, only if it changed since the last good
-  run.
-- Only `main` saves build caches.
-- Fuzzing and the macOS and Windows builds run weekly, only if `main` changed.
+about 1,800 of them having gone here in three weeks. From 2026-10-22 GitHub checked no PRs and
+`main` only nightly if it changed; the code was checked locally with `scripts/check.sh`.
 
-The repository becoming public (planned, Solrac Chess AI #71) makes its CI free.
+The repository has been public since 2026-10-30 (Solrac Chess AI #71, #233), so its Actions
+minutes are free. Since 2026-11-01 (Carlos, #233):
+- CI checks every PR, drafts included, and `main` every night, and `main: PR + CI` requires it.
+  `scripts/check.sh` stays the local check, and the only one that runs the GPU tests on a GPU.
+- CI is one job, `CI`, and only `main` saves build caches (GitHub's 10 GB cache limit).
+- Fuzzing and the macOS and Windows builds still run weekly, only if `main` changed, and the
+  release builds on tags.
 
 ## License and IP
 
@@ -927,7 +929,7 @@ v1.0 and don't gate it (Carlos, 2026-10-23, cjus/chessengine#191); its setup is 
 | Readability vs speed | Either a slow engine or unreadable code | Clarity by default; optimise only measured hot spots, with comments explaining them |
 | Strength limiting feels unnatural | Players don't enjoy low levels | MultiPV-based move choice; calibration; Carlos playtests the levels |
 | Tablebase crate changes or is abandoned | Tablebase support breaks | Behind a `Tablebase` trait and a cargo feature; Fathom or our own port can replace it |
-| CI minutes on a private repo | CI throttled or costly | PRs checked locally; Linux nightly and macOS/Windows weekly, only if `main` changed; macOS/Windows also on tags |
+| CI minutes on a private repo | CI throttled or costly | Resolved: public since 2026-10-30, so Actions is free; CI checks every PR again (2026-11-01). macOS/Windows weekly and on tags |
 | GPU training code is hard to debug | Wrong nets, or a trainer that stalls stage 21 | Every GPU kernel tested against the CPU reference on the same batch; the CPU trainer can train the first net on its own |
 | Windows GUIs tested late | Windows-only GUI problems (ChessBase/Fritz, Arena) found late | Strict UCI conformance tests and Windows CI builds throughout; Carlos tests on a Windows machine once the Windows build runs well, before going public |
 
@@ -1049,8 +1051,9 @@ about 26 s, and the M1 Max played about 970 games an hour.
       needs nothing installed on the Mac, and it is part of the teaching material. fastchess
       still works for anyone who prefers it (2026-10-10).
 - [x] `main` protected by the ruleset `main: PR + CI`: PR required, three CI checks required,
-      no force pushes or deletion (cjus/chessengine#5, 2026-10-10). Since 2026-10-22 `main: PR`:
-      no check required, PRs are checked locally to save Actions minutes (Carlos).
+      no force pushes or deletion (cjus/chessengine#5, 2026-10-10). From 2026-10-22 `main: PR`:
+      no check required, PRs checked locally to save Actions minutes (Carlos). Back to
+      `main: PR + CI`, requiring the one `CI` check, on 2026-11-01 (#233).
 - [x] Gauntlet reference engines: seven open-source versions from 2018 to 3049 CCRL Blitz,
       built from source by `scripts/fetch-gauntlet-engines.sh` (see "Testing and strength
       measurement"; cjus/chessengine#36, 2026-10-17).

@@ -1,23 +1,22 @@
-# Checks main every night, and any branch on demand (`gh workflow run ci.yml --ref <branch>`).
-# Linux only, to keep private-repo Actions minutes low; macOS and Windows run in
+# Checks every pull request, drafts included, and main every night. Run it on any branch by hand
+# with `gh workflow run ci.yml --ref <branch>`. Linux only; macOS and Windows run in
 # cross-platform.yml.
 #
-# Actions minutes ran out in October 2026 (Solrac Chess AI #73), so since 2026-10-22 pull requests
-# and merges aren't checked here at all: a PR is checked before it merges by `scripts/check.sh`,
-# on the machine that made it, and `main`'s ruleset no longer requires a check. What is left
-# spends as few minutes as it can:
+# The one job, `CI`, is the check `main`'s ruleset (`main: PR + CI`) requires before a PR merges.
+# A pull request's run checks the PR merged into main, so there is no run after a merge; the
+# nightly run checks main as it is and finds new security advisories, which can appear without a
+# change. From 2026-10-22 to 2026-11-01 GitHub checked no PRs and `scripts/check.sh` was the only
+# check: the private repository's Actions minutes had run out (Solrac Chess AI #73). It has been
+# public since 2026-10-30, where Actions is free, so PRs are checked again (#233).
 #
-# - The nightly run checks only if main changed since the last good run; otherwise every step
-#   is skipped and the run costs one short job. Security advisories are checked with the build,
-#   so a quiet week has none checked.
-# - One job, `CI`. GitHub bills each job rounded up to a whole minute, so three jobs cost five
-#   minutes for two and a half minutes of work.
-# - Only main saves the build cache, which keeps the caches under GitHub's 10 GB limit.
+# Only main saves the build cache (the nightly run, or a run started by hand on main). Pull
+# requests reuse it, which keeps the caches under GitHub's 10 GB limit.
 #
 # The steps are the same as `scripts/check.sh`'s: change both together.
 name: CI
 
 on:
+  pull_request:
   schedule:
     # 05:17 UTC, off the hour, when Actions is least busy.
     - cron: "17 5 * * *"
@@ -29,8 +28,6 @@ concurrency:
 
 permissions:
   contents: read
-  # The nightly run asks which commit the last good run checked.
-  actions: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -40,43 +37,21 @@ jobs:
     name: CI
     runs-on: ubuntu-latest
     steps:
-      - name: Decide whether to check
-        id: scope
-        env:
-          EVENT: ${{ github.event_name }}
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          check=true
-          if [ "$EVENT" = schedule ]; then
-            # Runs started by hand on main count too: they check everything.
-            last=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --branch main \
-              --status success --limit 1 --json headSha --jq '.[0].headSha // ""')
-            if [ "$last" = "$GITHUB_SHA" ]; then check=false; fi
-          fi
-          echo "check=$check" >> "$GITHUB_OUTPUT"
-          echo "Check: $check."
       - uses: actions/checkout@v4
-        if: steps.scope.outputs.check == 'true'
       - name: Install the toolchain from rust-toolchain.toml
-        if: steps.scope.outputs.check == 'true'
         run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
-        if: steps.scope.outputs.check == 'true'
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Format
-        if: steps.scope.outputs.check == 'true'
         run: cargo fmt --all --check
       - name: Clippy
-        if: steps.scope.outputs.check == 'true'
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       # The trainer's GPU backend sits behind its `gpu` feature. There is no GPU here, so its
       # tests say so and pass; they run on the GPU in scripts/check.sh on the Mac.
       - name: Clippy (the trainer's GPU backend)
-        if: steps.scope.outputs.check == 'true'
         run: cargo clippy -p cb2026-trainer --features gpu --all-targets --locked -- -D warnings
       - name: Cache the test tablebases
-        if: steps.scope.outputs.check == 'true'
         uses: actions/cache@v4
         with:
           path: syzygy-tables
@@ -84,40 +59,31 @@ jobs:
       # The tablebase tests run when this succeeds; if the download site is down they are
       # skipped (with a warning) rather than blocking every PR.
       - name: Download the test tablebases
-        if: steps.scope.outputs.check == 'true'
         continue-on-error: true
         run: |
           scripts/download-syzygy.sh syzygy-tables test
           echo "CB2026_SYZYGY_PATH=$PWD/syzygy-tables" >> "$GITHUB_ENV"
       - name: Tests
-        if: steps.scope.outputs.check == 'true'
         run: cargo test --workspace --locked
       - name: Tests (the trainer's GPU backend)
-        if: steps.scope.outputs.check == 'true'
         # A block, since a plain YAML value can't end in a colon.
         run: |
           cargo test -p cb2026-trainer --features gpu --locked gpu::
       - name: Perft suites (release build, every depth)
-        if: steps.scope.outputs.check == 'true'
         run: cargo run --release --locked -p cb2026-tools --bin perft-suite
       - name: Docs
-        if: steps.scope.outputs.check == 'true'
         run: |
           cargo doc --workspace --no-deps --document-private-items --locked
           cargo doc -p cb2026-trainer --features gpu --no-deps --document-private-items --locked
         env:
           RUSTDOCFLAGS: -D warnings
       - uses: taiki-e/install-action@v2
-        if: steps.scope.outputs.check == 'true'
         with:
           tool: cargo-deny
       - name: Check licences, advisories, bans and sources
-        if: steps.scope.outputs.check == 'true'
         run: cargo deny check
       - uses: taiki-e/install-action@v2
-        if: steps.scope.outputs.check == 'true'
         with:
           tool: mdbook
       - name: Build the book
-        if: steps.scope.outputs.check == 'true'
         run: mdbook build book

@@ -32,21 +32,22 @@ changes the picture.
 ## Definition of done for a change
 
 1. `scripts/check.sh` passes on the PR's latest commit: fmt, clippy, tests, every perft depth,
-   docs, licences and advisories, and the book (what CI checked on PRs until 2026-10-22).
-2. Perft suites still match (every depth, in `scripts/check.sh` and the nightly run).
+   docs, licences and advisories, and the book. CI's `CI` check runs the same steps on GitHub.
+2. Perft suites still match (every depth, in `scripts/check.sh` and CI).
 3. The commit message ends with `Bench: <nodes>` (from `cb2026 bench`).
 4. Changes to search or evaluation include an SPRT result in the PR (the `match` tool, see
    `docs/testing.md` and `docs/PRD.md` "Testing"), or say "No functional change" with an
    unchanged bench.
 5. Book chapter and `docs/elo-ledger.md` updated when a technique is added or changed.
-6. Work is on a `claude/<topic>` branch from the latest `main`, with a PR to `main`.
-   `main` is protected (ruleset `main: PR`): changes land only through a PR. Never try to get
-   around it. **GitHub doesn't check PRs** (since 2026-10-22: Actions minutes ran out in
-   October 2026, Solrac Chess AI #73), so `scripts/check.sh` is the check: run it before merging.
-   CI checks `main` every night, only if it changed; if a nightly run fails, fixing it comes
-   first. To have GitHub check a branch anyway: `gh workflow run ci.yml --ref <branch>`.
-   **Claude may merge its own PRs** (granted by Carlos 2026-10-10) once `scripts/check.sh`
-   passes on the latest commit, the PR merges cleanly and no review comment is unanswered.
+6. Work is on a `claude/<topic>` branch from the latest `main`, with a PR to `main` and green CI.
+   `main` is protected (ruleset `main: PR + CI`): changes land only through a PR whose `CI`
+   check passed. Never try to get around it. CI (`.github/workflows/ci.yml`) checks every PR,
+   drafts included, and `main` every night; if a nightly run fails, fixing it comes first.
+   From 2026-10-22 to 2026-11-01 it checked no PRs, since the Actions minutes had run out; the
+   repository has been public since 2026-10-30, so Actions is free (#233).
+   **Claude may merge its own PRs** (granted by Carlos 2026-10-10) once `CI` is green and
+   `scripts/check.sh` has passed on the latest commit, the PR merges cleanly and no review
+   comment is unanswered.
    Open a PR as a draft (`gh pr create --draft`) while it waits on something (an SPRT, Carlos)
    and mark it ready (`gh pr ready`) when its work is done. After a
    stage's last PR merges, it gets a `stage-NN-<name>` tag on `main`. Cloud sessions can't push
