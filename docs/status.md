@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-11-01, 15:30 MST (M5: the check extension, IIR and three versions of
+*Last updated 2026-11-01, 16:20 MST (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -169,7 +169,15 @@ workers never download one: a toolchain bump needs `bootstrap.py apply --rebake
 --rust-toolchain <new>` (Carlos). The first remote `check.sh` passed every step, perft
 included, about 2 minutes on a warm cache, once two version tests accepted a source without
 `.git` (remote-build snapshots leave it out, as release tarballs do): they expect the plain
-version there and still require the commit in a checkout; no functional change.*
+version there and still require the commit in a checkout; no functional change.
+**GitHub checks every PR again** (Carlos, #233, item 5a): `ci.yml` runs on every pull request,
+drafts included, and on `main` every night with no "only if it changed" skip, and `main`'s
+ruleset is `main: PR + CI` again, requiring the one `CI` check. The repository has been public
+since 2026-10-30, so Actions is free. `scripts/check.sh` stays the local check (and the only one
+with the GPU tests on a GPU). Also from #233: a skim of what's public found the account details
+in #61's text (removed, and its old revision deleted) and #242 and #244's links to Solrac's
+private repository (unlinked again, #247), and #157, the pnxfarm draft, is closed; no functional
+change.*
 
 ## Stages
 
@@ -532,8 +540,6 @@ passed; the rest wait on GUI checks, level calibration or the v1.0 work.
 
 The open [`needs-carlos` issues](https://github.com/cjus/chessengine/issues?q=is%3Aopen+label%3Aneeds-carlos):
 
-- #233: making the repository public: CI once Actions is free, a skim of the issues and PRs,
-  and the switch; then Pages and the security settings.
 - #199: the `v1.0.0` tag on `83fa6c6` (every gate passed; the GUI re-check, #205, on
   2026-10-29), then publishing the draft release with the
   book on it (#183).
@@ -568,8 +574,8 @@ section:
    so only its own commits replay.
 2. Open its PR. Then commit the result to the chapter's "What it's worth"
    table and a `docs/elo-ledger.md` row with the PR number, as a separate commit.
-3. Mark the PR ready (`gh pr ready`), run `scripts/check.sh` on it, then merge (CLAUDE.md:
-   Claude may merge its own PRs once it passes).
+3. Mark the PR ready (`gh pr ready`), run `scripts/check.sh` on it, then merge once its `CI`
+   check is green too (CLAUDE.md: Claude may merge its own PRs once both pass).
    Push the stage's tag (`git tag -a stage-NN-<name> <merge commit> -m "..."`); from a cloud
    session, which can't push tags, add the command to a `needs-carlos` issue instead.
 4. Rebase the rest of the stack onto the new branch head, and point each branch at its rebased
