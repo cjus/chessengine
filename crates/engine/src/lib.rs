@@ -1921,11 +1921,18 @@ mod tests {
 
     #[test]
     fn the_build_version_names_the_commit_it_was_built_from() {
-        // The tests run in the repository, so the build script found the commit.
-        let commit = COMMIT.expect("built from a git repository");
-        assert_eq!(commit.len(), 12);
-        assert!(commit.bytes().all(|b| b.is_ascii_hexdigit()), "{commit}");
-        assert_eq!(build_version(), format!("{VERSION}+{commit}"));
+        // A build from a git repository knows its commit (build.rs); one from a source archive
+        // (a release tarball, or a remote-build snapshot without `.git`) doesn't, and its
+        // version is the plain one. The CLI's CNP test, which can ask git, checks that a
+        // checkout's build found the commit.
+        match COMMIT {
+            Some(commit) => {
+                assert_eq!(commit.len(), 12);
+                assert!(commit.bytes().all(|b| b.is_ascii_hexdigit()), "{commit}");
+                assert_eq!(build_version(), format!("{VERSION}+{commit}"));
+            }
+            None => assert_eq!(build_version(), VERSION),
+        }
     }
 
     #[test]
