@@ -137,6 +137,22 @@ impl Changes {
 }
 // ANCHOR_END: changes
 
+impl Changes {
+    /// `piece` taken off `square` by no move at all, to see what the network thinks the
+    /// position is worth without it: how a piece's value to the network is measured (CNP's
+    /// `engine/evaluate` with `pieces`).
+    ///
+    /// The position without the piece may be one that can't arise in a game, such as the side
+    /// not to move left in check, which a `Position` refuses. The network's inputs are only
+    /// pieces on squares, so the accumulator still has an answer.
+    pub fn removing(piece: Piece, square: Square) -> Changes {
+        Changes {
+            removed: [Some((piece, square)), None],
+            added: [None, None],
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;

@@ -58,10 +58,12 @@ fn cb2026_passes_every_conformance_session_that_applies() {
     let (failed, skipped) = run_all(&node(&["--cnp"]));
     assert!(failed.is_empty(), "failed:\n{}", failed.join("\n\n"));
     // Of the engine's sessions, only the window's needs a capability cb2026 doesn't offer, and
-    // only one is for a node that doesn't ponder.
+    // two are for nodes without capabilities it has: pondering, and an evaluation's quiet line
+    // and piece values.
     assert_eq!(
         skipped,
         vec![
+            "evaluate-quiet-pieces-unsupported (needs !engine.quiet, !engine.pieces)".to_string(),
             "ponder-unsupported (needs !engine.ponder)".to_string(),
             "window (needs engine.window)".to_string(),
         ]

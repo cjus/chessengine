@@ -1026,6 +1026,14 @@ enum MoveSearch {
     },
 }
 
+/// Whether the search evaluates `pos` with the hand-crafted evaluation even when it has a
+/// network: a lone king ([`Techniques::lone_king`]) or a small pawnless ending
+/// ([`Techniques::pawnless_endings`]), which the hand-crafted evaluation plays better.
+pub(crate) fn hand_crafted_ending(techniques: &Techniques, pos: &Position) -> bool {
+    (techniques.lone_king && lone_king(pos))
+        || (techniques.pawnless_endings && pawnless_ending(pos))
+}
+
 /// Whether exactly one side has only its king: an ending the side ahead wins by driving that
 /// king to the edge (see [`Techniques::lone_king`]).
 fn lone_king(pos: &Position) -> bool {
@@ -1129,8 +1137,19 @@ impl<'a> Searcher<'a> {
     /// a lone king ([`Techniques::lone_king`]) or a small pawnless ending
     /// ([`Techniques::pawnless_endings`]).
     fn hand_crafted_ending(&self, pos: &Position) -> bool {
-        (self.techniques.lone_king && lone_king(pos))
-            || (self.techniques.pawnless_endings && pawnless_ending(pos))
+        hand_crafted_ending(&self.techniques, pos)
+    }
+
+    /// The quiescence search from `pos` alone, as at a leaf of the main search: captures (and
+    /// queen promotions, and every evasion in check) until the side to move does better to stop.
+    /// Returns its score, from the side to move's point of view, and its line. CNP's
+    /// `engine/evaluate` with `quiet` evaluates the position at the end of that line, which is
+    /// where a search's score comes from when its principal variation ends mid-exchange.
+    pub(crate) fn quiet_line(&mut self, pos: &Position) -> (i32, Vec<Move>) {
+        self.refresh_accumulator(pos);
+        let mut line = Vec::new();
+        let score = self.quiescence(pos, 0, -INFINITY, INFINITY, &mut line);
+        (score, line)
     }
 
     /// The static evaluation of `pos`, at `ply`: the network's, from the accumulator the

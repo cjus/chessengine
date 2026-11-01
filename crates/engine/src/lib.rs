@@ -97,8 +97,9 @@ use std::sync::{Arc, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use cb2026_chess::{Move, Position};
+use cb2026_chess::{Move, Piece, PieceType, Position, Square};
 /// The NNUE network type, for front ends that load one (stage 21; see `cb2026_nnue`).
+use cb2026_nnue::Changes;
 pub use cb2026_nnue::Network;
 
 use book::OpeningBook;
@@ -106,8 +107,8 @@ use correction::CorrectionHistory;
 use eval::EvalParams;
 use ordering::OrderingTables;
 use search::{
-    DEFAULT_DEPTH, INFINITY, MATE, MAX_PLY, RootResult, SearchParams, Searcher, StopConditions,
-    Techniques, to_score,
+    DEFAULT_DEPTH, INFINITY, MATE, MAX_PLY, NNUE_EVAL_LIMIT, RootResult, SearchParams, Searcher,
+    StopConditions, Techniques, to_score,
 };
 use stats::{SearchStats, SearchTree};
 use tablebase::{Tablebase, TablebaseLoader, TablebaseParams};
@@ -282,6 +283,34 @@ impl fmt::Display for Score {
             Score::Mate(moves) => write!(f, "mate {moves}"),
         }
     }
+}
+
+/// The quiescence search's line from a position ([`Engine::quiet_line`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct QuietLine {
+    /// Its score, from the side to move's point of view: the evaluation where the line ends,
+    /// or a mate when the line ends with a side checkmated.
+    pub score: Score,
+    /// The captures, promotions and evasions it plays, which may be none.
+    pub moves: Vec<Move>,
+}
+
+/// A static evaluation as the search would make it ([`Engine::search_evaluation`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SearchEvaluation {
+    /// In centipawns from the side to move's point of view.
+    pub score: i32,
+    /// Whether it is the network's (otherwise the hand-crafted evaluation's).
+    pub network: bool,
+}
+
+/// What one piece is worth to the search's evaluation of a position ([`Engine::piece_values`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PieceValue {
+    /// Where the piece stands.
+    pub square: Square,
+    /// What it is worth to its own side, in centipawns from that side's point of view.
+    pub value: i32,
 }
 
 /// Progress reported during a search.
@@ -768,6 +797,191 @@ impl Engine {
         };
         (searcher.take_tree().unwrap_or_default(), info)
     }
+
+    /// The quiescence search from `position` alone, on one thread, as at a leaf of the main
+    /// search: the captures (and queen promotions, and every evasion in check) it plays until
+    /// the side to move does better to stop, and its score.
+    ///
+    /// A principal variation ends where the main search did, which can be in the middle of an
+    /// exchange, a piece about to be taken back. Its score comes from the position at the end
+    /// of this line, played on from the variation's last position (CNP's `engine/evaluate`
+    /// with `quiet`). The line settles what is hanging; it isn't a search of the position.
+    ///
+    /// **Pitfall:** the quiescence search stands on the evaluation as the correction history
+    /// corrects it, and orders captures by the history tables, so call [`Engine::new_game`]
+    /// first for an answer that doesn't depend on earlier searches.
+    pub fn quiet_line(&mut self, position: &Position, history: &[u64]) -> QuietLine {
+        let stop = AtomicBool::new(false);
+        let mut searcher = Searcher::new(
+            &self.params,
+            self.search_params,
+            &self.tt,
+            &mut self.ordering,
+            self.techniques,
+            StopConditions {
+                stop: &stop,
+                deadline: None,
+                max_nodes: None,
+            },
+            history,
+        );
+        searcher.use_correction(&mut self.correction);
+        if let Some(net) = self.network.as_deref().filter(|_| self.techniques.nnue) {
+            searcher.use_network(net);
+        }
+        let (score, moves) = searcher.quiet_line(position);
+        QuietLine {
+            score: to_score(score),
+            moves,
+        }
+    }
+
+    /// The static evaluation the search would make of `position`: the network's, when there
+    /// is one, it is switched on and the position isn't an ending it leaves to the hand-crafted
+    /// evaluation ([`Techniques::lone_king`], [`Techniques::pawnless_endings`]); otherwise the
+    /// hand-crafted evaluation's. In centipawns from the side to move's point of view, without
+    /// the correction history a search adds to it.
+    ///
+    /// The shell's `eval` and CNP's `engine/evaluate` break down the hand-crafted evaluation,
+    /// term by term; at full strength, the search usually evaluates with the network instead.
+    /// This says which, and what it thinks.
+    pub fn search_evaluation(&self, position: &Position) -> SearchEvaluation {
+        match self.search_network(position) {
+            Some(net) => SearchEvaluation {
+                score: net
+                    .evaluate_position(position)
+                    .clamp(-NNUE_EVAL_LIMIT, NNUE_EVAL_LIMIT),
+                network: true,
+            },
+            None => SearchEvaluation {
+                score: eval::evaluate(position, &self.params),
+                network: false,
+            },
+        }
+    }
+
+    /// What each piece but the kings is worth to the search's evaluation of `position`
+    /// ([`Engine::search_evaluation`]): the evaluation from the piece's side's point of view,
+    /// less the same evaluation of the position with the piece taken off the board. In square
+    /// order, a1 first.
+    ///
+    /// A network judges a position as a whole, with no terms to break its score into; taking
+    /// one piece off and evaluating again measures what it thinks that piece is worth there.
+    /// The idea is the one Stockfish's `eval` shows (GPL; only the idea, no code). The values
+    /// don't add up to the score: pieces work together, and a defender is worth what its loss
+    /// would cost.
+    ///
+    /// **Pitfall:** a position without one of its pieces may be one that can't arise in a
+    /// game, such as the side not to move left in check. The network still evaluates it, since
+    /// its inputs are only pieces on squares ([`cb2026_nnue::Changes::removing`]). The
+    /// hand-crafted evaluation needs a [`Position`], which refuses such a position, so when it
+    /// is the search's evaluation those pieces are left out.
+    pub fn piece_values(&self, position: &Position) -> Vec<PieceValue> {
+        let us = position.side_to_move();
+        // What a piece is worth to its own side, from the evaluations with and without it,
+        // both from the side to move's point of view.
+        let to_its_side = |piece: Piece, with: i32, without: i32| {
+            if piece.color == us {
+                with - without
+            } else {
+                without - with
+            }
+        };
+        let pieces = position.occupied().squares().filter_map(|square| {
+            position
+                .piece_at(square)
+                .filter(|piece| piece.piece_type != PieceType::King)
+                .map(|piece| (square, piece))
+        });
+        match self.search_network(position) {
+            Some(net) => {
+                let clamp = |value: i32| value.clamp(-NNUE_EVAL_LIMIT, NNUE_EVAL_LIMIT);
+                let whole = net.accumulator(position);
+                let with = clamp(net.evaluate(&whole, us));
+                let mut rest = net.empty_accumulator();
+                pieces
+                    .map(|(square, piece)| {
+                        net.update_into(&whole, &mut rest, &Changes::removing(piece, square));
+                        let without = clamp(net.evaluate(&rest, us));
+                        PieceValue {
+                            square,
+                            value: to_its_side(piece, with, without),
+                        }
+                    })
+                    .collect()
+            }
+            None => {
+                let with = eval::evaluate(position, &self.params);
+                pieces
+                    .filter_map(|(square, piece)| {
+                        let rest = without_piece(position, square)?;
+                        let without = eval::evaluate(&rest, &self.params);
+                        Some(PieceValue {
+                            square,
+                            value: to_its_side(piece, with, without),
+                        })
+                    })
+                    .collect()
+            }
+        }
+    }
+
+    /// The network the search would evaluate `position` with, if any (see
+    /// [`Engine::search_evaluation`]).
+    fn search_network(&self, position: &Position) -> Option<&Network> {
+        self.network.as_deref().filter(|_| {
+            self.techniques.nnue && !search::hand_crafted_ending(&self.techniques, position)
+        })
+    }
+}
+
+/// `position` with the piece on `square` taken off, castling and en passant rights dropped
+/// (the hand-crafted evaluation reads neither), or `None` when what is left is a position a
+/// [`Position`] refuses, such as the side not to move in check.
+fn without_piece(position: &Position, square: Square) -> Option<Position> {
+    let fen = position.to_fen();
+    let mut fields = fen.split(' ');
+    let (placement, side) = (fields.next()?, fields.next()?);
+    // The placement lists rank 8 first, each rank from the a-file, digits counting empty
+    // squares.
+    let mut board: Vec<Vec<char>> = placement
+        .split('/')
+        .map(|rank| {
+            rank.chars()
+                .flat_map(|c| match c.to_digit(10) {
+                    Some(empty) => vec!['1'; empty as usize],
+                    None => vec![c],
+                })
+                .collect()
+        })
+        .collect();
+    *board
+        .get_mut(7 - square.rank().index())?
+        .get_mut(square.file().index())? = '1';
+    let placement = board
+        .iter()
+        .map(|rank| {
+            let mut text = String::new();
+            let mut empty = 0;
+            for &c in rank {
+                if c == '1' {
+                    empty += 1;
+                } else {
+                    if empty > 0 {
+                        text.push_str(&empty.to_string());
+                        empty = 0;
+                    }
+                    text.push(c);
+                }
+            }
+            if empty > 0 {
+                text.push_str(&empty.to_string());
+            }
+            text
+        })
+        .collect::<Vec<_>>()
+        .join("/");
+    Position::from_fen(&format!("{placement} {side} - - 0 1")).ok()
 }
 
 /// What the main search thread needs besides its [`Searcher`].
@@ -1337,6 +1551,129 @@ mod tests {
         assert!(stats.null_move_cutoffs <= stats.null_moves);
         assert!(stats.probcut_cutoffs <= stats.probcuts);
         assert!(stats.reduction_researches <= stats.reduced);
+    }
+
+    /// `moves` (coordinate text) played from the starting position.
+    fn after(moves: &[&str]) -> Position {
+        let mut pos = Position::startpos();
+        for text in moves {
+            let mv = pos.parse_uci_move(text).unwrap();
+            pos.make_move(mv);
+        }
+        pos
+    }
+
+    fn uci(line: &[Move]) -> Vec<String> {
+        line.iter().map(|mv| mv.to_uci(false)).collect()
+    }
+
+    #[test]
+    fn a_quiet_line_settles_the_exchange_a_line_stops_in() {
+        let mut engine = Engine::new();
+        // After 1.e4 d5 2.exd5 Black is a pawn down until its queen takes back.
+        let pos = after(&["e2e4", "d7d5", "e4d5"]);
+        engine.new_game();
+        let line = engine.quiet_line(&pos, &[]);
+        assert_eq!(uci(&line.moves), ["d8d5"]);
+        // Its score is the search's evaluation where it ends, one ply on: the other side's.
+        let mut end = pos.clone();
+        for &mv in &line.moves {
+            end.make_move(mv);
+        }
+        let at_end = engine.search_evaluation(&end);
+        assert!(at_end.network);
+        assert_eq!(line.score, Score::Centipawns(-at_end.score));
+        // A capture the side to move needn't make is left alone: after 1.e4 d5 White may take
+        // on d5 or not, and does at least as well standing pat.
+        engine.new_game();
+        let optional = engine.quiet_line(&after(&["e2e4", "d7d5"]), &[]);
+        assert!(optional.moves.is_empty(), "{:?}", uci(&optional.moves));
+        // A quiet position needs nothing settled.
+        engine.new_game();
+        let start = engine.quiet_line(&Position::startpos(), &[]);
+        assert!(start.moves.is_empty());
+        let here = engine.search_evaluation(&Position::startpos());
+        assert_eq!(start.score, Score::Centipawns(here.score));
+    }
+
+    #[test]
+    fn a_quiet_line_from_a_mated_position_is_mate() {
+        let mut engine = Engine::new();
+        let mated = after(&["f2f3", "e7e5", "g2g4", "d8h4"]);
+        let line = engine.quiet_line(&mated, &[]);
+        assert!(line.moves.is_empty());
+        assert_eq!(line.score, Score::Mate(0));
+    }
+
+    #[test]
+    fn the_search_evaluates_with_the_network_except_in_its_hand_crafted_endings() {
+        let mut engine = Engine::new();
+        let start = Position::startpos();
+        let by_net = engine.search_evaluation(&start);
+        assert!(by_net.network);
+        assert_eq!(
+            by_net.score,
+            engine.network.as_ref().unwrap().evaluate_position(&start)
+        );
+        // A lone king: the hand-crafted evaluation, which drives it to the edge.
+        let lone = Position::from_fen("8/8/8/4k3/8/8/8/3QK3 w - - 0 1").unwrap();
+        let by_hand = engine.search_evaluation(&lone);
+        assert!(!by_hand.network);
+        assert_eq!(by_hand.score, eval::evaluate(&lone, &engine.params));
+        // The network switched off.
+        engine.techniques.nnue = false;
+        assert!(!engine.search_evaluation(&start).network);
+    }
+
+    #[test]
+    fn a_piece_is_worth_what_the_evaluation_loses_without_it() {
+        let mut engine = Engine::new();
+        let start = Position::startpos();
+        let values = engine.piece_values(&start);
+        // Every piece but the kings, a1 first.
+        assert_eq!(values.len(), 30);
+        assert_eq!(values[0].square.to_string(), "a1");
+        let d1 = |values: &[PieceValue]| {
+            values
+                .iter()
+                .find(|v| v.square.to_string() == "d1")
+                .unwrap()
+                .value
+        };
+        let without_queen =
+            Position::from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNB1KBNR w KQkq - 0 1").unwrap();
+        let net = engine.network.clone().unwrap();
+        assert_eq!(
+            d1(&values),
+            net.evaluate_position(&start) - net.evaluate_position(&without_queen)
+        );
+        // Black's pieces are valued from Black's point of view: its queen is worth a lot to it.
+        let d8 = values
+            .iter()
+            .find(|v| v.square.to_string() == "d8")
+            .unwrap();
+        assert!(d8.value > 500, "{d8:?}");
+        // By the hand-crafted evaluation when it is the search's.
+        engine.techniques.nnue = false;
+        let by_hand = engine.piece_values(&start);
+        assert_eq!(
+            d1(&by_hand),
+            eval::evaluate(&start, &engine.params) - eval::evaluate(&without_queen, &engine.params)
+        );
+    }
+
+    #[test]
+    fn a_piece_whose_loss_would_leave_a_king_in_check_has_a_value_only_by_the_network() {
+        let mut engine = Engine::new();
+        // White to move; Black's e7 pawn shields its king from the rook on e1. Without it,
+        // Black, not to move, would be in check, which no position allows.
+        let pos = Position::from_fen("4k3/4p3/8/8/8/8/3P1P2/4RK2 w - - 0 1").unwrap();
+        let e7 = |values: &[PieceValue]| values.iter().any(|v| v.square.to_string() == "e7");
+        assert!(e7(&engine.piece_values(&pos)));
+        engine.techniques.nnue = false;
+        let by_hand = engine.piece_values(&pos);
+        assert!(!e7(&by_hand));
+        assert_eq!(by_hand.len(), 3);
     }
 
     #[test]
