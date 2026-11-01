@@ -162,9 +162,14 @@ of the node's own answers, cleared before each request; no functional change to 
 **remote-build is set up** (Carlos's plugin, cjus/cjus-skills; owner `cjus-builds`, us-east-1):
 `.remote-build.json` picks its `x86` launch profile on a `c7i.2xlarge` (8 vCPU; a `c7i.4xlarge`
 is also approved), so a PR's `scripts/check.sh` can run on a temporary Ubuntu x86-64 worker, the
-platform the GitHub CI ran on, while Actions minutes are out (not yet tried); each worker needs
-Carlos's approval (`/remote-build:up`), and `/remote-build:down` or the expiry janitor
-terminates it; no functional change.*
+platform the GitHub CI ran on, while Actions minutes are out; each worker needs Carlos's
+approval (`/remote-build:up`), and `/remote-build:down` or the expiry janitor terminates it
+(#245). The image must preinstall the pinned toolchain (`rust-toolchain.toml`, 1.97.0), since
+workers never download one: a toolchain bump needs `bootstrap.py apply --rebake
+--rust-toolchain <new>` (Carlos). The first remote `check.sh` passed every step, perft
+included, about 2 minutes on a warm cache, once two version tests accepted a source without
+`.git` (remote-build snapshots leave it out, as release tarballs do): they expect the plain
+version there and still require the commit in a checkout; no functional change.*
 
 ## Stages
 

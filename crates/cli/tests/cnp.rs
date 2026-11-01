@@ -22,6 +22,17 @@ fn node(args: &[&str]) -> Vec<String> {
         .collect()
 }
 
+/// Whether the source is in a git repository, asked the way `crates/engine/build.rs` asks: then
+/// the build script recorded the commit. A source archive has no repository (a release tarball,
+/// or a remote-build snapshot, which leaves out `.git`), so it builds the plain version.
+fn in_git_repository() -> bool {
+    std::process::Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .is_ok_and(|output| output.status.success())
+}
+
 /// Whether a capability a session needs (`engine.ponder`, `!engine.ponder`, `games.read`) is
 /// in the engine domain.
 fn is_engine(need: &str) -> bool {
@@ -83,7 +94,11 @@ fn initialize_and_version_name_the_commit_cb2026_was_built_from() {
     use std::process::{Command, Stdio};
 
     let version = cb2026_engine::build_version();
-    assert!(version.contains('+'), "{version} has no commit");
+    if in_git_repository() {
+        assert!(version.contains('+'), "{version} has no commit");
+    } else {
+        assert_eq!(version, cb2026_engine::VERSION);
+    }
     let printed = Command::new(env!("CARGO_BIN_EXE_cb2026"))
         .arg("--version")
         .output()
