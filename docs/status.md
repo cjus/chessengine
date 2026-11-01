@@ -158,7 +158,13 @@ answer now also has the network's score (`searchScore`) and, asked, each piece's
 (`Engine::piece_values`, the network's score without the piece, through
 `Changes::removing`); with `quiet` it first plays the quiescence search's line
 (`Engine::quiet_line`), since a line can end mid-exchange (2 lines in 30). An evaluator engine
-of the node's own answers, cleared before each request; no functional change to the search.*
+of the node's own answers, cleared before each request; no functional change to the search.
+**remote-build is set up** (Carlos's plugin, cjus/cjus-skills; owner `cjus-builds`, us-east-1):
+`.remote-build.json` picks its `x86` launch profile on a `c7i.2xlarge` (8 vCPU; a `c7i.4xlarge`
+is also approved), so a PR's `scripts/check.sh` can run on a temporary Ubuntu x86-64 worker, the
+platform the GitHub CI ran on, while Actions minutes are out (not yet tried); each worker needs
+Carlos's approval (`/remote-build:up`), and `/remote-build:down` or the expiry janitor
+terminates it; no functional change.*
 
 ## Stages
 
