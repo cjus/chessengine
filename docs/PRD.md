@@ -417,7 +417,10 @@ pondering switch (cjus/chess-node-protocol#18, Solrac Chess AI #319). And it kee
 (`engine/tree`, `engine/treeNode`): a search's decisions near the root, recorded on an engine of
 the tree's own, kept a few minutes under a handle and read a node at a time, each decision said
 in alpha-beta's terms with the switch behind it, so Solrac's Engine Mind can answer "why not that
-move?" (Solrac Chess AI #350). Every engine capability is offered except a root score window. Every conformance session in the
+move?" (Solrac Chess AI #350). And a search can be followed at its root (`rootMs` and
+`engine/root`): which root move it is on, the nodes each root move has had, and, at once, a later
+move searched again as perhaps the new best or a depth whose score fell outside its aspiration
+window, so Solrac's Engine Mind can show the search live (Solrac Chess AI #357). Every engine capability is offered except a root score window. Every conformance session in the
 protocol's repository runs against the real binary in `cargo test` (`crates/cli/tests/cnp.rs`).
 
 ### Lichess bot (must)
