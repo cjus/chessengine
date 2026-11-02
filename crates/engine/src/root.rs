@@ -22,7 +22,7 @@
 //!
 //! ## How it works
 //!
-//! The main thread's searcher ([`crate::search`]) holds a [`RootFollower`] when the caller
+//! The main thread's searcher ([`crate::search`]) holds a `RootFollower` when the caller
 //! follows the root. The root loop tells it when a line and each move start and end; the PVS
 //! re-search at the root and the aspiration window's failures tell it what is gone back over;
 //! and whenever the search looks at the clock and its stop flag, every thousand nodes or so, it
