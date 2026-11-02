@@ -25,7 +25,8 @@
 //!   protocols set it on `stop` and `quit`.
 //! - The **info callback** receives a [`SearchInfo`] as the search makes progress (depth,
 //!   score, nodes, principal variation); UCI turns it into `info` lines and the shell into its
-//!   thinking display.
+//!   thinking display. [`Engine::search_following_root`] also says, as it goes, which root
+//!   move the search is on and where its effort goes ([`root`]), for CNP's `engine/root`.
 //! - The **history** argument holds the hash keys of the positions before this one in the
 //!   game, for spotting repetitions.
 //!
@@ -82,6 +83,7 @@ pub mod eval;
 pub mod hce;
 pub mod levels;
 pub mod ordering;
+pub mod root;
 pub mod search;
 pub mod see;
 pub mod stats;
@@ -107,6 +109,8 @@ use book::OpeningBook;
 use correction::CorrectionHistory;
 use eval::EvalParams;
 use ordering::OrderingTables;
+use root::RootFollower;
+pub use root::{RootInfo, RootResearch};
 use search::{
     DEFAULT_DEPTH, INFINITY, MATE, MAX_PLY, NNUE_EVAL_LIMIT, RootResult, SearchParams, Searcher,
     StopConditions, Techniques, to_score,
@@ -484,6 +488,22 @@ impl Engine {
         stop: &AtomicBool,
         on_info: &mut dyn FnMut(&SearchInfo),
     ) -> SearchResult {
+        self.search_following_root(position, history, limits, stop, on_info, None)
+    }
+
+    /// [`Engine::search`], also telling `on_root`, if given, where the main thread's root loop
+    /// is as it goes: at each root move, whenever the search looks at the clock, and at once
+    /// when the search goes back over something ([`root`]). The search is the same, node for
+    /// node, followed or not.
+    pub fn search_following_root(
+        &mut self,
+        position: &Position,
+        history: &[u64],
+        limits: &Limits,
+        stop: &AtomicBool,
+        on_info: &mut dyn FnMut(&SearchInfo),
+        on_root: Option<&mut dyn FnMut(&RootInfo<'_>)>,
+    ) -> SearchResult {
         let start = Instant::now();
         let mut root_moves: Vec<Move> = position
             .legal_moves()
@@ -670,6 +690,10 @@ impl Engine {
             }
             if let Some(net) = network {
                 searcher.use_network(net);
+            }
+            if let Some(on_root) = on_root {
+                let follower = RootFollower::new(on_root, start, &helper_nodes, self_multipv);
+                searcher.follow_root(follower);
             }
             let result = main_search(
                 &mut searcher,
@@ -1042,6 +1066,8 @@ fn main_search(
                 .filter(|&mv| !this_depth.iter().any(|line| line.best_move == Some(mv)))
                 .collect();
             let previous = lines.get(k).map(|line| line.score);
+            let previous_move = lines.get(k).and_then(|line| line.best_move);
+            searcher.follow_line(depth, k, &moves, previous_move);
             let result = searcher.search_depth(position, &mut moves, depth, previous);
             // A stopped iteration still counts if it finished at least one move: the first
             // move searched is the previous best, so its result is at least as well-founded.

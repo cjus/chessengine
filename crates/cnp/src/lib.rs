@@ -11,7 +11,9 @@
 //! It ponders: a search with `"ponder": true` runs on the opponent's time until
 //! `engine/ponderHit` (spec 7.7). And it keeps search trees (spec 7.8): `engine/tree` records a
 //! search's decisions near the root and `engine/treeNode` reads them a node at a time, so
-//! Solrac's Engine Mind can say why cb2026 set a move aside (the `tree` module).
+//! Solrac's Engine Mind can say why cb2026 set a move aside (the `tree` module). And a search
+//! with `rootMs` is followed at its root (spec 7.9): `engine/root` says which root move it is
+//! on, where its effort has gone, and, at once, when it goes back over something.
 //! `cb2026 --cnp` speaks it, and so does a plain `cb2026` whose first input line is JSON.
 //!
 //! ```text
@@ -51,6 +53,12 @@
 //!   the same search throughout, so it keeps its tree, and its answer says how long it pondered
 //!   (`ponderMs`). On a miss the client cancels it, and the next search is taken at once, as
 //!   after any cancel. UCI's `go ponder` and `ponderhit` work the same way (`cb2026-protocol`).
+//! - **Following the root is throttled on its own.** The engine tells the search thread where
+//!   its root loop is at every root move and whenever it looks at the clock
+//!   ([`cb2026_engine::root`]). The thread passes it on as `engine/root` once `rootMs` has
+//!   passed since the last one, and a research (a better move, an aspiration window's failure)
+//!   at once, the interval then counting from it. `engine/progress` keeps its own interval, so neither holds the other
+//!   back. Only the main thread follows its root, so a move's nodes are that thread's.
 //! - **A tree has an engine and a thread of its own** (the `tree` module), so it is answered while a
 //!   search runs, and is the same tree each time it is asked for. One at a time
 //!   (`maxConcurrentTrees` 1). The trees are kept for [`TREE_EXPIRY_MS`] after their last use,
@@ -59,9 +67,9 @@
 //! ## What it offers
 //!
 //! Every engine capability except `window`: cb2026's search always starts with an open window
-//! at the root. Pondering and the search tree included, the tree to [`MAX_TREE_DEPTH`] and
-//! [`MAX_TREE_PLIES`]. None of the other domains: voice, and the games, preferences
-//! and backups that Solrac's own node keeps. Its techniques are the shell's switches
+//! at the root. Pondering, the search tree and following the root included, the tree to
+//! [`MAX_TREE_DEPTH`] and [`MAX_TREE_PLIES`]. None of the other domains: voice, and the games,
+//! preferences and backups that Solrac's own node keeps. Its techniques are the shell's switches
 //! ([`cb2026_shell::SWITCHES`]), by the names the shell's `set` uses. Its levels are [`RATINGS`],
 //! whole numbers only, since a level's settings are whole steps. A rating within [`ELO_RANGE`]
 //! picks a level as `UCI_Elo` does.
@@ -118,12 +126,16 @@ use cb2026_engine::levels::{ELO_RANGE, FULL_STRENGTH, RATINGS};
 use cb2026_engine::search::MAX_PLY;
 use cb2026_engine::tablebase::TablebaseLoader;
 use cb2026_engine::time;
-use cb2026_engine::{AUTHOR, Engine, Limits, NAME, Score, SearchInfo, SearchResult, build_version};
+use cb2026_engine::{
+    AUTHOR, Engine, Limits, NAME, RootInfo, RootResearch, Score, SearchInfo, SearchResult,
+    build_version,
+};
 use cb2026_shell::SWITCHES;
 use cnp::engine::{
-    EloRange, EngineCapabilities, EngineProgress, Evaluate, EvaluateParams, EvaluateResult, Level,
-    Levels, LevelsResult, Line, PieceValue, PonderHit, Progress, Search, SearchParams, SearchStats,
-    Stop, Technique, Techniques, TechniquesResult, Term, Tree, TreeNodePage,
+    Bound, EloRange, EngineCapabilities, EngineProgress, Evaluate, EvaluateParams, EvaluateResult,
+    Level, Levels, LevelsResult, Line, PieceValue, PonderHit, Progress, Root, RootMove, RootParams,
+    Search, SearchParams, SearchStats, Stop, Technique, Techniques, TechniquesResult, Term, Tree,
+    TreeNodePage,
 };
 use cnp::lifecycle::{
     CancelRequest, Capabilities, IncompatibleVersionData, Initialize, InitializeResult,
@@ -331,6 +343,8 @@ struct Prepared {
     techniques: Vec<(usize, bool)>,
     deterministic: bool,
     progress: Option<Duration>,
+    /// How often to send `engine/root`, when the search follows its root (`rootMs`).
+    root: Option<Duration>,
     game: Option<String>,
     chess960: bool,
     /// A ponder search: `limits` count from its hit (spec 7.7).
@@ -493,6 +507,7 @@ impl Node {
                     pieces: true,
                     ponder: true,
                     tree: true,
+                    root: true,
                 }),
                 voice: None,
                 preferences: None,
@@ -826,6 +841,7 @@ fn prepare(params: &SearchParams) -> Result<Prepared, ResponseError> {
         techniques,
         deterministic: params.deterministic,
         progress: params.progress_ms.map(Duration::from_millis),
+        root: params.root_ms.map(Duration::from_millis),
         game: params.game.clone(),
         chess960: params.position.chess960,
         ponder: params.ponder,
@@ -878,6 +894,7 @@ fn search_thread(
     // The latest report of each line, by its MultiPV number.
     let mut lines: BTreeMap<u32, SearchInfo> = BTreeMap::new();
     let mut last_progress: Option<Instant> = None;
+    let mut last_root: Option<Instant> = None;
     let result = {
         let mut on_info = |info: &SearchInfo| {
             lines.insert(info.multipv.max(1), info.clone());
@@ -891,12 +908,24 @@ fn search_thread(
                 last_progress = Some(Instant::now());
             }
         };
-        engine.search(
+        // Following the root (spec 7.9): at most every `rootMs`, on an interval of its own, and
+        // a research at once, the interval then counting from it.
+        let mut on_root = |info: &RootInfo<'_>| {
+            if let Some(every) = prepared.root
+                && (info.research.is_some() || last_root.is_none_or(|at| at.elapsed() >= every))
+            {
+                send(&output, root(&id, info, prepared.multipv, chess960).into());
+                last_root = Some(Instant::now());
+            }
+        };
+        let following: &mut dyn FnMut(&RootInfo<'_>) = &mut on_root;
+        engine.search_following_root(
             &prepared.position,
             &prepared.history,
             &limits,
             &flags.stop,
             &mut on_info,
+            prepared.root.is_some().then_some(following),
         )
     };
     // An infinite search waits for `engine/stop` or a cancel (or the watchdog), and a ponder
@@ -1012,6 +1041,42 @@ fn progress(id: &Id, info: &SearchInfo, multipv: usize, chess960: bool) -> Notif
     Notification::new::<EngineProgress>(&params)
 }
 
+/// An `engine/root` notification from where the root loop is.
+fn root(id: &Id, info: &RootInfo<'_>, multipv: usize, chess960: bool) -> Notification {
+    let research = info.research.map(|research| match research {
+        RootResearch::Better(mv) => cnp::engine::RootResearch::Better {
+            mv: mv.to_uci(chess960),
+        },
+        RootResearch::FailHigh(at_least) => cnp::engine::RootResearch::FailHigh {
+            score: bounded(at_least, Bound::Lower),
+        },
+        RootResearch::FailLow(at_most) => cnp::engine::RootResearch::FailLow {
+            score: bounded(at_most, Bound::Upper),
+        },
+    });
+    let params = RootParams {
+        id: id.clone(),
+        depth: info.depth,
+        multipv: (multipv > 1).then_some(info.multipv),
+        mv: info.current.to_uci(chess960),
+        number: info.number,
+        of: info.of,
+        best: info.best.map(|mv| mv.to_uci(chess960)),
+        moves: info
+            .moves
+            .iter()
+            .map(|&(mv, nodes)| RootMove {
+                mv: mv.to_uci(chess960),
+                nodes,
+            })
+            .collect(),
+        nodes: info.nodes,
+        time_ms: millis(info.time),
+        research,
+    };
+    Notification::new::<Root>(&params)
+}
+
 /// A request's position: its FEN with its moves played, and the hash of each position before
 /// a move, for repetitions. `InvalidPosition` if the FEN or a move isn't legal.
 fn read_position(wanted: &cnp::engine::Position) -> Result<(Position, Vec<u64>), ResponseError> {
@@ -1116,6 +1181,14 @@ fn score(score: Score) -> cnp::engine::Score {
     match score {
         Score::Centipawns(cp) => cnp::engine::Score::cp(cp),
         Score::Mate(moves) => cnp::engine::Score::mate(moves),
+    }
+}
+
+/// A score that is only a bound, `bound`.
+fn bounded(value: Score, bound: Bound) -> cnp::engine::Score {
+    cnp::engine::Score {
+        bound,
+        ..score(value)
     }
 }
 
@@ -1458,6 +1531,17 @@ mod tests {
             None
         }
 
+        /// Every message sent so far, in order.
+        fn messages(&self) -> Vec<Message> {
+            let bytes = self.0.lock().unwrap().clone();
+            let mut input = io::Cursor::new(bytes);
+            let mut messages = Vec::new();
+            while let Ok(Some(message)) = read_message(&mut input, usize::MAX) {
+                messages.push(message);
+            }
+            messages
+        }
+
         /// Waits up to `timeout` for the response to request `id`.
         fn wait_for(&self, id: i64, timeout: Duration) -> Option<Response> {
             let start = Instant::now();
@@ -1741,6 +1825,108 @@ mod tests {
         );
         assert_eq!((result.root.child_count, result.recorded.nodes), (0, 1));
         assert!(result.children.is_empty());
+        node.finish();
+    }
+
+    /// The `engine/root` notifications among `messages`, each with its place.
+    fn roots(messages: &[Message]) -> Vec<(usize, RootParams)> {
+        messages
+            .iter()
+            .enumerate()
+            .filter_map(|(at, message)| match message {
+                Message::Notification(notification) if notification.is::<Root>() => {
+                    Some((at, notification.params::<Root>().unwrap()))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn following_the_root_is_throttled_and_never_comes_after_the_answer() {
+        let capture = Capture::default();
+        let mut node = running_node(&capture);
+        let every = 50;
+        let mut params = start().root_ms(every);
+        params.limits = SearchLimits {
+            time_ms: Some(600),
+            ..SearchLimits::default()
+        };
+        params.multipv = Some(2);
+        node.request(Request::new::<Search>(1, &params));
+        let answer = capture
+            .wait_for(1, Duration::from_secs(10))
+            .expect("an answer")
+            .result::<Search>()
+            .unwrap();
+        // A moment for anything late to show.
+        thread::sleep(Duration::from_millis(100));
+        let messages = capture.messages();
+        let answered = messages
+            .iter()
+            .position(|m| matches!(m, Message::Response(r) if r.id == Some(Id::Number(1))))
+            .unwrap();
+        let roots = roots(&messages);
+        assert!(!roots.is_empty(), "no engine/root");
+        assert!(
+            roots.iter().all(|(at, _)| *at < answered),
+            "after the answer"
+        );
+        // The first, before there is a best move: depth 1's first move.
+        let first = &roots[0].1;
+        assert_eq!(
+            (first.depth, first.number, first.best.as_ref()),
+            (1, 1, None)
+        );
+        let mut previous: Option<u64> = None;
+        for (_, root) in &roots {
+            assert_eq!(root.id, Id::Number(1));
+            assert!(matches!(root.multipv, Some(1 | 2)), "{root:?}");
+            assert!((1..=root.of).contains(&root.number), "{root:?}");
+            assert!(root.moves.iter().any(|m| m.mv == root.mv), "{root:?}");
+            let below: u64 = root.moves.iter().map(|m| m.nodes).sum();
+            assert!(below <= root.nodes, "{root:?}");
+            match &root.research {
+                // At most every `rootMs`, counted from the last of any kind (give or take the
+                // millisecond the report takes to reach the throttle).
+                None => {
+                    if let Some(at) = previous {
+                        assert!(root.time_ms + 1 >= at + every, "{at} then {root:?}");
+                    }
+                }
+                Some(cnp::engine::RootResearch::Better { mv }) => assert_eq!(mv, &root.mv),
+                Some(cnp::engine::RootResearch::FailHigh { score }) => {
+                    assert_eq!(score.bound, Bound::Lower);
+                }
+                Some(cnp::engine::RootResearch::FailLow { score }) => {
+                    assert_eq!(score.bound, Bound::Upper);
+                }
+                Some(cnp::engine::RootResearch::Unknown) => panic!("{root:?}"),
+            }
+            previous = Some(root.time_ms);
+        }
+        // The move played was among those followed.
+        let best = answer.best_move.unwrap();
+        assert!(roots.last().unwrap().1.moves.iter().any(|m| m.mv == best));
+        node.finish();
+    }
+
+    #[test]
+    fn a_search_that_doesn_t_ask_isn_t_followed() {
+        let capture = Capture::default();
+        let mut node = running_node(&capture);
+        let mut params = start();
+        params.limits = SearchLimits::depth(6);
+        params.progress_ms = Some(0);
+        node.request(Request::new::<Search>(1, &params));
+        assert!(capture.wait_for(1, Duration::from_secs(10)).is_some());
+        let messages = capture.messages();
+        assert!(roots(&messages).is_empty());
+        // Its progress still comes.
+        assert!(messages.iter().any(|m| matches!(
+            m,
+            Message::Notification(n) if n.is::<EngineProgress>()
+        )));
         node.finish();
     }
 

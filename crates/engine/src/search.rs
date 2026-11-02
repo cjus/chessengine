@@ -384,6 +384,7 @@ use crate::eval::{EvalParams, evaluate};
 use crate::ordering::{
     CONTINUATION_PLIES, MovePicker, OrderingTables, PieceTo, Previous, is_noisy,
 };
+use crate::root::{RootFollower, RootResearch};
 use crate::see::{SEE_VALUES, see};
 use crate::stats::{Note, SearchStats, SearchTree};
 use crate::tablebase::{self, Tablebase, TablebaseParams};
@@ -999,6 +1000,9 @@ pub(crate) struct Searcher<'a> {
     nnue: Option<NnueStack<'a>>,
     /// The search tree, when one is being recorded.
     tree: Option<SearchTree>,
+    /// Whom to tell where the root loop is, when the caller follows it (the main thread only;
+    /// see [`crate::root`]).
+    root: Option<RootFollower<'a>>,
 }
 
 /// The late move reduction table covers depths and move numbers below this.
@@ -1105,6 +1109,7 @@ impl<'a> Searcher<'a> {
             stats: SearchStats::default(),
             nnue: None,
             tree: None,
+            root: None,
         }
     }
 
@@ -1210,6 +1215,46 @@ impl<'a> Searcher<'a> {
         self.tree.take()
     }
 
+    /// Tells `follower` where the root loop is from now on ([`crate::root`]).
+    pub(crate) fn follow_root(&mut self, follower: RootFollower<'a>) {
+        self.root = Some(follower);
+    }
+
+    /// Tells a root follower, if any, that line `line` (from 0) is about to be searched to
+    /// `depth` over `moves`, its best move at the last depth having been `previous`.
+    pub(crate) fn follow_line(
+        &mut self,
+        depth: u32,
+        line: usize,
+        moves: &[Move],
+        previous: Option<Move>,
+    ) {
+        if let Some(root) = &mut self.root {
+            root.begin_line(depth, line, moves, previous);
+        }
+    }
+
+    /// Tells a root follower, if any, that `mv`, a root move searched after the best, beat it
+    /// on its null-window search and is searched again with the full window.
+    fn follow_better(&mut self, mv: Move) {
+        // Only a root move's search: the path holds just the root move then.
+        if self.path.len() == 1
+            && let Some(root) = &mut self.root
+        {
+            root.report(self.nodes, Some(RootResearch::Better(mv)));
+        }
+    }
+
+    /// Tells a root follower, if any, that the depth is searched again because of `research`,
+    /// starting with the first of `root_moves`.
+    fn follow_research(&mut self, root_moves: &[Move], research: RootResearch) {
+        if let Some(root) = &mut self.root
+            && let Some(&first) = root_moves.first()
+        {
+            root.restart(first, root_moves.len() as u32, self.nodes, research);
+        }
+    }
+
     /// What the search has done so far.
     pub(crate) fn stats(&self) -> SearchStats {
         self.stats
@@ -1262,6 +1307,11 @@ impl<'a> Searcher<'a> {
             }
             self.aborted = self.stop.load(Ordering::Relaxed)
                 || self.deadline.is_some_and(|d| Instant::now() >= d);
+            // A root follower hears where the root is as often, so a long move's nodes show
+            // growing between root moves.
+            if let Some(root) = &mut self.root {
+                root.report(self.nodes, None);
+            }
         }
         self.aborted
     }
@@ -2073,6 +2123,7 @@ impl<'a> Searcher<'a> {
         if score > alpha && score < beta && !self.aborted {
             if let Some(mv) = mv {
                 self.note(Note::PvsResearch(mv));
+                self.follow_better(mv);
             }
             score = self.search_child(child, depth, alpha, beta, false, pv);
         }
@@ -2256,6 +2307,9 @@ impl<'a> Searcher<'a> {
         // `negamax` node, and the statistics stay as they were.
         self.record(Note::Enter { depth, alpha, beta });
         for (index, &mv) in root_moves.iter().enumerate() {
+            if let Some(root) = &mut self.root {
+                root.begin_move(mv, index as u32 + 1, root_moves.len() as u32, self.nodes);
+            }
             let mut child = pos.clone();
             child.make_move(mv);
             self.push_move(pos, Some(mv));
@@ -2274,6 +2328,11 @@ impl<'a> Searcher<'a> {
                 &mut child_pv,
             );
             self.pop_move();
+            if let Some(root) = &mut self.root {
+                // A move that raised the score is the line's new best.
+                let best = !self.aborted && score > result.score && score > alpha;
+                root.end_move(self.nodes, best);
+            }
             if self.aborted {
                 break;
             }
@@ -2342,12 +2401,14 @@ impl<'a> Searcher<'a> {
             }
             if result.score <= alpha {
                 alpha = (result.score - delta).max(-INFINITY);
+                self.follow_research(root_moves, RootResearch::FailLow(to_score(result.score)));
             } else if result.score >= beta {
                 beta = (result.score + delta).min(INFINITY);
                 if let Some(mv) = result.best_move {
                     root_moves.retain(|&m| m != mv);
                     root_moves.insert(0, mv);
                 }
+                self.follow_research(root_moves, RootResearch::FailHigh(to_score(result.score)));
                 fail_high = Some(result);
             } else {
                 return result;
