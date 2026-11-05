@@ -94,6 +94,24 @@ for clocks), ask for a `hint`, see its thinking depth by depth, look up the book
 tablebases, and switch its techniques on and off (`set nullmove off`, `set evalfile none`) to
 see what each one does. To run it as a Lichess bot, see [`docs/lichess.md`](docs/lichess.md).
 
+## From another computer
+
+cb2026 can serve its processors to a chess program on another computer on your network, over
+the Chess Node Protocol, encrypted and only for clients you approve. It is **off by default and
+not in the release downloads yet**: build it with `cargo build --release -p cb2026 --features net`.
+
+```
+cb2026 --serve 0.0.0.0:4026 --discover --name "the study" --threads 8 --hash 2048
+cb2026 --pair       # approve a new client: shows this engine's fingerprint and a one-time code
+```
+
+A client compares the fingerprint with the one `--pair` shows, then types the code; after that
+it connects with no code, and deleting its line in `approved-clients.txt` revokes it. `--discover`
+lets a client find the engine without an address. Chapter 22 of the book explains how it works
+and why, and section 3 of the [Chess Node Protocol
+specification](https://github.com/cjus/chess-node-protocol/blob/main/spec/cnp.md) is the
+transport a client implements.
+
 ## Learning from it
 
 The book in `book/`, *Building a Chess Engine in Rust*, has a chapter for each stage, from the

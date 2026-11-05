@@ -1,11 +1,11 @@
 # Network play: a design for the opt-in listener (#209)
 
-**Status: steps 1–5 built, 6–7 to do.** The listener, TLS and pairing exist in a build with
+**Status: steps 1–6 built, 7 later.** The listener, TLS and pairing exist in a build with
 `--features net`, which is off by default; an ordinary run opens no port. Carlos answered the five
 decisions on 2026-11-05 (cjus/chessengine#255; [Decisions](#decisions)): pairing with both sides
 pinning each other, one client at a time, discovery by UDP broadcast, limits set on the engine's
 machine, and a separate `crates/net`. [How it would be built](#how-it-would-be-built) says what
-each step did. Written 2026-11-05; steps 3 to 5 added the same day.
+each step did. Written 2026-11-05; steps 3 to 6 added the same day.
 
 ## What this is for
 
@@ -205,9 +205,9 @@ search runs, and the listener can't tell that silence from idleness, so a timeou
 searches. A client that has *gone* (its network dropped, no goodbye) is the real danger to the one
 place, and keepalive finds it. A client that is connected, alive and idle may keep its place.
 
-The CNP node reports the effective message limit in `initialize` now (`maxMessageBytes`). Its
-threads and hash can't be reported yet: `initialize`'s result is the protocol crate's own
-type, so that is a specification change, still to do (step 1's note).
+The CNP node reports the effective message limit in `initialize` (`maxMessageBytes`), and, since
+step 6, the threads and hash it runs with, in a new optional `resources` object
+(`{"threads": 8, "hashMb": 1024}`), added to the CNP specification for this (section 5.1).
 
 ### Where it lives (Decision 5)
 
@@ -295,8 +295,7 @@ Each step is its own PR with a green CI, and none changes the search:
    MB`, N from 1 to 256 and MB from 1 to 65,536 as UCI's options are, refused with exit code 2
    with any other mode. Without them a node keeps one thread and 16 MB. **A search request
    can't change them**: the node's owner chooses them, which is the cap the design wants.
-   Still to do: `initialize` can't report them, since its result is the Chess Node Protocol
-   crate's own type; that is a change to that specification, made with step 2's work.
+   `initialize` reports them (step 6: `resources` in the specification).
 2. **`crates/net`: framing, limits and a loopback listener** (done 2026-11-05): plaintext on
    loopback only (any other address is refused), the one-client rule with `Busy` for the rest,
    a fresh engine for each client, a disconnect cancelling the search, a client's `shutdown`
@@ -343,8 +342,16 @@ Each step is its own PR with a green CI, and none changes the search:
    through a message keeps its place until it disconnects or keepalive finds it dead (there is no
    idle timeout, because a long search is silent too); another approved client is told `Busy`.
    **Not done:** fuzzing the listener's input with `cargo fuzz`, and a test across a real network.
-6. **Documentation:** a chapter in the book, a README section, a transport section for the CNP
-   specification, and the licence notices.
+6. **Documentation and the specification** (done 2026-11-05): book chapter 22 ("Network play"), a
+   README section, and, in the Chess Node Protocol repository (cjus/chess-node-protocol#24),
+   section 3.2 (TLS over TCP, pairing, one client at a time, deadlines), section 3.3 (the
+   discovery probe and reply), section 10, and `resources` in `initialize`'s result, with a test
+   that checks the spec's transport examples. The wire messages use the key `"cnp"`, not
+   `"cb2026"`, so that another node or client can use them. The licence notices need no change
+   (`scripts/notices.sh` includes `ring`, rustls and the rest). The spec's additions are optional
+   and went into the 1.0 draft as pondering did; Carlos can ask for 1.1 instead.
+   **Waiting on Carlos:** a try between two real computers and the decision whether releases carry
+   the feature (#263).
 7. **Later, if wanted:** dial-out mode, isolated per-client engines, IPv6 multicast and mDNS.
 
 The Solrac side (a client connection, the pairing screen, the engine list, the discovery probe)

@@ -224,8 +224,11 @@ Windows and an Intel Mac, and a connection between two real computers (Carlos). 
 rate limited, nothing private; `cb2026_net::client::discover` for a client); **step 5 is done**
 (4 greetings at once from one address, 8 failures in 10 s earn a 30 s ban, and 14 negative
 end-to-end tests on the plain and the TLS listener: no change to the CNP node was needed);
-step 6 (the book chapter, README section, CNP transport section and notices) is next. No
-functional change.*
+**step 6 is done** (book chapter 22, a README section, the CNP specification's sections 3.2 and 3.3
+and `resources` in `initialize`, cjus/chess-node-protocol#24, and the pin moved to it; the wire
+messages use the key `cnp`); network play now waits only on Carlos: a try between two computers and the
+decision whether releases carry the feature (#263); step 7 (dial-out, per-client engines, IPv6)
+is for later. No functional change.*
 
 ## Stages
 
@@ -594,6 +597,8 @@ The open [`needs-carlos` issues](https://github.com/cjus/chessengine/issues?q=is
   nets"): output buckets, a second layer and king buckets, each by SPRT on gen3's records.
 - #191: the Lichess bot's two games, now that v1.0.0 is out (#199 and #183 closed 2026-11-05).
 - #88: whether macOS honours the search threads' QoS outside Claude Code.
+- #263: try network play between two computers, and decide whether the release binaries are built
+  with `--features net`.
 
 On hold: #61, running long tests on AWS Batch (closed 2026-10-12; reopen it if the M3 can't keep
 up with the test queue).

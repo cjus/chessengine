@@ -152,7 +152,7 @@ fn a_datagram_that_is_not_exactly_a_probe_gets_no_answer() {
     let good = discovery::probe();
     let mut long = good.clone();
     long.push(b' ');
-    let mut other = br#"{"cb2026":"here","v":1}"#.to_vec();
+    let mut other = br#"{"cnp":"here","v":1}"#.to_vec();
     other.resize(PROBE_BYTES, b' ');
     let bad = vec![
         good[..PROBE_BYTES - 1].to_vec(),
@@ -209,7 +209,7 @@ fn the_reply_says_nothing_private() {
     assert_eq!(
         keys,
         [
-            "cb2026",
+            "cnp",
             "fingerprint",
             "name",
             "pairing",

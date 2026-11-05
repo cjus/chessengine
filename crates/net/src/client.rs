@@ -113,11 +113,11 @@ impl Connection {
     /// for this client (kept in the node's approved list). Whether the node said yes. The
     /// connection is over after this either way.
     pub fn pair(&mut self, code: &str, name: &str) -> io::Result<bool> {
-        let request = serde_json::json!({ "cb2026": "pair", "code": code, "name": name });
+        let request = serde_json::json!({ "cnp": "pair", "code": code, "name": name });
         self.send_line(&request.to_string())?;
         let answer = self.read_line()?;
         Ok(answer.is_some_and(|line| {
-            serde_json::from_str::<serde_json::Value>(&line).is_ok_and(|v| v["cb2026"] == "paired")
+            serde_json::from_str::<serde_json::Value>(&line).is_ok_and(|v| v["cnp"] == "paired")
         }))
     }
 }

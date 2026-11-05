@@ -8,9 +8,9 @@
 //!
 //! ## The messages
 //!
-//! - **Probe:** a datagram of exactly [`PROBE_BYTES`] bytes: the JSON `{"cb2026":"probe","v":1}`
+//! - **Probe:** a datagram of exactly [`PROBE_BYTES`] bytes: the JSON `{"cnp":"probe","v":1}`
 //!   padded with spaces. Anything else, in size or content, is ignored without a reply.
-//! - **Reply:** one JSON line, sent to whoever sent the probe: `{"cb2026":"here","v":1,
+//! - **Reply:** one JSON line, sent to whoever sent the probe: `{"cnp":"here","v":1,
 //!   "name":…,"protocol":"1.0","port":4026,"fingerprint":"AB:CD:…","pairing":false}`: the name
 //!   its owner gave the node (`--name`), the CNP version, the TCP port, the certificate
 //!   fingerprint, and whether a pairing window is open.
@@ -79,7 +79,7 @@ const VERSION: u64 = 1;
 
 /// The probe datagram: its JSON, padded to [`PROBE_BYTES`].
 pub fn probe() -> Vec<u8> {
-    let mut datagram = json!({ "cb2026": "probe", "v": VERSION })
+    let mut datagram = json!({ "cnp": "probe", "v": VERSION })
         .to_string()
         .into_bytes();
     datagram.resize(PROBE_BYTES, b' ');
@@ -90,7 +90,7 @@ pub fn probe() -> Vec<u8> {
 fn is_probe(datagram: &[u8]) -> bool {
     datagram.len() == PROBE_BYTES
         && serde_json::from_slice::<Value>(datagram)
-            .is_ok_and(|v| v["cb2026"] == "probe" && v["v"] == VERSION)
+            .is_ok_and(|v| v["cnp"] == "probe" && v["v"] == VERSION)
 }
 
 /// What an engine says about itself in a reply.
@@ -113,7 +113,7 @@ impl Announcement {
     /// the name make impossible).
     fn encode(&self) -> Option<Vec<u8>> {
         let reply = json!({
-            "cb2026": "here",
+            "cnp": "here",
             "v": VERSION,
             "name": self.name,
             "protocol": self.protocol,
@@ -133,7 +133,7 @@ impl Announcement {
             return None;
         }
         let v: Value = serde_json::from_slice(datagram).ok()?;
-        if v["cb2026"] != "here" || v["v"] != VERSION {
+        if v["cnp"] != "here" || v["v"] != VERSION {
             return None;
         }
         let name = v["name"].as_str()?;
@@ -315,10 +315,10 @@ mod tests {
         assert!(!is_probe(&long), "too long");
         assert!(!is_probe(&[b' '; PROBE_BYTES]), "blank");
         assert!(!is_probe(&[0xFF; PROBE_BYTES]), "noise");
-        let mut other = br#"{"cb2026":"here","v":1}"#.to_vec();
+        let mut other = br#"{"cnp":"here","v":1}"#.to_vec();
         other.resize(PROBE_BYTES, b' ');
         assert!(!is_probe(&other), "another message");
-        let mut future = br#"{"cb2026":"probe","v":2}"#.to_vec();
+        let mut future = br#"{"cnp":"probe","v":2}"#.to_vec();
         future.resize(PROBE_BYTES, b' ');
         assert!(!is_probe(&future), "another version");
     }

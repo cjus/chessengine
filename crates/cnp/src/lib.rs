@@ -139,7 +139,7 @@ use cnp::engine::{
 };
 use cnp::lifecycle::{
     CancelRequest, Capabilities, IncompatibleVersionData, Initialize, InitializeResult,
-    Limits as NodeLimits, NodeInfo, PROTOCOL_VERSION, Ping, Shutdown, negotiate,
+    Limits as NodeLimits, NodeInfo, PROTOCOL_VERSION, Ping, Resources, Shutdown, negotiate,
 };
 use cnp::stdio::{ReadError, read_message, write_message};
 use cnp::{Id, Message, Notification, Request, RequestMethod, Response, ResponseError, code};
@@ -534,6 +534,13 @@ impl Node {
                 max_tree_plies: Some(MAX_TREE_PLIES),
                 max_concurrent_trees: Some(1),
             },
+            // What this node was started with (`--threads`, `--hash`), so a client that
+            // chooses among nodes can tell a big one from a small one. No search runs yet, so
+            // the engine is here to ask.
+            resources: self.engine.as_ref().map(|engine| Resources {
+                threads: u32::try_from(engine.threads).ok(),
+                hash_mb: u64::try_from(engine.tt.megabytes()).ok(),
+            }),
         };
         Response::ok::<Initialize>(id, &result)
     }
@@ -1352,6 +1359,40 @@ mod tests {
         let mut params = start();
         params.techniques.insert("nullmove".to_string(), false);
         assert_eq!(prepare(&params).unwrap().techniques.len(), 1);
+    }
+
+    #[test]
+    fn initialize_says_the_threads_and_hash_the_node_runs_with() {
+        let answer = |engine: Engine| {
+            let mut node = Node::new(
+                Arc::new(Mutex::new(Box::new(io::sink()))),
+                engine,
+                Config {
+                    license: "MIT OR Apache-2.0",
+                    message_bytes: None,
+                },
+            );
+            let params = cnp::lifecycle::InitializeParams {
+                protocol: PROTOCOL_VERSION,
+                client: cnp::lifecycle::Software {
+                    name: "test".to_string(),
+                    version: "0".to_string(),
+                },
+            };
+            let request = Request::new::<Initialize>(1, &params);
+            node.initialize(&request)
+                .result::<Initialize>()
+                .expect("an answer")
+        };
+        // The defaults of an engine nobody configured: one thread and 16 MB.
+        let plain = answer(Engine::new()).resources.expect("resources");
+        assert_eq!((plain.threads, plain.hash_mb), (Some(1), Some(16)));
+        // What `--threads` and `--hash` set, as the CLI sets them.
+        let mut engine = Engine::new();
+        engine.threads = 4;
+        engine.set_hash_size(64);
+        let set = answer(engine).resources.expect("resources");
+        assert_eq!((set.threads, set.hash_mb), (Some(4), Some(64)));
     }
 
     #[test]
