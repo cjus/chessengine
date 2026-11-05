@@ -219,8 +219,10 @@ one-time code, five minutes, one client, three tries; an approved-clients file r
 `--serve` on any address other than loopback is encrypted and for approved clients only, and
 `--tls` does the same on loopback; a reference client in `cb2026_net::client`; `cargo deny`
 passes and `scripts/notices.sh` includes `ring`'s licences). Not yet run: the `net` feature on
-Windows and an Intel Mac, and a connection between two real computers (Carlos). Step 4
-(UDP discovery) is next. No functional change.*
+Windows and an Intel Mac, and a connection between two real computers (Carlos). **Step 4 is done**
+(`--discover [--name]`: a 320-byte UDP probe on port 4026, a reply no bigger than the probe,
+rate limited, nothing private; `cb2026_net::client::discover` for a client); step 5 (hardening
+tests) is next. No functional change.*
 
 ## Stages
 

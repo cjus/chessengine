@@ -223,6 +223,18 @@ fn serve(address: std::net::SocketAddr, settings: Settings, network: args::Netwo
             }
         }
     }
+    let config_name = network.name.clone();
+    if network.discover {
+        if !secure {
+            eprintln!(
+                "cb2026: --discover needs an address beyond loopback, or --tls: a broadcast \
+                 can't reach a program that listens on this computer only"
+            );
+            return ExitCode::from(EXIT_USAGE);
+        }
+        let name = config_name.clone().unwrap_or_default();
+        config.discovery = Some(cb2026_net::Discovery::new(name));
+    }
     let trust = config.trust.clone();
     let server = match cb2026_net::Server::bind(config) {
         Ok(server) => server,
@@ -253,6 +265,13 @@ fn serve(address: std::net::SocketAddr, settings: Settings, network: args::Netwo
                 "This node's fingerprint:\n{}",
                 trust.fingerprint().in_lines()
             );
+            if let Some(probes) = server.discovery_addr() {
+                eprintln!(
+                    "Answering discovery probes on UDP port {} as \"{}\".",
+                    probes.port(),
+                    cb2026_net::discovery::clean_name(&config_name.unwrap_or_default())
+                );
+            }
             eprintln!(
                 "To approve a client, run `cb2026 --pair` on this computer (add `--data-dir` \
                  if you gave one here)."

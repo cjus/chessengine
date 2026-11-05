@@ -53,6 +53,11 @@ pub struct Network {
     /// Where the node's identity, approved clients and pairing window are kept, instead of the
     /// default directory of the system.
     pub data_dir: Option<PathBuf>,
+    /// Answer clients looking for engines on the local network (`--discover`). Needs the
+    /// encrypted listener.
+    pub discover: bool,
+    /// The name shown for this node to a person choosing among engines (`--name`).
+    pub name: Option<String>,
 }
 
 /// How the binary talks to whoever started it.
@@ -96,6 +101,9 @@ Options:
                  0.0.0.0:4026, it is encrypted and only clients you approved may connect.
                  Builds with --features net
   --tls          With --serve: encrypt and require approved clients on a loopback address too
+  --discover     With --serve (encrypted): answer clients on the local network that ask
+                 \"is there a cb2026 here?\", so nobody has to type an address
+  --name NAME    With --discover: the name clients show for this node (up to 32 bytes)
   --pair         Approve a new client: shows this node's fingerprint and a one-time code to
                  give the client within five minutes. Run it while --serve is running
   --data-dir DIR With --serve or --pair: keep the node's certificate, approved clients and
@@ -120,6 +128,7 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
     let mut mode = None;
     let mut serve = None;
     let (mut tls, mut pair, mut data_dir) = (false, false, None);
+    let (mut discover, mut name) = (false, None);
     let mut settings = Settings::default();
     let mut rest = args.iter();
     while let Some(arg) = rest.next() {
@@ -151,6 +160,18 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
                 tls = true;
                 continue;
             }
+            "--discover" => {
+                discover = true;
+                continue;
+            }
+            "--name" => {
+                let given = rest.next().filter(|n| !n.starts_with('-'));
+                let given = given.ok_or_else(|| "--name needs a name".to_string())?;
+                if name.replace(given.clone()).is_some() {
+                    return Err("--name is given once".to_string());
+                }
+                continue;
+            }
             "--pair" => {
                 pair = true;
                 continue;
@@ -174,7 +195,13 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
         }
     }
     if pair {
-        if serve.is_some() || tls || mode.is_some() || settings != Settings::default() {
+        if serve.is_some()
+            || tls
+            || discover
+            || name.is_some()
+            || mode.is_some()
+            || settings != Settings::default()
+        {
             return Err("--pair stands alone, with --data-dir if the files are elsewhere".into());
         }
         return Ok(Command::Pair(data_dir));
@@ -183,7 +210,22 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
         if mode.is_some() {
             return Err("--serve can't be combined with --shell, --uci, --xboard or --cnp".into());
         }
-        return Ok(Command::Serve(address, settings, Network { tls, data_dir }));
+        if name.is_some() && !discover {
+            return Err("--name goes with --discover".into());
+        }
+        return Ok(Command::Serve(
+            address,
+            settings,
+            Network {
+                tls,
+                data_dir,
+                discover,
+                name,
+            },
+        ));
+    }
+    if discover || name.is_some() {
+        return Err("--discover and --name go with --serve".into());
     }
     if tls || data_dir.is_some() {
         return Err("--tls and --data-dir go with --serve (--data-dir also with --pair)".into());
@@ -342,6 +384,7 @@ mod tests {
         let network = Network {
             tls: true,
             data_dir: Some(PathBuf::from("/tmp/cb")),
+            ..Network::default()
         };
         assert_eq!(
             parse_strs(&["--serve", "0.0.0.0:4026", "--tls", "--data-dir", "/tmp/cb"]),
@@ -349,6 +392,19 @@ mod tests {
                 SocketAddr::from(([0, 0, 0, 0], 4026)),
                 plain,
                 network
+            ))
+        );
+        let found = Network {
+            discover: true,
+            name: Some("study".to_string()),
+            ..Network::default()
+        };
+        assert_eq!(
+            parse_strs(&["--serve", "0.0.0.0:4026", "--discover", "--name", "study"]),
+            Ok(Command::Serve(
+                SocketAddr::from(([0, 0, 0, 0], 4026)),
+                plain,
+                found
             ))
         );
         assert_eq!(parse_strs(&["--pair"]), Ok(Command::Pair(None)));
@@ -368,6 +424,12 @@ mod tests {
             &["--pair", "--tls"][..],
             &["--pair", "--cnp"][..],
             &["--pair", "--threads", "2"][..],
+            &["--discover"][..],
+            &["--name", "x"][..],
+            &["--serve", "--name", "x"][..],
+            &["--serve", "--discover", "--name"][..],
+            &["--serve", "--discover", "--name", "a", "--name", "b"][..],
+            &["--pair", "--discover"][..],
         ] {
             assert!(parse_strs(bad).is_err(), "{bad:?}");
         }
