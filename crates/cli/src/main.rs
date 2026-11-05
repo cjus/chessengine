@@ -68,7 +68,8 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Ok(Command::Run(mode, settings)) => run(mode, settings),
-        Ok(Command::Serve(address, settings)) => serve(address, settings),
+        Ok(Command::Serve(address, settings, network)) => serve(address, settings, network),
+        Ok(Command::Pair(data_dir)) => pair(data_dir),
         Err(message) => {
             eprintln!("cb2026: {message}\n\n{USAGE}");
             ExitCode::from(EXIT_USAGE)
@@ -187,15 +188,43 @@ fn run_cnp(first_line: Option<String>, settings: Settings) -> ExitCode {
     }
 }
 
-/// Serves the Chess Node Protocol on the network until the program is stopped.
+/// Where the node's trust files are: the directory asked for, or the system's default.
 #[cfg(feature = "net")]
-fn serve(address: std::net::SocketAddr, settings: Settings) -> ExitCode {
+fn trust_store(data_dir: Option<std::path::PathBuf>) -> Result<cb2026_net::Store, String> {
+    data_dir
+        .or_else(cb2026_net::default_dir)
+        .map(cb2026_net::Store::new)
+        .ok_or_else(|| {
+            "this system has no home directory for cb2026's files; use --data-dir".into()
+        })
+}
+
+/// Serves the Chess Node Protocol on the network until the program is stopped.
+///
+/// On a loopback address the listener is plain, for a program on this computer; on any other
+/// (or with `--tls`) it is encrypted and serves only approved clients.
+#[cfg(feature = "net")]
+fn serve(address: std::net::SocketAddr, settings: Settings, network: args::Network) -> ExitCode {
     let license = if cfg!(feature = "syzygy") {
         "GPL-3.0-or-later"
     } else {
         "MIT OR Apache-2.0"
     };
-    let server = match cb2026_net::Server::bind(cb2026_net::Config::new(address, license)) {
+    let mut config = cb2026_net::Config::new(address, license);
+    let secure = network.tls || !address.ip().is_loopback();
+    if secure {
+        let opened = trust_store(network.data_dir)
+            .and_then(|store| cb2026_net::Trust::open(store).map_err(|e| e.to_string()));
+        match opened {
+            Ok(trust) => config.trust = Some(std::sync::Arc::new(trust)),
+            Err(e) => {
+                eprintln!("cb2026: {e}");
+                return ExitCode::FAILURE;
+            }
+        }
+    }
+    let trust = config.trust.clone();
+    let server = match cb2026_net::Server::bind(config) {
         Ok(server) => server,
         Err(e) => {
             eprintln!("cb2026: {e}");
@@ -203,14 +232,31 @@ fn serve(address: std::net::SocketAddr, settings: Settings) -> ExitCode {
         }
     };
     // The address the system gave, which differs from the one asked for when the port was 0.
-    match server.local_addr() {
-        Ok(bound) => eprintln!(
-            "cb2026: serving the Chess Node Protocol on {bound}, one client at a time \
-             (no encryption: loopback only). Stop it with Ctrl-C."
-        ),
+    let bound = match server.local_addr() {
+        Ok(bound) => bound,
         Err(e) => {
             eprintln!("cb2026: {e}");
             return ExitCode::FAILURE;
+        }
+    };
+    match &trust {
+        None => eprintln!(
+            "cb2026: serving the Chess Node Protocol on {bound}, one client at a time \
+             (no encryption: loopback only). Stop it with Ctrl-C."
+        ),
+        Some(trust) => {
+            eprintln!(
+                "cb2026: serving the Chess Node Protocol on {bound}, one client at a time, \
+                 encrypted, for approved clients only. Stop it with Ctrl-C."
+            );
+            eprintln!(
+                "This node's fingerprint:\n{}",
+                trust.fingerprint().in_lines()
+            );
+            eprintln!(
+                "To approve a client, run `cb2026 --pair` on this computer (add `--data-dir` \
+                 if you gave one here)."
+            );
         }
     }
     match server.serve(|| cnp_engine(settings)) {
@@ -224,9 +270,76 @@ fn serve(address: std::net::SocketAddr, settings: Settings) -> ExitCode {
 
 /// `--serve` in a build without the listener.
 #[cfg(not(feature = "net"))]
-fn serve(_address: std::net::SocketAddr, _settings: Settings) -> ExitCode {
+fn serve(_address: std::net::SocketAddr, _settings: Settings, _network: args::Network) -> ExitCode {
+    no_listener()
+}
+
+/// `--pair` in a build without the listener.
+#[cfg(not(feature = "net"))]
+fn pair(_data_dir: Option<std::path::PathBuf>) -> ExitCode {
+    no_listener()
+}
+
+#[cfg(not(feature = "net"))]
+fn no_listener() -> ExitCode {
     eprintln!("cb2026: this build has no network listener (build with --features net)");
     ExitCode::from(EXIT_USAGE)
+}
+
+/// Opens a pairing window and waits for one client to use it.
+///
+/// Shows the node's fingerprint, which the person compares with what the client shows, and the
+/// one-time code, which the person types into the client. The listener (`--serve`, a program of
+/// its own) sees the open window in the shared files; this waits until a client has paired, or
+/// the window has closed.
+#[cfg(feature = "net")]
+fn pair(data_dir: Option<std::path::PathBuf>) -> ExitCode {
+    use std::time::{Duration, SystemTime};
+
+    let run = || -> Result<ExitCode, String> {
+        let store = trust_store(data_dir)?;
+        let identity = store.identity().map_err(|e| e.to_string())?;
+        let known = store.approved().map_err(|e| e.to_string())?;
+        let window = store
+            .open_pairing(SystemTime::now())
+            .map_err(|e| e.to_string())?;
+        println!("Pairing: approve one new client.\n");
+        println!("1. On the client, choose this computer. It shows a fingerprint; check that");
+        println!("   it is the same as this one:\n");
+        for line in identity.fingerprint().in_lines().lines() {
+            println!("     {line}");
+        }
+        println!("\n2. Only if they match, type this code into the client:\n");
+        println!("     {}\n", window.code_in_groups());
+        println!(
+            "The code works once and for {} minutes, and closes after {} wrong tries.",
+            cb2026_net::trust::PAIRING_MINUTES,
+            cb2026_net::trust::PAIRING_ATTEMPTS
+        );
+        println!("`cb2026 --serve` must be running on this computer. Waiting for the client...");
+        loop {
+            std::thread::sleep(Duration::from_millis(250));
+            let now = store.approved().map_err(|e| e.to_string())?;
+            if let Some(added) = now
+                .iter()
+                .find(|a| !known.iter().any(|k| k.fingerprint == a.fingerprint))
+            {
+                println!("\nPaired: {} ({})", added.name, added.fingerprint);
+                return Ok(ExitCode::SUCCESS);
+            }
+            if !store.pairing_is_open(SystemTime::now()) {
+                println!(
+                    "\nThe window closed and nobody paired (it ran out of time, or the code \
+                     was wrong too often). Run `cb2026 --pair` again for a new code."
+                );
+                return Ok(ExitCode::FAILURE);
+            }
+        }
+    };
+    run().unwrap_or_else(|e| {
+        eprintln!("cb2026: {e}");
+        ExitCode::FAILURE
+    })
 }
 
 /// A new engine for a CNP node, with the threads and hash size it was started with.

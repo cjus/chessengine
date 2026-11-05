@@ -1,9 +1,11 @@
 # Network play: a design for the opt-in listener (#209)
 
-**Status: decided, not built.** Nothing here opens a port today. Carlos answered the five
+**Status: steps 1–3 built, 4–7 to do.** The listener, TLS and pairing exist in a build with
+`--features net`, which is off by default; an ordinary run opens no port. Carlos answered the five
 decisions on 2026-11-05 (cjus/chessengine#255; [Decisions](#decisions)): pairing with both sides
 pinning each other, one client at a time, discovery by UDP broadcast, limits set on the engine's
-machine, and a separate `crates/net`. The first step is next. Written 2026-11-05.
+machine, and a separate `crates/net`. [How it would be built](#how-it-would-be-built) says what
+each step did. Written 2026-11-05; step 3 added the same day.
 
 ## What this is for
 
@@ -80,6 +82,38 @@ asking, with no certificate authority and nothing to install:
   no code and no prompt.
 - **Revoking** a client is deleting its line from the file.
 - Anyone else is refused before CNP starts, and a refusal says nothing about why.
+
+**As built (step 3):**
+
+- TLS 1.3 only, through rustls with the `ring` backend. Each side's certificate is self-signed
+  and made on first use (ECDSA P-256). The handshake's signature is checked in both directions,
+  so presenting someone's public certificate without its key gets nowhere (tested with a
+  certificate and a key that don't belong together). What a certificate *means* is only its
+  SHA-256 fingerprint, checked after the handshake.
+- **Files**, in one directory (`~/Library/Application Support/cb2026` on macOS,
+  `$XDG_DATA_HOME/cb2026` or `~/.local/share/cb2026` on Linux, `%APPDATA%\cb2026` on Windows;
+  `--data-dir` chooses another), readable by the owner alone on Unix: `identity.pem`,
+  `approved-clients.txt` (`fingerprint date name`, one client a line, hand-editable, read at
+  each connection so a revoked client is refused at its next one), and `pairing.txt` (present
+  only while a window is open). On Windows the application-data folder is already the user's
+  own, and no extra mode is set.
+- **`cb2026 --pair`** is a separate process from `cb2026 --serve`; they meet only in those
+  files. It prints the fingerprint and an **eight-digit code**, valid for **5 minutes**, for
+  **one** client, closing after **3 wrong tries**; then it waits until a client has paired or the
+  window has closed (exit code 0 or 1).
+- **What a client must do** is written in `crates/net/src/client.rs`, which is also the client the
+  tests use: connect without knowing the node, **show the person the node's fingerprint and wait
+  for them to say it matches the one on the engine's screen**, then send the code. That
+  comparison is the defence against someone in the middle; the code alone doesn't give it.
+- A client that isn't approved can send **one** message of at most 1 KiB, the pairing request,
+  and only that. Anything else, a wrong code, no open window: the connection is closed with no
+  reply, so a guesser learns nothing.
+- Handshakes happen on their own threads, at most 16 at once (more are dropped), and **only an
+  approved client reaches the one place**: a stranger can't make an approved client wait or be
+  told `Busy`.
+- `--serve` on a loopback address stays plain (for a program on the same computer); on any other
+  address, or with `--tls`, it is TLS with approved clients only. There is no plaintext mode off
+  loopback.
 
 This is the recommendation. The options, with their costs:
 
@@ -185,8 +219,12 @@ That is a separate choice, made when the feature is ready.
 ## What can go wrong, and what handles it
 
 - **A port left open to the world.** Loopback by default. A non-loopback address needs the
-  explicit flag **and** TLS with pairing; there is no plaintext mode off loopback. The tests'
-  loopback plaintext mode refuses any other address.
+  explicit address **and** gets TLS with pairing automatically; there is no plaintext mode off
+  loopback, and the plaintext mode refuses any other address.
+- **A flood of strangers.** At most 16 connections are greeted at once and each has 10 seconds
+  to finish, so a flood can't run threads or memory without end. **Known gap:** a machine on the
+  network can keep all 16 occupied and so delay an approved client's connection (not take its
+  place); a limit per address, and backing off after failures, belong to step 5.
 - **Slow or hostile input:** bounded line length, read and write deadlines, backpressure when a
   reader is slow, and positions and options validated before any search starts.
 - **A client picks a file:** remote options are an allowlist. Paths (`EvalFile`, `SyzygyPath`,
@@ -229,13 +267,19 @@ is checked before it is chosen:
 (Read from each crate's `Cargo.toml` on 2026-11-05.) Every licence on this list is already in
 `deny.toml`'s allow list. Two things to do before the dependency lands:
 
-- **Run `cargo deny check licenses` with the choice added.** Nothing is added yet, so this has
-  not been run.
-- **Settle the OpenSSL attribution.** AWS-LC descends from BoringSSL and OpenSSL, and its
-  LICENSE file names OpenSSL, though the declared expression doesn't list that licence. Whether
-  `THIRD-PARTY-NOTICES.txt` must also carry OpenSSL's notice is a question for the notices tool or
-  for counsel. `ring` is the alternative backend. Either choice also needs a check that it
-  builds on all four release targets, since both compile C.
+- **Run `cargo deny check licenses` with the choice added.** Done in step 3 with `rustls`
+  (`ring` backend), `rcgen` (`ring`, `pem`), `sha2` and `serde_json`: `cargo deny check` passes
+  (advisories, bans, licences, sources). No `rustls-pemfile` (unmaintained): rustls's own
+  `pki-types` reads the PEM.
+- **Settle the OpenSSL attribution.** **Chosen: `ring`**, not AWS-LC. `ring`'s licence files
+  (`LICENSE`, `LICENSE-BoringSSL`, `LICENSE-other-bits`) don't name OpenSSL (it appears in
+  comments in a few source files only), and `scripts/notices.sh` runs with it and includes
+  `ring`'s and BoringSSL's licence texts in `THIRD-PARTY-NOTICES.txt`. That is my reading of the
+  files, not legal advice; the release that carries the feature should have the notices file
+  looked at once.
+- **Still to check:** that `ring` builds on all four release targets (it compiles C and
+  assembly). Linux CI and the M1 Max build today; Windows and Intel macOS are checked by the
+  Cross-platform workflow, which hasn't run with the `net` feature.
 
 The licence of a client that links none of this stays as it is: a program that only talks to
 the listener over a socket takes no licence from it.
@@ -257,8 +301,14 @@ Each step is its own PR with a green CI, and none changes the search:
    loopback connections. `cb2026 --serve [ADDR]` runs it, in a build with `--features net`
    (off by default); stop it with Ctrl-C. It is the first thing that opens a port, and only
    when asked, and only on this computer.
-3. **TLS, certificates and pairing**, with the approved-clients file; the non-loopback address
-   turns on here and not before.
+3. **TLS, certificates and pairing** (done 2026-11-05): rustls (`ring`), self-signed
+   certificates made on first use, `cb2026 --pair`, the approved-clients file, and
+   `cb2026 --serve ADDR` on any address (encrypted, approved clients only), as in
+   [Security model](#security-model-decision-1) above. A reference client
+   (`cb2026_net::client`) and 17 end-to-end tests over real TLS connections, which include the
+   attacks listed there; breaking the signature check, the approval check or the deadline each
+   makes tests fail. **Not yet run:** the `net` feature on Windows and on an Intel Mac (CI
+   builds Linux only), and a connection between two computers.
 4. **Discovery:** the UDP probe and reply, `--discover`, the rate limit and the size rule,
    with tests for a probe that is too small, too large or too frequent, and two engines on one
    network.
