@@ -367,6 +367,15 @@ Each step is its own PR with a green CI, and none changes the search:
    It now reads the fingerprint and hangs up, then sends `pair` on a new connection pinned to the
    confirmed fingerprint. Its tests piped the answers in at once, so they missed it; a test now
    waits twelve seconds between the two answers (it fails on the old code).
+   **`Connection::into_halves`** (added 2026-11-05, asked for by the Solrac side, whose client
+   reads the node's output on one thread and sends requests and `engine/stop` from another): a
+   paired connection splits into a reader and a writer that work at once. The reader waits
+   without a timeout and never holds what a write needs; dropping either half sends a TLS
+   `close_notify` and closes the socket, which ends a running search and wakes the other half. The
+   pieces are the listener's own `TlsReader` and `TlsWriter`, now over rustls's `Connection`
+   (either side). 3 tests (`crates/net/tests/tls.rs`): an infinite search stopped from another
+   thread while the reader waits; dropping a half ends the search and frees the node; lines read
+   before the split are kept. Without the close on drop, the second test fails.
 7. **Later, if wanted:** dial-out mode, isolated per-client engines, IPv6 multicast and mDNS.
 
 The Solrac side (a client connection, the pairing screen, the engine list, the discovery probe)

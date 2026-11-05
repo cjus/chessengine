@@ -532,3 +532,122 @@ fn stopping_ends_a_tls_session_and_a_connection_still_in_its_handshake() {
     node.finish();
     assert!(start.elapsed() < Duration::from_secs(10));
 }
+
+fn search(id: u32, limits: &str) -> String {
+    format!(
+        r#"{{"jsonrpc":"2.0","id":{id},"method":"engine/search","params":{{"position":{{"fen":"{START}"}},"limits":{limits}}}}}"#
+    )
+}
+
+#[test]
+fn a_split_connection_can_stop_a_search_from_another_thread_while_the_reader_waits() {
+    use std::io::BufRead;
+    let node = Node::start();
+    let me = node.approved_client("my laptop");
+    let mut connection = node.connect(&me);
+    initialize(&mut connection);
+    let (mut reader, mut writer) = connection.into_halves().expect("splits");
+    writer
+        .write_all(search(2, r#"{"infinite":true}"#).as_bytes())
+        .unwrap();
+    writer.write_all(b"\n").unwrap();
+
+    // The reader waits, with no timeout, for the answer to a search that won't end by itself.
+    let (sender, received) = std::sync::mpsc::channel();
+    let waiting = thread::spawn(move || {
+        let mut line = String::new();
+        while reader.read_line(&mut line).unwrap_or(0) > 0 {
+            if line.contains(r#""id":2"#) {
+                let _ = sender.send(line.clone());
+                return;
+            }
+            line.clear();
+        }
+    });
+    thread::sleep(Duration::from_millis(1500));
+    assert!(
+        received.try_recv().is_err(),
+        "an infinite search answered by itself"
+    );
+    writer
+        .write_all(
+            b"{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"engine/stop\",\"params\":{\"id\":2}}\n",
+        )
+        .unwrap();
+    let answer = received
+        .recv_timeout(WAIT)
+        .expect("the answer arrives after the stop");
+    assert!(answer.contains(r#""bestMove""#), "{answer}");
+    drop(writer);
+    waiting.join().unwrap();
+    node.finish();
+}
+
+#[test]
+fn dropping_a_half_ends_the_search_and_frees_the_node_for_the_next_client() {
+    use std::io::BufRead;
+    let node = Node::start();
+    let me = node.approved_client("my laptop");
+    let mut connection = node.connect(&me);
+    initialize(&mut connection);
+    let (mut reader, mut writer) = connection.into_halves().expect("splits");
+    writer
+        .write_all(search(2, r#"{"infinite":true}"#).as_bytes())
+        .unwrap();
+    writer.write_all(b"\n").unwrap();
+    thread::sleep(Duration::from_millis(500));
+
+    // The reader is waiting on another thread when the writer goes.
+    let (ended, saw_end) = std::sync::mpsc::channel();
+    thread::spawn(move || {
+        let mut line = String::new();
+        // Ends (no more bytes, or an error) once the connection is closed.
+        while reader.read_line(&mut line).unwrap_or(0) > 0 {
+            line.clear();
+        }
+        let _ = ended.send(());
+    });
+    drop(writer);
+    saw_end
+        .recv_timeout(Duration::from_secs(10))
+        .expect("the reader sees the end");
+
+    // The search was cancelled with its connection: the one place comes free again, a moment
+    // later (until then a new client is told busy).
+    let started = Instant::now();
+    let mut next = loop {
+        let mut next = node.connect(&me);
+        next.send_line(INITIALIZE).unwrap();
+        match next.read_line() {
+            Ok(Some(line)) if line.contains(r#""result""#) => break next,
+            _ => assert!(started.elapsed() < WAIT, "the place never came free"),
+        }
+        thread::sleep(Duration::from_millis(20));
+    };
+    next.send_line(&search(3, r#"{"depth":2}"#)).unwrap();
+    let answer = next.read_line().unwrap().expect("an answer");
+    assert!(answer.contains(r#""bestMove""#), "{answer}");
+    node.finish();
+}
+
+#[test]
+fn splitting_keeps_the_lines_already_read_ahead() {
+    use std::io::BufRead;
+    let node = Node::start();
+    let me = node.approved_client("my laptop");
+    let mut connection = node.connect(&me);
+    initialize(&mut connection);
+    // Two answers arrive together; only the first is read before the split.
+    connection
+        .send_bytes(b"{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}\n{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"ping\"}\n")
+        .unwrap();
+    let first = connection.read_line().unwrap().expect("first answer");
+    assert!(first.contains(r#""id":2"#), "{first}");
+    thread::sleep(Duration::from_millis(300));
+    let (mut reader, writer) = connection.into_halves().expect("splits");
+    let mut second = String::new();
+    reader.read_line(&mut second).unwrap();
+    assert!(second.contains(r#""id":3"#), "{second}");
+    drop((reader, writer));
+    node.finish();
+}
