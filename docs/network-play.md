@@ -155,17 +155,25 @@ client:
 
 | Limit | Provisional default | Why |
 | --- | --- | --- |
-| Threads a search may use | all but one of the machine's performance cores | A client may ask for fewer, never more |
-| Hash memory | 1/4 of RAM, at most | A client may ask for less |
+| Threads a search may use | `--threads N` (step 1); 1 if not given | A request carries no thread count, so a client can neither raise nor lower it |
+| Hash memory | `--hash MB` (step 1); 16 MB if not given | The same |
 | MultiPV | the engine's existing cap | |
-| One message | 1 MB | Bounded framing; a position and its history fit easily |
-| Idle time with no message | 5 minutes | Read and write deadlines are separate and shorter |
+| One message | 1 MiB, `cb2026_net::MESSAGE_BYTES` (step 2); a stdio node reads 16 MiB | Bounded framing; a position with its whole history is a few kilobytes. A longer message is refused with an error and the node says the limit in `initialize` |
+| First message of a connection | 10 seconds, for the whole message (step 2) | A client that connects and trickles bytes is dropped |
+| One write to a client | 30 seconds (step 2) | A slow reader can't stall a search |
+| A client that vanished | TCP keepalive: 60 s of silence, then probes every 10 s (step 2) | See below: there is **no idle timeout** |
 | Search time | none beyond what the client sends | The client owns its clock |
-| Connections waiting | 0 (a second one is refused) | |
+| Connections waiting | 0 (a second one is told `Busy` and closed) | |
 
-A client's thread and hash requests are clamped to these. The CNP node reports the effective
-values in `initialize` (build, network hash, threads, hash caps), so the client sees what it
-got, and Solrac's stage 2 can read the same fields.
+**Why no idle timeout.** The first draft had one (5 minutes). Building it showed it can't be
+done from outside the node: a client waiting for a long search sends nothing for as long as the
+search runs, and the listener can't tell that silence from idleness, so a timeout would kill
+searches. A client that has *gone* (its network dropped, no goodbye) is the real danger to the one
+place, and keepalive finds it. A client that is connected, alive and idle may keep its place.
+
+The CNP node reports the effective message limit in `initialize` now (`maxMessageBytes`). Its
+threads and hash can't be reported yet: `initialize`'s result is the protocol crate's own
+type, so that is a specification change, still to do (step 1's note).
 
 ### Where it lives (Decision 5)
 
@@ -242,8 +250,13 @@ Each step is its own PR with a green CI, and none changes the search:
    can't change them**: the node's owner chooses them, which is the cap the design wants.
    Still to do: `initialize` can't report them, since its result is the Chess Node Protocol
    crate's own type; that is a change to that specification, made with step 2's work.
-2. **`crates/net`: framing, limits and a loopback listener** with plaintext allowed only on
-   loopback, the one-client rule, cancellation and shutdown, and the loopback end-to-end tests.
+2. **`crates/net`: framing, limits and a loopback listener** (done 2026-11-05): plaintext on
+   loopback only (any other address is refused), the one-client rule with `Busy` for the rest,
+   a fresh engine for each client, a disconnect cancelling the search, a client's `shutdown`
+   and `exit` ending only its own session, the deadlines above, and end-to-end tests over real
+   loopback connections. `cb2026 --serve [ADDR]` runs it, in a build with `--features net`
+   (off by default); stop it with Ctrl-C. It is the first thing that opens a port, and only
+   when asked, and only on this computer.
 3. **TLS, certificates and pairing**, with the approved-clients file; the non-loopback address
    turns on here and not before.
 4. **Discovery:** the UDP probe and reply, `--discover`, the rate limit and the size rule,

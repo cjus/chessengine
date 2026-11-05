@@ -209,8 +209,12 @@ Same day: **the design for network play is decided** (Carlos, #255; `docs/networ
 opt-in CNP listener in `crates/net` with TLS and pairing (both sides pin each other), one client
 at a time, an IP address or discovery by UDP broadcast, limits set on the engine's machine; no SSH. Step 1
 is done: `cb2026 --cnp --threads N --hash MB` (CNP has no option for them), and no CNP request can
-name a file, so the listener's option allowlist is what CNP already has; step 2 (`crates/net`,
-the loopback listener) is next; nothing listens yet. No functional change.*
+name a file, so the listener's option allowlist is what CNP already has; **step 2 is done** (`crates/net`: a
+loopback listener, one client at a time, a fresh engine each, a disconnect cancelling the
+search, deadlines, `cb2026 --serve`, built with `--features net`, off by default; it replaced the
+planned idle timeout with TCP keepalive, since a node can't tell a long search's silence from
+idleness), and CNP nodes now report `maxMessageBytes`; step 3 (TLS and pairing) is next, and
+nothing listens beyond this computer until it is done. No functional change.*
 
 ## Stages
 

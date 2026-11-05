@@ -1,0 +1,20 @@
+[package]
+name = "cb2026-net"
+description = "cb2026 over a network: an opt-in listener that serves the Chess Node Protocol to one client at a time."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+cb2026-cnp.workspace = true
+cb2026-engine.workspace = true
+cnp.workspace = true
+# TCP keepalive, which the standard library can't set: it is how a client that vanished without
+# closing its connection (a laptop that lost its Wi-Fi) stops holding the one place.
+socket2 = { version = "0.6", features = ["all"] }
+
+[lints]
+workspace = true
