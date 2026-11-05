@@ -204,7 +204,11 @@ pin moves to cjus/chess-node-protocol#23's merge, `6274420` (#250).
 the tag on `83fa6c6`, the Mac binaries signed and notarised, the book and the gen2 net on it;
 before publishing, its eight assets were downloaded again and `SHA256SUMS.txt` checked OK, the
 arm64 binary's bench was 701720, and the release notes of #199 went above GitHub's generated
-list. `main` is v1.1 (gen3 the default). No functional change.*
+list. `main` is v1.1 (gen3 the default). No functional change.
+Same day: **the design for network play is decided** (Carlos, #255; `docs/network-play.md`): an
+opt-in CNP listener in `crates/net` with TLS and pairing (both sides pin each other), one client
+at a time, discovery by UDP broadcast, limits set on the engine's machine; no SSH. Step 1,
+threads and hash in CNP mode, is next; nothing listens yet.*
 
 ## Stages
 
@@ -569,8 +573,6 @@ passed; the rest wait on GUI checks, level calibration or the v1.0 work.
 
 The open [`needs-carlos` issues](https://github.com/cjus/chessengine/issues?q=is%3Aopen+label%3Aneeds-carlos):
 
-- #255: the design for network play (#209, `docs/network-play.md`): five decisions, pairing and
-  TLS first, no SSH.
 - #253: whether to go ahead with the plan for nets beyond gen3 (PRD, "After gen3: the next
   nets"): output buckets, a second layer and king buckets, each by SPRT on gen3's records.
 - #191: the Lichess bot's two games, now that v1.0.0 is out (#199 and #183 closed 2026-11-05).
