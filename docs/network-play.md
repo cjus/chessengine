@@ -1,8 +1,9 @@
 # Network play: a design for the opt-in listener (#209)
 
-**Status: a proposal, not built.** Nothing here opens a port today. It waits on Carlos's answers
-to the five decisions below (cjus/chessengine#255), and no code
-starts before then. Written 2026-11-05.
+**Status: decided, not built.** Nothing here opens a port today. Carlos answered the five
+decisions on 2026-11-05 (cjus/chessengine#255; [Decisions](#decisions)): pairing with both sides
+pinning each other, one client at a time, discovery by UDP broadcast, limits set on the engine's
+machine, and a separate `crates/net`. The first step is next. Written 2026-11-05.
 
 ## What this is for
 
@@ -99,9 +100,47 @@ Connection rules, in every release:
 
 ### Finding the engine (Decision 3)
 
-**A typed address and port** in the first release. Automatic discovery (mDNS) is useful, but it
-adds a service to the machine, a platform-specific prompt and a way to see engines that haven't
-paired. It can come later without changing the protocol.
+**Both ways to find an engine are supported** (Carlos, 2026-11-05): **entering an IP address
+and port**, and **automatic discovery by UDP broadcast**. The typed address is a full feature,
+for people who know their network and for networks where a broadcast can't reach; discovery is
+the easy way for people who are less technical, who should never have to find an address. A
+client offers both, with discovery as the first thing a new user sees. Discovery only says
+*where an engine is*; it is never trusted. Pairing and the pinned fingerprints (above) decide who
+may connect, the same way however the engine was found.
+
+- **Opt-in, in two layers.** Discovery runs only when the engine is serving on a non-loopback
+  address **and** is started with `--discover`. A listener with no flag answers no probes. For
+  the less technical user the flag isn't the interface: the setup screen of a client or
+  installer turns it on with the same choice, and the documentation shows both.
+- **The engine answers, it doesn't announce.** A client sends a small *probe* to the broadcast
+  address on a fixed UDP port; an engine that has discovery on answers the sender directly with
+  one small JSON line: the node's name, the protocol version, its TCP port, its certificate
+  fingerprint and whether it is accepting pairing. No timers, no periodic chatter, nothing on
+  the wire until someone asks.
+- **No amplification.** A reply is never larger than the probe that asked for it (probes are
+  padded to a fixed size), and an engine answers at most a few probes a second per sender.
+- **Nothing private in it.** No hostname, user name, path, CPU model or memory size: the name
+  is one the owner set, and the fingerprint is the engine's certificate's, which a TLS
+  handshake reveals anyway. A client that isn't paired learns only that an engine is there.
+- **A hint, not a credential.** A client connects to the address a reply came from, then checks
+  the fingerprint against its own approved list, or asks the person to confirm it (pairing). A
+  forged reply can only send a client to a machine that then fails the TLS check.
+- **Where it works, and where it doesn't.** A broadcast reaches the local network segment only.
+  It won't cross a router or VLAN, many Wi-Fi access points isolate clients from each other, and
+  a firewall may block the UDP port, so a person can always enter the address instead. IPv6 has no
+  broadcast, so the first release is IPv4; an IPv6 multicast group can be added with the same
+  messages.
+- **Every interface.** Sending to the all-ones address (`255.255.255.255`) reaches only one
+  interface on some systems, so a client probes each interface's own broadcast address. Listing
+  the interfaces needs either a small dependency (checked by `cargo deny`, like the TLS stack)
+  or the operating system's own calls; that is settled in the step's PR.
+- **Operating-system prompts.** macOS and Windows ask the person once to allow incoming
+  connections for a program that listens; the documentation says so, with what to click.
+
+The probe and the reply, with the port number, are written into the CNP specification's
+transport section (step 6), so another client can use them. A standard like mDNS would find
+engines across more networks and is the alternative; it adds a service to the machine, and it can
+replace this without changing the protocol above it.
 
 ### Limits and the server's caps (Decision 4)
 
@@ -198,23 +237,28 @@ Each step is its own PR with a green CI, and none changes the search:
    loopback, the one-client rule, cancellation and shutdown, and the loopback end-to-end tests.
 3. **TLS, certificates and pairing**, with the approved-clients file; the non-loopback address
    turns on here and not before.
-4. **Hardening tests:** the negative tests in #209's verification list (unauthenticated access,
+4. **Discovery:** the UDP probe and reply, `--discover`, the rate limit and the size rule,
+   with tests for a probe that is too small, too large or too frequent, and two engines on one
+   network.
+5. **Hardening tests:** the negative tests in #209's verification list (unauthenticated access,
    oversized, fragmented and malformed messages, slow input and output, invalid positions and
    options, connection exhaustion), each run with and without TLS where it applies.
-5. **Documentation:** a chapter in the book, a README section, a transport section for the CNP
+6. **Documentation:** a chapter in the book, a README section, a transport section for the CNP
    specification, and the licence notices.
-6. **Later, if wanted:** dial-out mode, isolated per-client engines, mDNS.
+7. **Later, if wanted:** dial-out mode, isolated per-client engines, IPv6 multicast and mDNS.
 
-The Solrac side (a client connection, the pairing screen, the engine list) is separate work and
-starts once step 3 has a protocol to talk to.
+The Solrac side (a client connection, the pairing screen, the engine list, the discovery probe)
+is separate work and starts once step 3 has a protocol to talk to.
 
-## Decisions for Carlos
+## Decisions
 
-1. **Security model:** pairing with both sides pinning each other (recommended), a shared
-   token over TLS, or certificates from a certificate authority?
-2. **Clients:** one at a time (recommended), or an isolated engine for each?
-3. **Discovery:** a typed address only (recommended), or mDNS as well?
-4. **Limits:** set by flags or a config file on the engine's machine (recommended), and the
-   provisional defaults above?
-5. **Where it lives:** a separate `crates/net`, off by default in the CLI (recommended), or inside
-   `crates/cnp`?
+Answered by Carlos on 2026-11-05 (cjus/chessengine#255):
+
+1. **Security model:** pairing, with both sides pinning each other.
+2. **Clients:** one at a time.
+3. **Discovery:** **both**: entering an IP address and port, and automatic discovery by UDP
+   broadcast for less technical users (a change from the typed address only that was
+   recommended), described above.
+4. **Limits:** set by flags or a config file on the engine's machine, with the provisional
+   defaults above.
+5. **Where it lives:** a separate `crates/net`, off by default in the CLI.
