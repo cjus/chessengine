@@ -387,7 +387,8 @@ fn a_second_approved_client_is_told_busy_and_the_first_is_not_disturbed() {
 fn a_stranger_holding_a_connection_does_not_keep_an_approved_client_out() {
     let node = Node::start();
     // Strangers that finish the handshake and then say nothing.
-    let idle: Vec<_> = (0..4)
+    // Fewer than one address may have greeted at once (see `abuse`), as all of these share one.
+    let idle: Vec<_> = (0..cb2026_net::PER_ADDRESS - 1)
         .map(|_| {
             let id = Identity::generate().unwrap();
             client::connect(node.address, &id, None).unwrap()

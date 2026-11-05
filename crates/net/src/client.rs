@@ -81,6 +81,14 @@ impl Connection {
         self.server
     }
 
+    /// Sends bytes as they are, with no newline added: for a client that sends a message in
+    /// pieces, and for tests of one that does.
+    pub fn send_bytes(&mut self, bytes: &[u8]) -> io::Result<()> {
+        let stream = self.stream.get_mut();
+        stream.write_all(bytes)?;
+        stream.flush()
+    }
+
     /// Sends one line (a CNP message, or a pairing request).
     pub fn send_line(&mut self, line: &str) -> io::Result<()> {
         let stream = self.stream.get_mut();

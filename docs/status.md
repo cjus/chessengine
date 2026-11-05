@@ -221,8 +221,11 @@ one-time code, five minutes, one client, three tries; an approved-clients file r
 passes and `scripts/notices.sh` includes `ring`'s licences). Not yet run: the `net` feature on
 Windows and an Intel Mac, and a connection between two real computers (Carlos). **Step 4 is done**
 (`--discover [--name]`: a 320-byte UDP probe on port 4026, a reply no bigger than the probe,
-rate limited, nothing private; `cb2026_net::client::discover` for a client); step 5 (hardening
-tests) is next. No functional change.*
+rate limited, nothing private; `cb2026_net::client::discover` for a client); **step 5 is done**
+(4 greetings at once from one address, 8 failures in 10 s earn a 30 s ban, and 14 negative
+end-to-end tests on the plain and the TLS listener: no change to the CNP node was needed);
+step 6 (the book chapter, README section, CNP transport section and notices) is next. No
+functional change.*
 
 ## Stages
 
