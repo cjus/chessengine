@@ -100,6 +100,9 @@ crates/
               time management, threads (Lazy SMP), tablebases, opening book,
               strength limiting. Exposes an Engine API with an info callback.
   protocol/   UCI and XBoard/CECP adapters over the Engine API.
+  cnp/        the Chess Node Protocol adapter (Solrac's), over the Engine API.
+  net/        (network play) an opt-in listener serving CNP over TCP, one client at a
+              time; loopback only until TLS and pairing (`docs/network-play.md`).
   shell/      the interactive REPL: commands, board views, live thinking display.
   tools/      tuner (Texel), self-play data generation, bench, test helpers.
   nnue/       (M6) NNUE inference: the net's inputs, layers and integer

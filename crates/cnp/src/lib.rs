@@ -206,6 +206,11 @@ pub struct Config {
     /// The binary's licence as a whole, an SPDX expression: `MIT OR Apache-2.0`, or
     /// `GPL-3.0-or-later` when it was built with Syzygy probing.
     pub license: &'static str,
+    /// The longest message the node reads, in bytes, which it also tells the client
+    /// (`limits.maxMessageBytes`). `None` leaves the protocol's default (16 MiB, spec 5.2), which
+    /// a program on standard input and output has no reason to lower; a listener on a network
+    /// does (`cb2026-net`).
+    pub message_bytes: Option<u64>,
 }
 
 /// Where the node's messages go. Shared between the command loop and the search thread.
@@ -235,7 +240,11 @@ pub fn run(
     let first = first_line.unwrap_or_default();
     let mut input = io::Cursor::new(first.into_bytes()).chain(input);
     let mut node = Node::new(Arc::new(Mutex::new(output)), engine, config);
-    let max_bytes = usize::try_from(NodeLimits::default().message_bytes()).unwrap_or(usize::MAX);
+    let limits = NodeLimits {
+        max_message_bytes: node.config.message_bytes,
+        ..NodeLimits::default()
+    };
+    let max_bytes = usize::try_from(limits.message_bytes()).unwrap_or(usize::MAX);
     loop {
         match read_message(&mut input, max_bytes) {
             Ok(None) => break,
@@ -520,7 +529,7 @@ impl Node {
                 max_time_ms: Some(MAX_TIME_MS),
                 max_multipv: Some(MAX_MULTIPV),
                 max_concurrent_searches: Some(1),
-                max_message_bytes: None,
+                max_message_bytes: self.config.message_bytes,
                 max_tree_depth: Some(MAX_TREE_DEPTH),
                 max_tree_plies: Some(MAX_TREE_PLIES),
                 max_concurrent_trees: Some(1),
@@ -1332,6 +1341,7 @@ mod tests {
             Engine::new(),
             Config {
                 license: "MIT OR Apache-2.0",
+                message_bytes: None,
             },
         );
         let listed = node.techniques().techniques;
@@ -1458,6 +1468,7 @@ mod tests {
             Engine::new(),
             Config {
                 license: "MIT OR Apache-2.0",
+                message_bytes: None,
             },
         );
         // A search that has sent its answer and is still giving the engine back.
@@ -1562,6 +1573,7 @@ mod tests {
             Engine::new(),
             Config {
                 license: "MIT OR Apache-2.0",
+                message_bytes: None,
             },
         );
         node.state = State::Running;

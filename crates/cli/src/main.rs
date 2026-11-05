@@ -68,6 +68,7 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Ok(Command::Run(mode, settings)) => run(mode, settings),
+        Ok(Command::Serve(address, settings)) => serve(address, settings),
         Err(message) => {
             eprintln!("cb2026: {message}\n\n{USAGE}");
             ExitCode::from(EXIT_USAGE)
@@ -172,7 +173,10 @@ fn run_cnp(first_line: Option<String>, settings: Settings) -> ExitCode {
         Box::new(io::stdout()),
         first_line,
         cnp_engine(settings),
-        cb2026_cnp::Config { license },
+        cb2026_cnp::Config {
+            license,
+            message_bytes: None,
+        },
     ) {
         Ok(true) => ExitCode::SUCCESS,
         Ok(false) => ExitCode::FAILURE,
@@ -181,6 +185,48 @@ fn run_cnp(first_line: Option<String>, settings: Settings) -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// Serves the Chess Node Protocol on the network until the program is stopped.
+#[cfg(feature = "net")]
+fn serve(address: std::net::SocketAddr, settings: Settings) -> ExitCode {
+    let license = if cfg!(feature = "syzygy") {
+        "GPL-3.0-or-later"
+    } else {
+        "MIT OR Apache-2.0"
+    };
+    let server = match cb2026_net::Server::bind(cb2026_net::Config::new(address, license)) {
+        Ok(server) => server,
+        Err(e) => {
+            eprintln!("cb2026: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    // The address the system gave, which differs from the one asked for when the port was 0.
+    match server.local_addr() {
+        Ok(bound) => eprintln!(
+            "cb2026: serving the Chess Node Protocol on {bound}, one client at a time \
+             (no encryption: loopback only). Stop it with Ctrl-C."
+        ),
+        Err(e) => {
+            eprintln!("cb2026: {e}");
+            return ExitCode::FAILURE;
+        }
+    }
+    match server.serve(|| cnp_engine(settings)) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("cb2026: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// `--serve` in a build without the listener.
+#[cfg(not(feature = "net"))]
+fn serve(_address: std::net::SocketAddr, _settings: Settings) -> ExitCode {
+    eprintln!("cb2026: this build has no network listener (build with --features net)");
+    ExitCode::from(EXIT_USAGE)
 }
 
 /// A new engine for a CNP node, with the threads and hash size it was started with.

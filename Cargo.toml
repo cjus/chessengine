@@ -14,6 +14,7 @@ default-members = [
     "crates/cli",
     "crates/cnp",
     "crates/engine",
+    "crates/net",
     "crates/nnue",
     "crates/protocol",
     "crates/shell",
@@ -33,6 +34,7 @@ publish = false
 cb2026-chess = { path = "crates/chess" }
 cb2026-cnp = { path = "crates/cnp" }
 cb2026-engine = { path = "crates/engine" }
+cb2026-net = { path = "crates/net" }
 cb2026-nnue = { path = "crates/nnue" }
 cb2026-protocol = { path = "crates/protocol" }
 cb2026-shell = { path = "crates/shell" }

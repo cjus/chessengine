@@ -15,6 +15,7 @@ path = "src/main.rs"
 [dependencies]
 cb2026-cnp.workspace = true
 cb2026-engine.workspace = true
+cb2026-net = { workspace = true, optional = true }
 cb2026-protocol.workspace = true
 cb2026-shell.workspace = true
 cb2026-syzygy = { workspace = true, optional = true }
@@ -28,6 +29,9 @@ default = ["syzygy"]
 # shakmaty-syzygy (GPL-3.0-or-later), so a binary built with it is GPL-3.0-or-later as a whole;
 # `--no-default-features` builds a cb2026 that is `MIT OR Apache-2.0` throughout.
 syzygy = ["dep:cb2026-syzygy"]
+# `--serve`: the opt-in network listener (`cb2026-net`, docs/network-play.md). Off by default, so
+# an ordinary build has no networking code at all; the release binaries decide separately.
+net = ["dep:cb2026-net"]
 
 [lints]
 workspace = true
