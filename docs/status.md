@@ -207,7 +207,7 @@ arm64 binary's bench was 701720, and the release notes of #199 went above GitHub
 list. `main` is v1.1 (gen3 the default). No functional change.
 Same day: **the design for network play is decided** (Carlos, #255; `docs/network-play.md`): an
 opt-in CNP listener in `crates/net` with TLS and pairing (both sides pin each other), one client
-at a time, discovery by UDP broadcast, limits set on the engine's machine; no SSH. Step 1,
+at a time, an IP address or discovery by UDP broadcast, limits set on the engine's machine; no SSH. Step 1,
 threads and hash in CNP mode, is next; nothing listens yet.*
 
 ## Stages
