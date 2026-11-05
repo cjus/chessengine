@@ -134,3 +134,44 @@ fn initialize_and_version_name_the_commit_cb2026_was_built_from() {
         "{answer}"
     );
 }
+
+#[test]
+fn a_node_started_with_threads_and_hash_still_passes_the_searches() {
+    // `--threads` and `--hash` are the node's own settings (CNP has no option for them), so a
+    // search must behave as it does with the defaults: the same sessions, with more threads.
+    let command = node(&["--cnp", "--threads", "3", "--hash", "32"]);
+    let sessions = session::load(&[PathBuf::from(SESSIONS)]).expect("the sessions load");
+    let offered = capabilities(&command, STEP_TIMEOUT).expect("cb2026 answers initialize");
+    let (mut ran, mut failed) = (0, Vec::new());
+    for mut session in sessions {
+        // The deterministic sessions fix the search to one thread whatever was asked, and the
+        // ones for other nodes' capabilities don't apply.
+        if !session.name.contains("search") || !missing(&session, &offered).is_empty() {
+            continue;
+        }
+        session.timeout = session.timeout.max(STEP_TIMEOUT);
+        ran += 1;
+        if let Outcome::Failed(why) = run_session(&session, &command) {
+            failed.push(format!("{}: {why}", session.name));
+        }
+    }
+    assert!(ran >= 2, "only {ran} search sessions ran");
+    assert!(failed.is_empty(), "failed:\n{}", failed.join("\n\n"));
+}
+
+#[test]
+fn bad_threads_or_hash_are_refused_before_anything_starts() {
+    for args in [
+        &["--cnp", "--threads", "0"][..],
+        &["--cnp", "--hash", "70000"][..],
+        &["--uci", "--threads", "2"][..],
+        &["--threads", "2"][..],
+    ] {
+        let output = std::process::Command::new(env!("CARGO_BIN_EXE_cb2026"))
+            .args(args)
+            .output()
+            .expect("cb2026 runs");
+        assert_eq!(output.status.code(), Some(2), "{args:?}");
+        assert!(output.stdout.is_empty(), "{args:?}");
+    }
+}

@@ -38,10 +38,16 @@ shell account, so cb2026 provides the encryption and the authentication itself.
 - `crates/cnp` serves CNP over stdin and stdout: initialisation and capabilities, search with
   progress, stop and cancel, and structured errors. A node runs **one search at a time**
   (`maxConcurrentSearches` 1) and answers a second with `Busy`.
-- `cb2026 --cnp` takes **no thread or hash settings**, so a remote engine would use one thread and
-  16 MB. That has to change first, or a fast remote machine does the work of a slow one.
+- `cb2026 --cnp` took **no thread or hash settings**, so a remote engine would have used one
+  thread and 16 MB, and a fast remote machine would have done the work of a slow one. **Step 1
+  fixed that** (below): `cb2026 --cnp --threads N --hash MB`.
 - Options that name a file (`EvalFile`, `SyzygyPath`, `BookFile` in UCI) must never be settable
-  by a remote client. Which of CNP's options can name a path is checked in step 1.
+  by a remote client. **Checked in step 1: no CNP request can name a file.** A search takes a
+  position, its history, limits, the strength level, the techniques' switches by name, MultiPV,
+  and a few flags (`deterministic`, `ponder`, `chess960`); the network, the book and the
+  tablebases are fixed by how the node was started. So the allowlist the listener needs is the
+  set of requests CNP already has, and a new CNP option that takes a path must not be added
+  without a decision.
 
 ## The design
 
@@ -230,9 +236,12 @@ the listener over a socket takes no licence from it.
 
 Each step is its own PR with a green CI, and none changes the search:
 
-1. **Threads and hash in CNP mode** (`--threads`, `--hash`, and what `initialize` reports),
-   and which CNP options can name a path. Useful on its own, and it is the first thing a
-   remote engine needs.
+1. **Threads and hash in CNP mode** (done 2026-11-05): `cb2026 --cnp --threads N --hash
+   MB`, N from 1 to 256 and MB from 1 to 65,536 as UCI's options are, refused with exit code 2
+   with any other mode. Without them a node keeps one thread and 16 MB. **A search request
+   can't change them**: the node's owner chooses them, which is the cap the design wants.
+   Still to do: `initialize` can't report them, since its result is the Chess Node Protocol
+   crate's own type; that is a change to that specification, made with step 2's work.
 2. **`crates/net`: framing, limits and a loopback listener** with plaintext allowed only on
    loopback, the one-client rule, cancellation and shutdown, and the loopback end-to-end tests.
 3. **TLS, certificates and pairing**, with the approved-clients file; the non-loopback address

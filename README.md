@@ -84,6 +84,7 @@ cb2026              # the interactive shell; `help` lists its commands
 cb2026 --uci        # UCI mode (a GUI switches to it by sending "uci")
 cb2026 --xboard     # XBoard/CECP mode
 cb2026 --cnp        # Chess Node Protocol mode (Solrac switches to it by sending JSON)
+cb2026 --cnp --threads 8 --hash 1024   # the same, searching with 8 threads and a 1 GB table
 cb2026 bench        # the fixed benchmark: total nodes and speed
 cb2026 bench none   # the same with the hand-crafted evaluation
 ```
