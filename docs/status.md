@@ -569,6 +569,8 @@ passed; the rest wait on GUI checks, level calibration or the v1.0 work.
 
 The open [`needs-carlos` issues](https://github.com/cjus/chessengine/issues?q=is%3Aopen+label%3Aneeds-carlos):
 
+- #255: the design for network play (#209, `docs/network-play.md`): five decisions, pairing and
+  TLS first, no SSH.
 - #253: whether to go ahead with the plan for nets beyond gen3 (PRD, "After gen3: the next
   nets"): output buckets, a second layer and king buckets, each by SPRT on gen3's records.
 - #191: the Lichess bot's two games, now that v1.0.0 is out (#199 and #183 closed 2026-11-05).
