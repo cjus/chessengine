@@ -30,8 +30,8 @@ use rustls::crypto::{CryptoProvider, WebPkiSupportedAlgorithms};
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::server::danger::{ClientCertVerified, ClientCertVerifier};
 use rustls::{
-    ClientConfig, DigitallySignedStruct, DistinguishedName, Error, ServerConfig, ServerConnection,
-    SignatureScheme,
+    ClientConfig, ClientConnection, Connection, DigitallySignedStruct, DistinguishedName, Error,
+    ServerConfig, ServerConnection, SignatureScheme,
 };
 
 use crate::deadline::Gate;
@@ -176,16 +176,16 @@ impl ServerCertVerifier for PinnedServer {
     }
 }
 
-/// The server's side of a TLS connection, shared by its reader and its writer.
-type Shared = Arc<Mutex<ServerConnection>>;
+/// One side of a TLS connection (the node's or a client's), shared by its reader and its writer.
+type Shared = Arc<Mutex<Connection>>;
 
-fn lock(connection: &Shared) -> MutexGuard<'_, ServerConnection> {
+fn lock(connection: &Shared) -> MutexGuard<'_, Connection> {
     // A panic elsewhere must not stop the connection from being closed.
     connection.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 /// Sends whatever TLS has ready for the peer: handshake messages, alerts, encrypted replies.
-fn send_pending(connection: &mut ServerConnection, mut socket: &TcpStream) -> io::Result<()> {
+fn send_pending(connection: &mut Connection, mut socket: &TcpStream) -> io::Result<()> {
     while connection.wants_write() {
         connection.write_tls(&mut socket)?;
     }
@@ -202,7 +202,9 @@ pub(crate) fn accept(
     config: Arc<ServerConfig>,
 ) -> io::Result<(TlsReader, TlsWriter, Fingerprint)> {
     let connection: Shared = Arc::new(Mutex::new(
-        ServerConnection::new(config).map_err(io::Error::other)?,
+        ServerConnection::new(config)
+            .map_err(io::Error::other)?
+            .into(),
     ));
     let mut reader = TlsReader {
         connection: Arc::clone(&connection),
@@ -226,6 +228,26 @@ pub(crate) fn accept(
         socket: stream,
     };
     Ok((reader, writer, fingerprint))
+}
+
+/// Splits a client's finished TLS connection into what it reads from and writes to, which can be
+/// used from two threads at once. Reads wait as long as the node takes (a search is silent).
+pub(crate) fn split_client(
+    connection: ClientConnection,
+    socket: TcpStream,
+) -> io::Result<(TlsReader, TlsWriter)> {
+    let connection: Shared = Arc::new(Mutex::new(connection.into()));
+    // No deadline: the client waits as long as a search takes.
+    let deadline = crate::deadline::Deadline::after(Duration::ZERO);
+    deadline.clear();
+    let reader = TlsReader {
+        connection: Arc::clone(&connection),
+        gate: Gate::new(socket.try_clone()?, deadline),
+        socket: socket.try_clone()?,
+        buffer: Vec::new(),
+        position: 0,
+    };
+    Ok((reader, TlsWriter { connection, socket }))
 }
 
 /// What a node reads requests from: the decrypted bytes of a TLS connection.

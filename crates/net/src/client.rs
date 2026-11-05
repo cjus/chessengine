@@ -22,7 +22,7 @@
 //! 5. From then on the client connects with `pin: Some(fingerprint)` and goes straight to the
 //!    protocol: no code, no prompt. A node that shows any other certificate is refused.
 
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, Cursor, Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpStream, UdpSocket};
 use std::time::{Duration, Instant};
 
@@ -102,6 +102,39 @@ impl Connection {
         stream.flush()
     }
 
+    /// Splits the connection into the two halves of a client that reads and writes at once: the
+    /// node's decrypted output, to read lines from on a thread of its own, and where to write
+    /// requests, from another. (One `Connection` can't do both, as a reader holding it would
+    /// stop a write; a search can run for a long time, and a request to stop it must not wait.)
+    ///
+    /// Reads wait as long as the node takes, with no timeout, because the node has no idle
+    /// timeout and a search is silent. Reading never holds what writing needs. **Dropping either
+    /// half ends the connection**: it sends a TLS `close_notify` and closes the socket, which
+    /// ends a search the node is running, and the other half then sees the end (a read returns
+    /// no more bytes; a write fails). Drop both when finished.
+    ///
+    /// Lines already read ahead by [`read_line`](Connection::read_line) are not lost.
+    pub fn into_halves(
+        self,
+    ) -> io::Result<(
+        impl BufRead + Send + 'static,
+        impl Write + Send + Sync + 'static,
+    )> {
+        let ahead = self.stream.buffer().to_vec();
+        let StreamOwned { conn, sock } = self.stream.into_inner();
+        let (reader, writer) = tls::split_client(conn, sock)?;
+        let closer = writer.closer()?;
+        let reader = Half {
+            inner: Cursor::new(ahead).chain(reader),
+            closer: writer.closer()?,
+        };
+        let writer = Half {
+            inner: writer,
+            closer,
+        };
+        Ok((reader, writer))
+    }
+
     /// Reads one line, without its newline, or `None` when the node has closed the connection.
     pub fn read_line(&mut self) -> io::Result<Option<String>> {
         let mut line = String::new();
@@ -124,6 +157,44 @@ impl Connection {
         Ok(answer.is_some_and(|line| {
             serde_json::from_str::<serde_json::Value>(&line).is_ok_and(|v| v["cnp"] == "paired")
         }))
+    }
+}
+
+/// One half of a split connection: dropping it ends the connection politely.
+struct Half<T> {
+    inner: T,
+    closer: tls::TlsCloser,
+}
+
+impl<T> Drop for Half<T> {
+    fn drop(&mut self) {
+        self.closer.close();
+    }
+}
+
+impl<T: Read> Read for Half<T> {
+    fn read(&mut self, out: &mut [u8]) -> io::Result<usize> {
+        self.inner.read(out)
+    }
+}
+
+impl<T: BufRead> BufRead for Half<T> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        self.inner.fill_buf()
+    }
+
+    fn consume(&mut self, amount: usize) {
+        self.inner.consume(amount);
+    }
+}
+
+impl<T: Write> Write for Half<T> {
+    fn write(&mut self, data: &[u8]) -> io::Result<usize> {
+        self.inner.write(data)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.inner.flush()
     }
 }
 
