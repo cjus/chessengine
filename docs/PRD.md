@@ -231,6 +231,36 @@ teaching value, and the trainer uses the Mac's GPU through Metal.
   net: 767,812 nodes (701,720 with gen2, 715,827 with gen1), against the HCE's 749,181
   (`cb2026 bench none`). `datagen` plays with the built-in net unless given
   `--evalfile none`, so the next data is the net's own games.
+- **After gen3: the next nets** (proposed 2026-11-05, waiting on Carlos, cjus/chessengine#253). Each generation has gained less (gen2 +144, gen3 +53 in
+  self-play), and gen3's 512 net was no stronger than its 256 (+1.1 ± 4.8 in 8,180 games at
+  8+0.08, #223). The same net on more of its own games is running out of things to learn, so the
+  next gains are expected from the net's shape, not another data run. The net today is the
+  plainest one (768 inputs per side, no king bucket, one hidden layer, one output; see "The
+  net's definition"). Three changes, **each tried alone on gen3's 200.7M records** (so a result
+  is the change's, not new data's), each by SPRT against gen3's 256 net with `NET=… BASE_NET=…`
+  (`scripts/mac-sprt.sh`), [0, 5] at 8+0.08, and kept only if it passes:
+  1. **Output buckets.** The output layer gets one set of weights per bucket, chosen by the
+     number of men on the board (eight buckets, so an opening, a middlegame and a bare ending
+     each have their own output). The inputs and the accumulator don't change, so the cost per
+     node is one choice of weights. It may also remove the need for the HCE in the lone-king
+     and pawnless endings (`lone_king`, `pawnless_endings`), which would be tested separately.
+     It changes the file format (a version bump, with the bucket count in the header), the float
+     network, both trainer backends and their GPU kernels, and needs the book's chapter 21 to
+     say how it works.
+  2. **A second layer.** The two accumulators feed a small dense layer (for example 32 wide)
+     before the output. It can express what a sum of squared hidden values can't, and costs
+     nodes a second, which the SPRT weighs, as with the 512 net.
+  3. **King buckets.** The inputs also depend on the friendly king's square (for example the
+     board folded to four or eight buckets). Chapter 21 says cb2026 would try them later. They
+     need more data and make a king move recompute the accumulator (a cache of accumulators per
+     bucket avoids most of it), so they come last.
+  A change that passes becomes the shape for **gen4**: a data run from gen3's games (about 30
+  hours on the M3, as gen3's), a net trained on it, its SPRT against gen3 and a gauntlet
+  (gen3 rated 3379 ± 21, #227). The data run is Carlos's call, after the experiments say which
+  shape to train. A change that fails is merged off by default or recorded, as every technique
+  here is (CLAUDE.md, "Definition of done"). Training one net takes about 15 minutes on the M3's
+  GPU (gen1's 256 net took 7 minutes on 104M records; gen3's records are twice that), so
+  each experiment's cost is its SPRT, 2 to 10 hours.
 - **Data:** `datagen` self-play, with the HCE for the first net and each net's own games for the
   next, stores the search score as well as the game result, in a compact binary file. A first
   net needs about 100 million positions. `datagen` made about 190 a second per thread on the M1
