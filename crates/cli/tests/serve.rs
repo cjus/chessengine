@@ -236,3 +236,62 @@ fn pair_reports_a_window_that_closed_without_a_client() {
     let _ = server.kill();
     let _ = server.wait();
 }
+
+#[test]
+fn discover_needs_the_encrypted_listener() {
+    let output = Command::new(env!("CARGO_BIN_EXE_cb2026"))
+        .args(["--serve", "127.0.0.1:0", "--discover"])
+        .output()
+        .expect("cb2026 runs");
+    assert_eq!(output.status.code(), Some(2));
+    let said = String::from_utf8_lossy(&output.stderr);
+    assert!(said.contains("--discover needs"), "{said}");
+}
+
+#[test]
+fn a_discovering_node_answers_a_clients_search_under_its_name() {
+    use cb2026_net::client;
+    let dir = data_dir("discover");
+    let mut child = Command::new(env!("CARGO_BIN_EXE_cb2026"))
+        .args([
+            "--serve",
+            "127.0.0.1:0",
+            "--tls",
+            "--discover",
+            "--name",
+            "den",
+            "--data-dir",
+        ])
+        .arg(&dir)
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("cb2026 starts");
+    let mut stderr = BufReader::new(child.stderr.take().expect("its stderr"));
+    let mut said = String::new();
+    // The line that ends the announcement says to run --pair; discovery's comes before it.
+    let mut line = String::new();
+    while stderr.read_line(&mut line).unwrap_or(0) > 0 {
+        said.push_str(&line);
+        if line.contains("cb2026 --pair")
+            || line.starts_with("cb2026: ") && line.contains("Address already in use")
+        {
+            break;
+        }
+        line.clear();
+    }
+    if !said.contains("Answering discovery probes") {
+        // The fixed UDP port is taken (another cb2026 is answering on this computer): nothing
+        // to test here, and the node said so.
+        eprintln!("skipped: {said}");
+        let _ = child.kill();
+        let _ = child.wait();
+        return;
+    }
+    assert!(said.contains("as \"den\""), "{said}");
+    let target = std::net::SocketAddr::from(([127, 0, 0, 1], cb2026_net::discovery::PORT));
+    let found = client::discover_at(&[target], std::time::Duration::from_millis(800)).unwrap();
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(found[0].announcement.name, "den");
+    let _ = child.kill();
+    let _ = child.wait();
+}

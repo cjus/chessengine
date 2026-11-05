@@ -18,12 +18,13 @@
 //!    protocol: no code, no prompt. A node that shows any other certificate is refused.
 
 use std::io::{self, BufRead, BufReader, Write};
-use std::net::{SocketAddr, TcpStream};
-use std::time::Duration;
+use std::net::{Ipv4Addr, SocketAddr, TcpStream, UdpSocket};
+use std::time::{Duration, Instant};
 
 use rustls::pki_types::ServerName;
 use rustls::{ClientConnection, StreamOwned};
 
+use crate::discovery::{self, Announcement};
 use crate::identity::{Fingerprint, Identity};
 use crate::tls;
 
@@ -110,5 +111,99 @@ impl Connection {
         Ok(answer.is_some_and(|line| {
             serde_json::from_str::<serde_json::Value>(&line).is_ok_and(|v| v["cb2026"] == "paired")
         }))
+    }
+}
+
+/// An engine that answered a discovery probe.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Found {
+    /// Where to connect: the address the reply came from, with the port it named.
+    pub address: SocketAddr,
+    /// What the engine said about itself.
+    pub announcement: Announcement,
+}
+
+/// Looks for engines on the local network: probes every interface's broadcast address, and
+/// `255.255.255.255`, on the standard discovery port, and collects the replies for `wait`.
+///
+/// **A reply is a hint, not a credential.** Anyone on the network can send one, so connect with
+/// the fingerprint it names as a *claim*: a client that has paired with that engine checks it
+/// against the fingerprint it pinned, and a new one shows it to the person to confirm before
+/// pairing. See the module docs of [`crate::discovery`] for where a broadcast does not reach;
+/// a client always offers typing an address as well.
+pub fn discover(wait: Duration) -> io::Result<Vec<Found>> {
+    discover_at(&broadcast_targets(discovery::PORT), wait)
+}
+
+/// The addresses a probe goes to: each interface's broadcast address, and the all-ones address
+/// (which on some systems reaches one interface only, hence the others).
+fn broadcast_targets(port: u16) -> Vec<SocketAddr> {
+    let mut targets: Vec<Ipv4Addr> = vec![Ipv4Addr::BROADCAST];
+    for interface in if_addrs::get_if_addrs().unwrap_or_default() {
+        if let if_addrs::IfAddr::V4(v4) = interface.addr
+            && !v4.ip.is_loopback()
+            && let Some(broadcast) = v4.broadcast
+            && !targets.contains(&broadcast)
+        {
+            targets.push(broadcast);
+        }
+    }
+    targets
+        .into_iter()
+        .map(|ip| SocketAddr::from((ip, port)))
+        .collect()
+}
+
+/// [`discover`], probing exactly these addresses (a test's loopback engine, or an address a
+/// person typed to check whether an engine answers there).
+pub fn discover_at(targets: &[SocketAddr], wait: Duration) -> io::Result<Vec<Found>> {
+    let socket = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0))?;
+    socket.set_broadcast(true)?;
+    let probe = discovery::probe();
+    let started = Instant::now();
+    let deadline = started + wait;
+    let send = |socket: &UdpSocket| {
+        for target in targets {
+            // A network with no route to one of them (an interface that just went down) is
+            // not a reason to stop looking on the others.
+            let _ = socket.send_to(&probe, target);
+        }
+    };
+    send(&socket);
+    // UDP loses datagrams; a second probe halfway, well inside an engine's rate limit, makes
+    // one lost datagram unlikely to hide an engine.
+    let mut resent = false;
+    let mut found: Vec<Found> = Vec::new();
+    let mut buffer = [0u8; discovery::PROBE_BYTES + 1];
+    loop {
+        let now = Instant::now();
+        if now >= deadline {
+            return Ok(found);
+        }
+        if !resent && now - started >= wait / 2 {
+            send(&socket);
+            resent = true;
+        }
+        let next = if resent { deadline } else { started + wait / 2 };
+        socket.set_read_timeout(Some(
+            next.saturating_duration_since(now)
+                .max(Duration::from_millis(1)),
+        ))?;
+        let Ok((n, from)) = socket.recv_from(&mut buffer) else {
+            continue;
+        };
+        let Some(announcement) = Announcement::parse(&buffer[..n]) else {
+            continue;
+        };
+        let address = SocketAddr::new(from.ip(), announcement.port);
+        if !found
+            .iter()
+            .any(|f| f.address == address && f.announcement.fingerprint == announcement.fingerprint)
+        {
+            found.push(Found {
+                address,
+                announcement,
+            });
+        }
     }
 }

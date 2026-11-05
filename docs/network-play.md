@@ -1,11 +1,11 @@
 # Network play: a design for the opt-in listener (#209)
 
-**Status: steps 1–3 built, 4–7 to do.** The listener, TLS and pairing exist in a build with
+**Status: steps 1–4 built, 5–7 to do.** The listener, TLS and pairing exist in a build with
 `--features net`, which is off by default; an ordinary run opens no port. Carlos answered the five
 decisions on 2026-11-05 (cjus/chessengine#255; [Decisions](#decisions)): pairing with both sides
 pinning each other, one client at a time, discovery by UDP broadcast, limits set on the engine's
 machine, and a separate `crates/net`. [How it would be built](#how-it-would-be-built) says what
-each step did. Written 2026-11-05; step 3 added the same day.
+each step did. Written 2026-11-05; steps 3 and 4 added the same day.
 
 ## What this is for
 
@@ -309,9 +309,22 @@ Each step is its own PR with a green CI, and none changes the search:
    attacks listed there; breaking the signature check, the approval check or the deadline each
    makes tests fail. **Not yet run:** the `net` feature on Windows and on an Intel Mac (CI
    builds Linux only), and a connection between two computers.
-4. **Discovery:** the UDP probe and reply, `--discover`, the rate limit and the size rule,
-   with tests for a probe that is too small, too large or too frequent, and two engines on one
-   network.
+4. **Discovery** (done 2026-11-05): `cb2026 --serve ADDR --discover [--name NAME]`, only with
+   the encrypted listener. **UDP port 4026** (the TCP default's number; a different protocol),
+   a **probe of exactly 320 bytes** (JSON padded with spaces) and a **reply** of one JSON line
+   with the name (at most 32 bytes), the CNP version, the TCP port, the certificate fingerprint
+   and whether a pairing window is open: never larger than the probe (tested with the longest
+   name, in the widest characters), at most **4 replies a second to one sender and 40 in all**,
+   a sender table bounded at 1,024, and no answer to a datagram of any other size or content. The
+   socket is opened before serving starts, so a port in use is reported at once. The client side,
+   `cb2026_net::client::discover`, probes each interface's broadcast address (found with the
+   `if-addrs` crate, MIT/Apache-2.0-class licence, passes `cargo deny`) and `255.255.255.255`,
+   sends the probe twice, ignores malformed replies, and returns what answered: a hint to check
+   with the fingerprint, never trust. The default name is `cb2026`, not the computer's name.
+   Tests: 10 end-to-end over real UDP on loopback, and unit tests for the messages and the
+   limiter; breaking the size rule or the rate limit each fails a test. **Not tested:** a real
+   broadcast across a network (it can't be tested portably; the messages are the same), Windows
+   and Intel macOS, and the operating systems' firewall prompts.
 5. **Hardening tests:** the negative tests in #209's verification list (unauthenticated access,
    oversized, fragmented and malformed messages, slow input and output, invalid positions and
    options, connection exhaustion), each run with and without TLS where it applies.

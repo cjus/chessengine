@@ -67,6 +67,7 @@
 
 pub mod client;
 mod deadline;
+pub mod discovery;
 mod files;
 mod identity;
 mod tls;
@@ -74,7 +75,7 @@ pub mod trust;
 
 use std::fmt;
 use std::io::{self, BufRead, BufReader, Read, Write};
-use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
+use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream, UdpSocket};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Sender};
@@ -177,6 +178,9 @@ pub struct Config {
     pub license: &'static str,
     /// Encryption and approved clients, or `None` for plaintext on loopback.
     pub trust: Option<Arc<Trust>>,
+    /// Answer probes from clients looking for engines on the local network (`--discover`), or
+    /// `None` to answer none. Needs [`Config::trust`].
+    pub discovery: Option<Discovery>,
     /// How long a new connection has to finish its handshake and send its first message.
     pub handshake_timeout: Duration,
     /// How long one write to a client may take.
@@ -196,10 +200,31 @@ impl Config {
             address,
             license,
             trust: None,
+            discovery: None,
             handshake_timeout: HANDSHAKE_TIMEOUT,
             write_timeout: WRITE_TIMEOUT,
             keepalive: KEEPALIVE,
             message_bytes: MESSAGE_BYTES,
+        }
+    }
+}
+
+/// How the listener answers clients looking for it (see [`discovery`]).
+#[derive(Clone, Debug)]
+pub struct Discovery {
+    /// The UDP port to listen for probes on: [`discovery::PORT`] unless a test needs another.
+    pub port: u16,
+    /// The name the owner gave this node, shown to a person choosing among engines. Cleaned by
+    /// [`discovery::clean_name`] when used.
+    pub name: String,
+}
+
+impl Discovery {
+    /// Discovery on the standard port, under `name`.
+    pub fn new(name: impl Into<String>) -> Discovery {
+        Discovery {
+            port: discovery::PORT,
+            name: name.into(),
         }
     }
 }
@@ -209,6 +234,9 @@ impl Config {
 pub enum Error {
     /// The address isn't loopback, and there is no TLS to protect it.
     NotLoopback(SocketAddr),
+    /// Discovery was asked for on a listener with no TLS, which nothing outside this computer
+    /// should be told about.
+    DiscoveryWithoutTrust,
     /// The socket couldn't be opened.
     Io(io::Error),
 }
@@ -220,6 +248,9 @@ impl fmt::Display for Error {
                 f,
                 "{address} isn't a loopback address: without TLS and pairing, cb2026 \
                  listens on 127.0.0.1 or ::1 only"
+            ),
+            Error::DiscoveryWithoutTrust => f.write_str(
+                "discovery needs the encrypted listener (an address beyond loopback, or --tls)",
             ),
             Error::Io(e) => write!(f, "{e}"),
         }
@@ -249,6 +280,8 @@ impl StopHandle {
 #[derive(Debug)]
 pub struct Server {
     listener: TcpListener,
+    /// The socket probes arrive on, if discovery is on.
+    probes: Option<UdpSocket>,
     config: Config,
     stop: Arc<AtomicBool>,
 }
@@ -283,11 +316,20 @@ impl Server {
         if config.trust.is_none() && !config.address.ip().is_loopback() {
             return Err(Error::NotLoopback(config.address));
         }
+        if config.discovery.is_some() && config.trust.is_none() {
+            return Err(Error::DiscoveryWithoutTrust);
+        }
         let listener = TcpListener::bind(config.address)?;
         // Non-blocking, so the listener can notice a stop between connections.
         listener.set_nonblocking(true)?;
+        // Opened here, so a port already in use is reported before anything is announced.
+        let probes = match &config.discovery {
+            Some(discovery) => Some(discovery::bind(discovery.port)?),
+            None => None,
+        };
         Ok(Server {
             listener,
+            probes,
             config,
             stop: Arc::new(AtomicBool::new(false)),
         })
@@ -296,6 +338,11 @@ impl Server {
     /// The address the listener is on (with the port the system chose, if `0` was asked for).
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
         self.listener.local_addr()
+    }
+
+    /// The address probes are answered on, if discovery is on.
+    pub fn discovery_addr(&self) -> Option<SocketAddr> {
+        self.probes.as_ref().and_then(|s| s.local_addr().ok())
     }
 
     /// A handle that stops [`Server::serve`] from another thread.
@@ -310,6 +357,25 @@ impl Server {
     /// waiting for its search to end; or at once with the error if the socket fails for a reason
     /// that isn't a single bad connection.
     pub fn serve(self, make_engine: impl Fn() -> Engine) -> io::Result<()> {
+        let responder = match (
+            self.probes.as_ref(),
+            &self.config.discovery,
+            &self.config.trust,
+        ) {
+            (Some(socket), Some(discovery), Some(trust)) => {
+                let who = discovery::Who {
+                    name: discovery::clean_name(&discovery.name),
+                    tcp_port: self.listener.local_addr()?.port(),
+                    trust: Arc::clone(trust),
+                };
+                Some(discovery::Responder::start(
+                    socket.try_clone()?,
+                    who,
+                    Arc::clone(&self.stop),
+                ))
+            }
+            _ => None,
+        };
         let (ready, arrivals) = mpsc::channel::<Link>();
         let mut active: Option<Session> = None;
         let mut greeting: Vec<Greeting> = Vec::new();
@@ -361,6 +427,9 @@ impl Server {
         }
         if let Some(session) = active {
             let _ = session.handle.join();
+        }
+        if let Some(responder) = responder {
+            responder.join();
         }
         // Any client that was greeted but not yet served is closed with its link.
         while let Ok(link) = arrivals.try_recv() {
