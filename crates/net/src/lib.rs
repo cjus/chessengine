@@ -65,6 +65,7 @@
 
 #![forbid(unsafe_code)]
 
+mod abuse;
 pub mod client;
 mod deadline;
 pub mod discovery;
@@ -75,12 +76,12 @@ pub mod trust;
 
 use std::fmt;
 use std::io::{self, BufRead, BufReader, Read, Write};
-use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream, UdpSocket};
+use std::net::{IpAddr, Shutdown, SocketAddr, TcpListener, TcpStream, UdpSocket};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::thread::{self, JoinHandle};
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 use cb2026_engine::Engine;
 use cnp::stdio::write_message;
@@ -88,6 +89,8 @@ use cnp::{Response, ResponseError, code};
 use rustls::ServerConfig;
 use socket2::{SockRef, TcpKeepalive};
 
+use crate::abuse::Abuse;
+pub use crate::abuse::{BAN, FAILURES, PER_ADDRESS, WINDOW};
 use crate::deadline::{Deadline, Gate};
 pub use crate::files::default_dir;
 pub use crate::identity::{BadFingerprint, Fingerprint, Identity};
@@ -297,6 +300,14 @@ struct Link {
     socket: TcpStream,
 }
 
+/// What a greeting ends in.
+enum Arrival {
+    /// A client that may ask for the one place.
+    Link(Link),
+    /// A connection that was not let in, from this address: a failed handshake, a stranger.
+    Failed(IpAddr),
+}
+
 /// The client being served, and the thread serving it.
 struct Session {
     handle: JoinHandle<()>,
@@ -308,6 +319,7 @@ struct Session {
 struct Greeting {
     handle: JoinHandle<()>,
     socket: TcpStream,
+    address: IpAddr,
 }
 
 impl Server {
@@ -376,7 +388,8 @@ impl Server {
             }
             _ => None,
         };
-        let (ready, arrivals) = mpsc::channel::<Link>();
+        let (ready, arrivals) = mpsc::channel::<Arrival>();
+        let mut abuse = Abuse::default();
         let mut active: Option<Session> = None;
         let mut greeting: Vec<Greeting> = Vec::new();
         let outcome = loop {
@@ -389,15 +402,17 @@ impl Server {
             }
             reap(&mut greeting);
             // Clients that are greeted ask for the one place in the order they arrive here.
-            while let Ok(link) = arrivals.try_recv() {
-                if active.is_none() {
-                    active = self.start_session(link, make_engine());
-                } else {
-                    refuse(link);
+            while let Ok(arrival) = arrivals.try_recv() {
+                match arrival {
+                    Arrival::Link(link) if active.is_none() => {
+                        active = self.start_session(link, make_engine());
+                    }
+                    Arrival::Link(link) => refuse(link),
+                    Arrival::Failed(ip) => abuse.failed(ip, Instant::now()),
                 }
             }
             match self.listener.accept() {
-                Ok((stream, _)) => {
+                Ok((stream, peer)) => {
                     // Some systems hand over the listener's non-blocking mode; a connection is
                     // read and written with deadlines, not by polling.
                     if stream.set_nonblocking(false).is_err() {
@@ -407,7 +422,12 @@ impl Server {
                         // Over the limit: closed without a word, which costs nothing.
                         continue;
                     }
-                    if let Some(started) = self.start_greeting(stream, ready.clone()) {
+                    let in_flight = greeting.iter().filter(|g| g.address == peer.ip()).count();
+                    if !abuse.may_greet(peer.ip(), in_flight, Instant::now()) {
+                        // One address asking too much: closed without a word.
+                        continue;
+                    }
+                    if let Some(started) = self.start_greeting(stream, peer.ip(), ready.clone()) {
                         greeting.push(started);
                     }
                 }
@@ -432,24 +452,35 @@ impl Server {
             responder.join();
         }
         // Any client that was greeted but not yet served is closed with its link.
-        while let Ok(link) = arrivals.try_recv() {
-            let _ = link.socket.shutdown(Shutdown::Both);
+        while let Ok(arrival) = arrivals.try_recv() {
+            if let Arrival::Link(link) = arrival {
+                let _ = link.socket.shutdown(Shutdown::Both);
+            }
         }
         outcome
     }
 
     /// Greets `stream` on a thread of its own, or drops it if it can't be set up.
-    fn start_greeting(&self, stream: TcpStream, ready: Sender<Link>) -> Option<Greeting> {
+    fn start_greeting(
+        &self,
+        stream: TcpStream,
+        address: IpAddr,
+        ready: Sender<Arrival>,
+    ) -> Option<Greeting> {
         let closer = stream.try_clone().ok()?;
         let config = self.config.clone();
         let handle = thread::spawn(move || {
-            if let Some(link) = greet(stream, &config) {
-                let _ = ready.send(link);
-            }
+            let arrival = match greet(stream, &config) {
+                Greeted::Link(link) => Arrival::Link(link),
+                Greeted::Paired => return,
+                Greeted::Refused => Arrival::Failed(address),
+            };
+            let _ = ready.send(arrival);
         });
         Some(Greeting {
             handle,
             socket: closer,
+            address,
         })
     }
 
@@ -514,11 +545,25 @@ fn refuse(link: Link) {
     (link.goodbye)();
 }
 
+/// How greeting a connection ended.
+enum Greeted {
+    /// A client that may ask for the one place.
+    Link(Link),
+    /// A stranger that paired: approved now, and closed (it connects again as a client).
+    Paired,
+    /// Anything else: the connection is closed.
+    Refused,
+}
+
 /// Greets a new connection: sets up the socket, and (with trust) completes the TLS handshake,
 /// checks whether the client is approved, and lets one that isn't pair. The link of a client that
-/// may ask for the one place, or `None` for a connection that was dropped, paired, or never
-/// approved. A stranger is told nothing: its connection is closed.
-fn greet(stream: TcpStream, config: &Config) -> Option<Link> {
+/// may ask for the one place, a stranger that paired, or a connection that wasn't let in. A
+/// stranger is told nothing: its connection is closed.
+fn greet(stream: TcpStream, config: &Config) -> Greeted {
+    greet_with(stream, config).unwrap_or(Greeted::Refused)
+}
+
+fn greet_with(stream: TcpStream, config: &Config) -> Option<Greeted> {
     // A client that vanished is found by keepalive; a few probes 10 seconds apart decide.
     let keepalive = TcpKeepalive::new()
         .with_time(config.keepalive)
@@ -534,14 +579,14 @@ fn greet(stream: TcpStream, config: &Config) -> Option<Link> {
     let Some(trust) = &config.trust else {
         let writer = stream.try_clone().ok()?;
         let closer = stream.try_clone().ok()?;
-        return Some(Link {
+        return Some(Greeted::Link(Link {
             input: FirstMessage::new(Box::new(BufReader::new(gate)), control, deadline),
             output: Box::new(writer),
             goodbye: Box::new(move || {
                 let _ = closer.shutdown(Shutdown::Both);
             }),
             socket,
-        });
+        }));
     };
     let (reader, mut writer, fingerprint) =
         tls::accept(gate, stream, Arc::clone(&trust.tls)).ok()?;
@@ -549,16 +594,20 @@ fn greet(stream: TcpStream, config: &Config) -> Option<Link> {
     let mut input = FirstMessage::new(Box::new(reader), control, deadline);
     if !trust.store.is_approved(&fingerprint) {
         // A client that isn't approved may only ask to pair, and only while a window is open.
-        pair(trust, fingerprint, &mut input, &mut writer);
+        let paired = pair(trust, fingerprint, &mut input, &mut writer);
         goodbye.close();
-        return None;
+        return Some(if paired {
+            Greeted::Paired
+        } else {
+            Greeted::Refused
+        });
     }
-    Some(Link {
+    Some(Greeted::Link(Link {
         input,
         output: Box::new(writer),
         goodbye: Box::new(move || goodbye.close()),
         socket,
-    })
+    }))
 }
 
 /// Handles the one message an unapproved client may send: a request to pair. Approves the client
@@ -569,31 +618,35 @@ fn pair(
     fingerprint: Fingerprint,
     input: &mut FirstMessage,
     output: &mut impl Write,
-) {
+) -> bool {
     let mut line = String::new();
     // Bounded: a client with no business here can't make the node buffer more than this.
     let read = input.by_ref().take(PAIRING_BYTES).read_line(&mut line);
     if read.is_err() || !line.ends_with('\n') {
-        return;
+        return false;
     }
     let Ok(request) = serde_json::from_str::<serde_json::Value>(&line) else {
-        return;
+        return false;
     };
     if request["cb2026"] != "pair" {
-        return;
+        return false;
     }
     let (Some(code), name) = (
         request["code"].as_str(),
         request["name"].as_str().unwrap_or_default(),
     ) else {
-        return;
+        return false;
     };
-    if let Ok(Paired::Yes) = trust
-        .store
-        .try_pair(code, fingerprint, name, SystemTime::now())
-    {
+    let paired = matches!(
+        trust
+            .store
+            .try_pair(code, fingerprint, name, SystemTime::now()),
+        Ok(Paired::Yes)
+    );
+    if paired {
         let _ = writeln!(output, r#"{{"cb2026":"paired"}}"#);
     }
+    paired
 }
 
 /// A connection's input, with its deadline cleared when the first message is complete.

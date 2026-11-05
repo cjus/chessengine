@@ -1,11 +1,11 @@
 # Network play: a design for the opt-in listener (#209)
 
-**Status: steps 1–4 built, 5–7 to do.** The listener, TLS and pairing exist in a build with
+**Status: steps 1–5 built, 6–7 to do.** The listener, TLS and pairing exist in a build with
 `--features net`, which is off by default; an ordinary run opens no port. Carlos answered the five
 decisions on 2026-11-05 (cjus/chessengine#255; [Decisions](#decisions)): pairing with both sides
 pinning each other, one client at a time, discovery by UDP broadcast, limits set on the engine's
 machine, and a separate `crates/net`. [How it would be built](#how-it-would-be-built) says what
-each step did. Written 2026-11-05; steps 3 and 4 added the same day.
+each step did. Written 2026-11-05; steps 3 to 5 added the same day.
 
 ## What this is for
 
@@ -221,10 +221,13 @@ That is a separate choice, made when the feature is ready.
 - **A port left open to the world.** Loopback by default. A non-loopback address needs the
   explicit address **and** gets TLS with pairing automatically; there is no plaintext mode off
   loopback, and the plaintext mode refuses any other address.
-- **A flood of strangers.** At most 16 connections are greeted at once and each has 10 seconds
-  to finish, so a flood can't run threads or memory without end. **Known gap:** a machine on the
-  network can keep all 16 occupied and so delay an approved client's connection (not take its
-  place); a limit per address, and backing off after failures, belong to step 5.
+- **A flood of strangers.** At most 16 connections are greeted at once overall and **4 from one
+  address**, and each has 10 seconds to finish; more are closed unanswered. An address with
+  **8 failed greetings in 10 seconds is ignored for 30**. A stranger never reaches the one
+  place, so a flood can't make an approved client wait or be told `Busy`. It can still delay
+  its connection if the flood comes from the same address (a person and an attacker sharing one
+  address, or one household's router seen from outside: one allowance for all of them), which is
+  the price of asking nothing of the person; the tables forget the oldest address past 1,024.
 - **Slow or hostile input:** bounded line length, read and write deadlines, backpressure when a
   reader is slow, and positions and options validated before any search starts.
 - **A client picks a file:** remote options are an allowlist. Paths (`EvalFile`, `SyzygyPath`,
@@ -325,9 +328,21 @@ Each step is its own PR with a green CI, and none changes the search:
    limiter; breaking the size rule or the rate limit each fails a test. **Not tested:** a real
    broadcast across a network (it can't be tested portably; the messages are the same), Windows
    and Intel macOS, and the operating systems' firewall prompts.
-5. **Hardening tests:** the negative tests in #209's verification list (unauthenticated access,
-   oversized, fragmented and malformed messages, slow input and output, invalid positions and
-   options, connection exhaustion), each run with and without TLS where it applies.
+5. **Hardening** (done 2026-11-05): the per-address limits and ban above (`crates/net/src/abuse.rs`),
+   and 14 end-to-end negative tests (`crates/net/tests/hardening.rs`), most run on both the
+   plaintext and the TLS listener: a message sent two bytes at a time, malformed JSON of many
+   kinds (including 100,000 nested brackets and a 10,000-digit id), bytes that aren't text,
+   oversized messages, 14 invalid positions, moves and limits and an absurd `multipv`, a cancel
+   followed at once by a new search (10 rounds: the cancelled search never answers with a move),
+   request ids reused by the next connection (nothing stale reaches it), half a message then a
+   disconnect, a client that never reads (the listener still stops), 150 silent connections from one
+   address, an address that keeps failing, a client with no certificate, and a plain listener
+   refusing `0.0.0.0` and `[::]`. Breaking the per-address cap or the ban each fails a test.
+   **Findings:** none that needed a change to the CNP node: it answered every malformed message
+   with an error and went on. **By design, not fixed:** an approved client that stalls half-way
+   through a message keeps its place until it disconnects or keepalive finds it dead (there is no
+   idle timeout, because a long search is silent too); another approved client is told `Busy`.
+   **Not done:** fuzzing the listener's input with `cargo fuzz`, and a test across a real network.
 6. **Documentation:** a chapter in the book, a README section, a transport section for the CNP
    specification, and the licence notices.
 7. **Later, if wanted:** dial-out mode, isolated per-client engines, IPv6 multicast and mDNS.
