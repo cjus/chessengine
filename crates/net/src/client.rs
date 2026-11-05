@@ -12,8 +12,13 @@
 //!    engine's screen.** This is the step that stops someone in the middle: the code is
 //!    useless to an attacker who can't also present the engine's certificate. A client must not
 //!    send the code until the person has said the two match.
-//! 4. The client calls [`Connection::pair`] with the code and a name for itself. The node
-//!    approves the client's own fingerprint and says so, and closes the connection.
+//!    **Close that connection as soon as the fingerprint is read.** A person takes longer than
+//!    the node's first-message deadline ([`crate::HANDSHAKE_TIMEOUT`], ten seconds) to compare
+//!    and type, and the node hangs up on a connection that sends nothing in that time.
+//! 4. The client connects again with `pin: Some(fingerprint)` (so a node showing any other
+//!    certificate fails the handshake before the code is sent) and at once calls
+//!    [`Connection::pair`] with the code and a name for itself. The node approves the client's
+//!    own fingerprint and says so, and closes the connection.
 //! 5. From then on the client connects with `pin: Some(fingerprint)` and goes straight to the
 //!    protocol: no code, no prompt. A node that shows any other certificate is refused.
 

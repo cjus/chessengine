@@ -362,6 +362,17 @@ fn pairable(dir: &std::path::Path) -> Pairable {
 
 /// `cb2026 --connect ADDRESS --data-dir DIR`, given `typed` as what the person types.
 fn connect(address: &str, dir: &std::path::Path, typed: &str) -> std::process::Output {
+    connect_slowly(address, dir, typed, std::time::Duration::ZERO)
+}
+
+/// [`connect`], with `pause` between the answer to the fingerprint question (the first line)
+/// and the code (the rest): a person comparing fingerprints takes a while.
+fn connect_slowly(
+    address: &str,
+    dir: &std::path::Path,
+    typed: &str,
+    pause: std::time::Duration,
+) -> std::process::Output {
     let mut child = Command::new(env!("CARGO_BIN_EXE_cb2026"))
         .args(["--connect", address, "--data-dir"])
         .arg(dir)
@@ -371,7 +382,11 @@ fn connect(address: &str, dir: &std::path::Path, typed: &str) -> std::process::O
         .spawn()
         .expect("--connect starts");
     let mut stdin = child.stdin.take().expect("its input");
-    stdin.write_all(typed.as_bytes()).unwrap();
+    let (first, rest) = typed.split_once('\n').unwrap_or((typed, ""));
+    stdin.write_all(format!("{first}\n").as_bytes()).unwrap();
+    stdin.flush().unwrap();
+    std::thread::sleep(pause);
+    stdin.write_all(rest.as_bytes()).unwrap();
     drop(stdin);
     child.wait_with_output().expect("--connect ends")
 }
@@ -462,4 +477,28 @@ fn connect_says_so_when_nothing_answers_at_an_address() {
     let output = connect("127.0.0.1:1", &mine, "");
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("couldn't connect"));
+}
+
+#[test]
+fn connect_pairs_even_when_the_person_takes_longer_than_the_nodes_deadline() {
+    let node_dir = data_dir("connect-slow-node");
+    let mine = data_dir("connect-slow-mine");
+    let node = pairable(&node_dir);
+    // The node gives a connection ten seconds (cb2026_net::HANDSHAKE_TIMEOUT) to send its first
+    // message. This person takes longer, so the client must not hold a connection open meanwhile.
+    let pause = cb2026_net::HANDSHAKE_TIMEOUT + std::time::Duration::from_secs(2);
+    let output = connect_slowly(
+        &node.address,
+        &mine,
+        &format!("yes\n{}\n", node.code),
+        pause,
+    );
+    let said = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success(),
+        "{said}\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(said.contains("Paired."), "{said}");
+    assert!(said.contains("Best move "), "{said}");
 }
