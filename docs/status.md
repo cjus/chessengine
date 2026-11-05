@@ -226,7 +226,8 @@ rate limited, nothing private; `cb2026_net::client::discover` for a client); **s
 end-to-end tests on the plain and the TLS listener: no change to the CNP node was needed);
 **step 6 is done** (book chapter 22, a README section, the CNP specification's sections 3.2 and 3.3
 and `resources` in `initialize`, cjus/chess-node-protocol#24, and the pin moved to it; the wire
-messages use the key `cnp`); network play now waits only on Carlos: a try between two computers and the
+messages use the key `cnp`); `cb2026 --connect [ADDRESS]` is a command-line client (find, confirm the fingerprint, pair, a
+test search) for trying it without a GUI; network play now waits only on Carlos: a try between two computers and the
 decision whether releases carry the feature (#263); step 7 (dial-out, per-client engines, IPv6)
 is for later. No functional change.*
 

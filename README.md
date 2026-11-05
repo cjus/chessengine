@@ -105,6 +105,9 @@ cb2026 --serve 0.0.0.0:4026 --discover --name "the study" --threads 8 --hash 204
 cb2026 --pair       # approve a new client: shows this engine's fingerprint and a one-time code
 ```
 
+From the other computer, `cb2026 --connect` is a command-line client: it finds the engine (or give
+it `ADDRESS[:PORT]`), shows you the fingerprint to compare with `--pair`'s, asks for the code the
+first time, and runs a short test search. A chess program does the same steps in its own window.
 A client compares the fingerprint with the one `--pair` shows, then types the code; after that
 it connects with no code, and deleting its line in `approved-clients.txt` revokes it. `--discover`
 lets a client find the engine without an address. Chapter 22 of the book explains how it works

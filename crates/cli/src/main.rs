@@ -8,6 +8,8 @@
 #![forbid(unsafe_code)]
 
 mod args;
+#[cfg(feature = "net")]
+mod connect;
 
 use std::io::{self, BufRead, IsTerminal, Read};
 use std::process::ExitCode;
@@ -70,6 +72,7 @@ fn main() -> ExitCode {
         Ok(Command::Run(mode, settings)) => run(mode, settings),
         Ok(Command::Serve(address, settings, network)) => serve(address, settings, network),
         Ok(Command::Pair(data_dir)) => pair(data_dir),
+        Ok(Command::Connect(target, data_dir)) => connect_to(target, data_dir),
         Err(message) => {
             eprintln!("cb2026: {message}\n\n{USAGE}");
             ExitCode::from(EXIT_USAGE)
@@ -293,6 +296,25 @@ fn serve(_address: std::net::SocketAddr, _settings: Settings, _network: args::Ne
     no_listener()
 }
 
+/// `--connect` in a build without the network code.
+#[cfg(not(feature = "net"))]
+fn connect_to(_target: Option<String>, _data_dir: Option<std::path::PathBuf>) -> ExitCode {
+    no_listener()
+}
+
+/// `--connect`: see [`connect`].
+#[cfg(feature = "net")]
+fn connect_to(target: Option<String>, data_dir: Option<std::path::PathBuf>) -> ExitCode {
+    match trust_store(data_dir).and_then(|store| connect::run(target, &store)) {
+        Ok(true) => ExitCode::SUCCESS,
+        Ok(false) => ExitCode::FAILURE,
+        Err(e) => {
+            eprintln!("cb2026: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
 /// `--pair` in a build without the listener.
 #[cfg(not(feature = "net"))]
 fn pair(_data_dir: Option<std::path::PathBuf>) -> ExitCode {
@@ -301,7 +323,7 @@ fn pair(_data_dir: Option<std::path::PathBuf>) -> ExitCode {
 
 #[cfg(not(feature = "net"))]
 fn no_listener() -> ExitCode {
-    eprintln!("cb2026: this build has no network listener (build with --features net)");
+    eprintln!("cb2026: this build has no network code (build with --features net)");
     ExitCode::from(EXIT_USAGE)
 }
 

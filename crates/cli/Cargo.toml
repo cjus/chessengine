@@ -19,6 +19,7 @@ cb2026-net = { workspace = true, optional = true }
 cb2026-protocol.workspace = true
 cb2026-shell.workspace = true
 cb2026-syzygy = { workspace = true, optional = true }
+serde_json = { version = "1.0.154", optional = true }
 
 [dev-dependencies]
 cnp-conformance.workspace = true
@@ -31,7 +32,7 @@ default = ["syzygy"]
 syzygy = ["dep:cb2026-syzygy"]
 # `--serve`: the opt-in network listener (`cb2026-net`, docs/network-play.md). Off by default, so
 # an ordinary build has no networking code at all; the release binaries decide separately.
-net = ["dep:cb2026-net"]
+net = ["dep:cb2026-net", "dep:serde_json"]
 
 [lints]
 workspace = true
