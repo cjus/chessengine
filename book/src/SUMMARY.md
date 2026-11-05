@@ -46,3 +46,7 @@
 # Part V: Neural networks
 
 - [NNUE](ch21-nnue.md)
+
+# Part VI: Beyond one computer
+
+- [Network play](ch22-network.md)

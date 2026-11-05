@@ -492,9 +492,9 @@ fn an_oversized_or_malformed_pairing_request_is_closed_on() {
     for request in [
         "x".repeat(5_000),
         "not json".to_string(),
-        r#"{"cb2026":"other","code":"1"}"#.to_string(),
-        r#"{"cb2026":"pair"}"#.to_string(),
-        format!(r#"{{"cb2026":"pair","code":{code}}}"#), // a number, not a string
+        r#"{"cnp":"other","code":"1"}"#.to_string(),
+        r#"{"cnp":"pair"}"#.to_string(),
+        format!(r#"{{"cnp":"pair","code":{code}}}"#), // a number, not a string
     ] {
         let mut c = client::connect(node.address, &me, None).unwrap();
         c.send_line(&request).ok();

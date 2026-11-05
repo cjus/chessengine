@@ -175,3 +175,37 @@ fn bad_threads_or_hash_are_refused_before_anything_starts() {
         assert!(output.stdout.is_empty(), "{args:?}");
     }
 }
+
+#[test]
+fn initialize_reports_the_threads_and_hash_the_node_was_started_with() {
+    use std::io::{BufRead, BufReader, Write};
+    use std::process::{Command, Stdio};
+
+    for (args, resources) in [
+        (
+            &["--cnp", "--threads", "3", "--hash", "32"][..],
+            r#""resources":{"hashMb":32,"threads":3}"#,
+        ),
+        (&["--cnp"][..], r#""resources":{"hashMb":16,"threads":1}"#),
+    ] {
+        let mut node = Command::new(env!("CARGO_BIN_EXE_cb2026"))
+            .args(args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .expect("cb2026 starts");
+        let mut stdin = node.stdin.take().expect("its input");
+        writeln!(
+            stdin,
+            r#"{{"jsonrpc":"2.0","id":1,"method":"initialize","params":{{"protocol":"1.0","client":{{"name":"test","version":"0"}}}}}}"#
+        )
+        .expect("initialize is sent");
+        drop(stdin);
+        let mut answer = String::new();
+        BufReader::new(node.stdout.take().expect("its output"))
+            .read_line(&mut answer)
+            .expect("cb2026 answers");
+        node.wait().expect("cb2026 ends when its input does");
+        assert!(answer.contains(resources), "{args:?}: {answer}");
+    }
+}

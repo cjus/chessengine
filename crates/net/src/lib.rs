@@ -628,7 +628,7 @@ fn pair(
     let Ok(request) = serde_json::from_str::<serde_json::Value>(&line) else {
         return false;
     };
-    if request["cb2026"] != "pair" {
+    if request["cnp"] != "pair" {
         return false;
     }
     let (Some(code), name) = (
@@ -644,7 +644,7 @@ fn pair(
         Ok(Paired::Yes)
     );
     if paired {
-        let _ = writeln!(output, r#"{{"cb2026":"paired"}}"#);
+        let _ = writeln!(output, r#"{{"cnp":"paired"}}"#);
     }
     paired
 }
