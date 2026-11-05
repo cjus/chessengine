@@ -12,6 +12,10 @@ publish.workspace = true
 cb2026-cnp.workspace = true
 cb2026-engine.workspace = true
 cnp.workspace = true
+rcgen = { version = "0.14.10", default-features = false, features = ["ring", "pem"] }
+rustls = { version = "0.23.46", default-features = false, features = ["std", "ring"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
 # TCP keepalive, which the standard library can't set: it is how a client that vanished without
 # closing its connection (a laptop that lost its Wi-Fi) stops holding the one place.
 socket2 = { version = "0.6", features = ["all"] }

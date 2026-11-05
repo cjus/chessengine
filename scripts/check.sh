@@ -34,7 +34,7 @@ step cargo clippy -p cb2026-trainer --features gpu --all-targets --locked -- -D 
 step cargo test --workspace --locked
 # The network listener (`--serve`) sits behind the CLI's `net` feature, so it is checked on its own.
 step cargo clippy -p cb2026 --features net --all-targets --locked -- -D warnings
-step cargo test -p cb2026 --features net --locked serve
+step cargo test -p cb2026 --features net --locked --test serve
 step cargo test -p cb2026-trainer --features gpu --locked gpu::
 step cargo run --release --locked -p cb2026-tools --bin perft-suite
 RUSTDOCFLAGS="-D warnings" step cargo doc --workspace --no-deps --document-private-items --locked

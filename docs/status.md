@@ -213,8 +213,14 @@ name a file, so the listener's option allowlist is what CNP already has; **step 
 loopback listener, one client at a time, a fresh engine each, a disconnect cancelling the
 search, deadlines, `cb2026 --serve`, built with `--features net`, off by default; it replaced the
 planned idle timeout with TCP keepalive, since a node can't tell a long search's silence from
-idleness), and CNP nodes now report `maxMessageBytes`; step 3 (TLS and pairing) is next, and
-nothing listens beyond this computer until it is done. No functional change.*
+idleness), and CNP nodes now report `maxMessageBytes`; **step 3 is done** (TLS 1.3 with self-signed
+certificates, rustls on `ring`; `cb2026 --pair` shows the node's fingerprint and an eight-digit
+one-time code, five minutes, one client, three tries; an approved-clients file read at each connection;
+`--serve` on any address other than loopback is encrypted and for approved clients only, and
+`--tls` does the same on loopback; a reference client in `cb2026_net::client`; `cargo deny`
+passes and `scripts/notices.sh` includes `ring`'s licences). Not yet run: the `net` feature on
+Windows and an Intel Mac, and a connection between two real computers (Carlos). Step 4
+(UDP discovery) is next. No functional change.*
 
 ## Stages
 
