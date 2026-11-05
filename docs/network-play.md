@@ -352,6 +352,15 @@ Each step is its own PR with a green CI, and none changes the search:
    and went into the 1.0 draft as pondering did; Carlos can ask for 1.1 instead.
    **Waiting on Carlos:** a try between two real computers and the decision whether releases carry
    the feature (#263).
+   **`cb2026 --connect [ADDRESS]`** (added 2026-11-05, after the Solrac side asked for a way to
+   test before it has a window): a command-line client in `crates/cli/src/connect.rs` over
+   `cb2026_net::client`. It finds a node (discovery, or an address; port 4026 if none), shows the
+   fingerprint and sends nothing until the person types yes, asks for the code, keeps the
+   node's fingerprint in `engines.txt` and its own identity in `client-identity.pem`, then
+   runs `initialize` and a one-second search. A node it has paired with needs no typing. 4
+   end-to-end tests (`crates/cli/tests/serve.rs`): pair then reconnect, declining sends no
+   code, a wrong code remembers nothing, nothing listening; making "no" send the code fails
+   the declining test.
 7. **Later, if wanted:** dial-out mode, isolated per-client engines, IPv6 multicast and mDNS.
 
 The Solrac side (a client connection, the pairing screen, the engine list, the discovery probe)

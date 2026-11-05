@@ -205,8 +205,18 @@ It prints its fingerprint. In another terminal on the same computer:
 cb2026 --pair
 ```
 
-Then, from the other computer, a client finds the engine (or you type its address), shows you the
-fingerprint, and asks for the code. The reference client in `crates/net/src/client.rs` is a short
+Then, from the other computer, run the command-line client:
+
+```text
+cb2026 --connect                  # looks for engines on the local network
+cb2026 --connect 192.168.1.20     # or give an address (the port is 4026 unless you add one)
+```
+
+It shows you the fingerprint and asks whether it is the same as the one on the engine's screen. It
+sends nothing until you answer yes; then it asks for the code. Once paired it keeps the engine's
+fingerprint in `engines.txt` in its own data directory, so the next time it asks nothing, and it
+runs a one-second search of the starting position to show the connection works. A chess program
+does the same steps in its own window. The reference client in `crates/net/src/client.rs` is a short
 file and is what the tests use: read it to see exactly what a client does.
 
 Your operating system may ask once whether to allow incoming connections for the program; say

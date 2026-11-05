@@ -177,6 +177,7 @@ dependencies = [
  "cb2026-shell",
  "cb2026-syzygy",
  "cnp-conformance",
+ "serde_json",
 ]
 
 [[package]]

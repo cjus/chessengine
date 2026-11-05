@@ -295,3 +295,171 @@ fn a_discovering_node_answers_a_clients_search_under_its_name() {
     let _ = child.kill();
     let _ = child.wait();
 }
+
+/// An encrypted node on loopback with its pairing window open, and the code the window shows.
+/// Everything is killed when dropped.
+struct Pairable {
+    server: Child,
+    pairing: Child,
+    address: String,
+    code: String,
+}
+
+impl Drop for Pairable {
+    fn drop(&mut self) {
+        for child in [&mut self.server, &mut self.pairing] {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+}
+
+fn pairable(dir: &std::path::Path) -> Pairable {
+    let mut server = Command::new(env!("CARGO_BIN_EXE_cb2026"))
+        .args(["--serve", "127.0.0.1:0", "--tls", "--data-dir"])
+        .arg(dir)
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("cb2026 starts");
+    let mut stderr = BufReader::new(server.stderr.take().expect("its stderr"));
+    let said = read_until(&mut stderr, "cb2026 --pair").join("");
+    let address = said
+        .split_whitespace()
+        .find(|w| w.starts_with("127.0.0.1:"))
+        .expect("an address")
+        .trim_end_matches(',')
+        .to_string();
+    let mut pairing = Command::new(env!("CARGO_BIN_EXE_cb2026"))
+        .args(["--pair", "--data-dir"])
+        .arg(dir)
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("--pair starts");
+    let mut shown = BufReader::new(pairing.stdout.take().expect("its output"));
+    let text = read_until(&mut shown, "Waiting for the client").join("");
+    let code = text
+        .lines()
+        .map(str::trim)
+        .find(|l| {
+            l.len() == 9
+                && l.as_bytes()[4] == b' '
+                && l.bytes().all(|b| b.is_ascii_digit() || b == b' ')
+        })
+        .expect("the code")
+        .to_string();
+    // Keep reading its output so it never blocks on a full pipe.
+    std::thread::spawn(move || {
+        let mut sink = String::new();
+        let _ = std::io::Read::read_to_string(&mut shown, &mut sink);
+    });
+    Pairable {
+        server,
+        pairing,
+        address,
+        code,
+    }
+}
+
+/// `cb2026 --connect ADDRESS --data-dir DIR`, given `typed` as what the person types.
+fn connect(address: &str, dir: &std::path::Path, typed: &str) -> std::process::Output {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_cb2026"))
+        .args(["--connect", address, "--data-dir"])
+        .arg(dir)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("--connect starts");
+    let mut stdin = child.stdin.take().expect("its input");
+    stdin.write_all(typed.as_bytes()).unwrap();
+    drop(stdin);
+    child.wait_with_output().expect("--connect ends")
+}
+
+#[test]
+fn connect_pairs_once_and_then_connects_without_a_code() {
+    let node_dir = data_dir("connect-node");
+    let mine = data_dir("connect-mine");
+    let node = pairable(&node_dir);
+
+    let first = connect(&node.address, &mine, &format!("yes\n{}\n", node.code));
+    let said = String::from_utf8_lossy(&first.stdout);
+    assert!(
+        first.status.success(),
+        "{said}\n{}",
+        String::from_utf8_lossy(&first.stderr)
+    );
+    assert!(said.contains("Paired."), "{said}");
+    assert!(said.contains("Best move "), "{said}");
+    assert!(said.contains("1 thread(s)"), "{said}");
+    // The node's screen and this client agree on who the node is.
+    let identity = cb2026_net::Store::new(&node_dir).identity().unwrap();
+    assert!(
+        said.contains(
+            &identity
+                .fingerprint()
+                .in_lines()
+                .lines()
+                .next()
+                .unwrap()
+                .to_string()
+        ),
+        "{said}"
+    );
+    assert!(mine.join("client-identity.pem").exists());
+
+    // The second time nothing is typed.
+    let second = connect(&node.address, &mine, "");
+    let said = String::from_utf8_lossy(&second.stdout);
+    assert!(
+        second.status.success(),
+        "{said}\n{}",
+        String::from_utf8_lossy(&second.stderr)
+    );
+    assert!(said.contains("paired with before"), "{said}");
+    assert!(said.contains("Best move "), "{said}");
+}
+
+#[test]
+fn connect_sends_no_code_unless_the_person_says_the_fingerprints_match() {
+    let node_dir = data_dir("connect-decline-node");
+    let mine = data_dir("connect-decline-mine");
+    let node = pairable(&node_dir);
+    // The code is typed here, but the answer to the fingerprint question is no.
+    let output = connect(&node.address, &mine, &format!("no\n{}\n", node.code));
+    let said = String::from_utf8_lossy(&output.stdout);
+    assert!(!output.status.success(), "{said}");
+    assert!(said.contains("Nothing was sent"), "{said}");
+    assert!(!said.contains("Best move"), "{said}");
+    // The node never saw a pairing line, so its window and approvals are untouched.
+    let store = cb2026_net::Store::new(&node_dir);
+    assert!(store.approved().unwrap().is_empty());
+    assert!(store.pairing_is_open(std::time::SystemTime::now()));
+}
+
+#[test]
+fn connect_reports_a_wrong_code_and_remembers_nothing() {
+    let node_dir = data_dir("connect-wrong-node");
+    let mine = data_dir("connect-wrong-mine");
+    let node = pairable(&node_dir);
+    let output = connect(&node.address, &mine, "yes\n00000000\n");
+    let said = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success(), "{said}");
+    assert!(said.contains("didn't accept the code"), "{said}");
+    assert!(!mine.join("engines.txt").exists());
+    assert!(
+        cb2026_net::Store::new(&node_dir)
+            .approved()
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn connect_says_so_when_nothing_answers_at_an_address() {
+    let mine = data_dir("connect-nothing");
+    // Port 1 on loopback has nothing listening.
+    let output = connect("127.0.0.1:1", &mine, "");
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("couldn't connect"));
+}

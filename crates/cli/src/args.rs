@@ -20,6 +20,11 @@ pub enum Command {
     /// Open a window in which one new client may pair with this node (`--pair`), keeping its
     /// files in the given directory, or the default one. Needs a build with the `net` feature.
     Pair(Option<PathBuf>),
+    /// Connect to a node on the network as a client (`--connect`): the engine's address, or none
+    /// to look for one, and the directory for this client's files, or the default one. Pairs
+    /// with the node the first time, then runs a short test search. Needs a build with the `net`
+    /// feature.
+    Connect(Option<String>, Option<PathBuf>),
     /// Run the fixed benchmark and print its node count and speed, evaluating with the NNUE
     /// network in this file, or with none (`none`, the hand-crafted evaluation), if given; with
     /// the built-in network otherwise.
@@ -104,9 +109,14 @@ Options:
   --discover     With --serve (encrypted): answer clients on the local network that ask
                  \"is there a cb2026 here?\", so nobody has to type an address
   --name NAME    With --discover: the name clients show for this node (up to 32 bytes)
+  --connect [ADDR]
+                 Be a client of a cb2026 node on another computer: looks for one on the
+                 local network (or use ADDRESS[:PORT]), pairs with it the first time (you
+                 check its fingerprint and type the code from its --pair), then runs a short
+                 test search. Builds with --features net
   --pair         Approve a new client: shows this node's fingerprint and a one-time code to
                  give the client within five minutes. Run it while --serve is running
-  --data-dir DIR With --serve or --pair: keep the node's certificate, approved clients and
+  --data-dir DIR With --serve, --pair or --connect: keep the node's certificate, approved clients and
                  pairing code in DIR (default: cb2026 in your user data directory)
   --threads N    With --cnp or --serve: search with N threads (1-256, default 1)
   --hash MB      With --cnp or --serve: a transposition table of MB megabytes (1-65536,
@@ -129,6 +139,7 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
     let mut serve = None;
     let (mut tls, mut pair, mut data_dir) = (false, false, None);
     let (mut discover, mut name) = (false, None);
+    let mut connect: Option<Option<String>> = None;
     let mut settings = Settings::default();
     let mut rest = args.iter();
     while let Some(arg) = rest.next() {
@@ -176,6 +187,17 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
                 pair = true;
                 continue;
             }
+            "--connect" => {
+                // An address may follow; anything starting with `-` is the next option.
+                let target = match rest.as_slice().first() {
+                    Some(next) if !next.starts_with('-') => Some(rest.next().unwrap().clone()),
+                    _ => None,
+                };
+                if connect.replace(target).is_some() {
+                    return Err("--connect is given once".to_string());
+                }
+                continue;
+            }
             "--data-dir" => {
                 let dir = rest.next().filter(|d| !d.starts_with('-'));
                 let dir = dir.ok_or_else(|| "--data-dir needs a directory".to_string())?;
@@ -193,6 +215,21 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
         if mode.replace(chosen).is_some() {
             return Err("expected at most one of --shell, --uci, --xboard and --cnp".to_string());
         }
+    }
+    if let Some(target) = connect {
+        if serve.is_some()
+            || pair
+            || tls
+            || discover
+            || name.is_some()
+            || mode.is_some()
+            || settings != Settings::default()
+        {
+            return Err(
+                "--connect stands alone, with --data-dir if the files are elsewhere".into(),
+            );
+        }
+        return Ok(Command::Connect(target, data_dir));
     }
     if pair {
         if serve.is_some()
@@ -228,7 +265,10 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
         return Err("--discover and --name go with --serve".into());
     }
     if tls || data_dir.is_some() {
-        return Err("--tls and --data-dir go with --serve (--data-dir also with --pair)".into());
+        return Err(
+            "--tls and --data-dir go with --serve (--data-dir also with --pair and --connect)"
+                .into(),
+        );
     }
     if settings != Settings::default() && mode != Some(Mode::Cnp) {
         return Err("--threads and --hash go with --cnp or --serve".to_string());
@@ -407,6 +447,24 @@ mod tests {
                 found
             ))
         );
+        assert_eq!(parse_strs(&["--connect"]), Ok(Command::Connect(None, None)));
+        assert_eq!(
+            parse_strs(&["--connect", "10.0.0.5:4026", "--data-dir", "/tmp/c"]),
+            Ok(Command::Connect(
+                Some("10.0.0.5:4026".to_string()),
+                Some(PathBuf::from("/tmp/c"))
+            ))
+        );
+        for bad in [
+            &["--connect", "--serve"][..],
+            &["--connect", "--pair"],
+            &["--connect", "--tls"],
+            &["--connect", "--cnp"],
+            &["--connect", "a", "--connect", "b"],
+            &["--connect", "--threads", "2"],
+        ] {
+            assert!(parse_strs(bad).is_err(), "{bad:?}");
+        }
         assert_eq!(parse_strs(&["--pair"]), Ok(Command::Pair(None)));
         assert_eq!(
             parse_strs(&["--data-dir", "/tmp/cb", "--pair"]),
