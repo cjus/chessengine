@@ -1802,8 +1802,12 @@ mod tests {
         let start = Instant::now();
         let result = engine.search(&Position::startpos(), &[], &limits, &stop, &mut |_| {});
         assert!(result.best_move.is_some());
+        // Helpers that never stopped would keep the search running far past this (the search
+        // has no depth limit), so the bound only has to tell "stopped" from "never stopped".
+        // It is generous because the test runs beside others on a loaded CI runner, where a
+        // 150 ms search was seen to take 500.34 ms (PR #251's first CI run, a 500 ms bound).
         assert!(
-            start.elapsed() < Duration::from_millis(500),
+            start.elapsed() < Duration::from_millis(2000),
             "{:?}",
             start.elapsed()
         );
