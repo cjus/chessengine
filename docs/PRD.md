@@ -117,8 +117,9 @@ scripts/      SPRT and gauntlet runners for the test Mac, release helpers.
 **One binary, four modes.** GUIs launch the engine and send `uci` (or `xboard`) as their first
 line, so the binary chooses its mode from that first line: `uci` → UCI, `xboard` → CECP, a JSON
 message → the Chess Node Protocol (Solrac, below), anything else on an interactive terminal → the
-shell. `--uci`, `--xboard`, `--cnp` and `--shell` force a mode, and `cb2026 bench` runs the
-benchmark (see Testing).
+shell. `--uci`, `--xboard`, `--cnp` and `--shell` force a mode, `--cnp` also takes `--threads N`
+and `--hash MB` (CNP has no option for them; UCI and XBoard set theirs through the protocol),
+and `cb2026 bench` runs the benchmark (see Testing).
 
 **Engine API.** `Engine::search(position, limits, options, on_info)` returns a best move (and a
 ponder move), and calls `on_info` with depth, score, PV, nodes, speed and other statistics while it

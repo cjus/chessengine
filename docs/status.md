@@ -207,8 +207,10 @@ arm64 binary's bench was 701720, and the release notes of #199 went above GitHub
 list. `main` is v1.1 (gen3 the default). No functional change.
 Same day: **the design for network play is decided** (Carlos, #255; `docs/network-play.md`): an
 opt-in CNP listener in `crates/net` with TLS and pairing (both sides pin each other), one client
-at a time, an IP address or discovery by UDP broadcast, limits set on the engine's machine; no SSH. Step 1,
-threads and hash in CNP mode, is next; nothing listens yet.*
+at a time, an IP address or discovery by UDP broadcast, limits set on the engine's machine; no SSH. Step 1
+is done: `cb2026 --cnp --threads N --hash MB` (CNP has no option for them), and no CNP request can
+name a file, so the listener's option allowlist is what CNP already has; step 2 (`crates/net`,
+the loopback listener) is next; nothing listens yet. No functional change.*
 
 ## Stages
 

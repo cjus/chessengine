@@ -12,7 +12,7 @@ mod args;
 use std::io::{self, BufRead, IsTerminal, Read};
 use std::process::ExitCode;
 
-use args::{Command, Mode, USAGE};
+use args::{Command, Mode, Settings, USAGE};
 use cb2026_engine::{BUILTIN_NETWORK_NAME, Engine, EvalChoice, Network, builtin_network};
 use cb2026_protocol::Protocol;
 use cb2026_shell::{Shell, Style};
@@ -67,7 +67,7 @@ fn main() -> ExitCode {
             );
             ExitCode::SUCCESS
         }
-        Ok(Command::Run(mode)) => run(mode),
+        Ok(Command::Run(mode, settings)) => run(mode, settings),
         Err(message) => {
             eprintln!("cb2026: {message}\n\n{USAGE}");
             ExitCode::from(EXIT_USAGE)
@@ -76,7 +76,7 @@ fn main() -> ExitCode {
 }
 
 /// Starts the requested mode, resolving [`Mode::Auto`] first.
-fn run(mode: Mode) -> ExitCode {
+fn run(mode: Mode, settings: Settings) -> ExitCode {
     let (mode, first_line) = match mode {
         Mode::Auto => detect_mode(),
         forced => (forced, None),
@@ -84,7 +84,7 @@ fn run(mode: Mode) -> ExitCode {
     match mode {
         Mode::Uci => run_uci(first_line),
         Mode::Xboard => run_xboard(first_line),
-        Mode::Cnp => run_cnp(first_line),
+        Mode::Cnp => run_cnp(first_line, settings),
         Mode::Shell | Mode::Auto => run_shell(first_line),
     }
 }
@@ -155,7 +155,10 @@ fn run_xboard(first_line: Option<String>) -> ExitCode {
 
 /// Speaks the Chess Node Protocol on standard input and output until `exit`: exit code 0 if
 /// `shutdown` came first, 1 otherwise (the protocol's rule).
-fn run_cnp(first_line: Option<String>) -> ExitCode {
+///
+/// `settings` give the node's threads and hash size, which CNP has no option for: a node that
+/// searches for a client on another machine is started with what that machine should spend.
+fn run_cnp(first_line: Option<String>, settings: Settings) -> ExitCode {
     // With Syzygy probing the binary links GPL code, so it is GPL as a whole (README,
     // "License"), and it says so to the client.
     let license = if cfg!(feature = "syzygy") {
@@ -168,7 +171,7 @@ fn run_cnp(first_line: Option<String>) -> ExitCode {
         stdin.lock(),
         Box::new(io::stdout()),
         first_line,
-        new_engine(),
+        cnp_engine(settings),
         cb2026_cnp::Config { license },
     ) {
         Ok(true) => ExitCode::SUCCESS,
@@ -178,6 +181,18 @@ fn run_cnp(first_line: Option<String>) -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// A new engine for a CNP node, with the threads and hash size it was started with.
+fn cnp_engine(settings: Settings) -> Engine {
+    let mut engine = new_engine();
+    if let Some(threads) = settings.threads {
+        engine.threads = threads;
+    }
+    if let Some(megabytes) = settings.hash_mb {
+        engine.set_hash_size(megabytes);
+    }
+    engine
 }
 
 /// A new engine, able to open tablebases if this build includes them.
@@ -241,4 +256,26 @@ fn no_color_requested() -> bool {
 /// Whether the terminal says it can't do much (`TERM=dumb`): then use plain ASCII.
 fn dumb_terminal() -> bool {
     std::env::var("TERM").is_ok_and(|t| t == "dumb")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_cnp_engine_takes_the_threads_and_hash_it_was_started_with() {
+        let engine = cnp_engine(Settings {
+            threads: Some(6),
+            hash_mb: Some(48),
+        });
+        assert_eq!(engine.threads, 6);
+        assert_eq!(engine.tt.megabytes(), 48);
+    }
+
+    #[test]
+    fn without_settings_a_cnp_engine_keeps_the_defaults() {
+        let engine = cnp_engine(Settings::default());
+        assert_eq!(engine.threads, new_engine().threads);
+        assert_eq!(engine.tt.megabytes(), new_engine().tt.megabytes());
+    }
 }
