@@ -4,7 +4,7 @@ The single place that says where cb2026 stands: what is merged, what is built an
 is blocked on whom, and how to carry on. **Claude: read this first in a new session.** Update
 it in every PR that changes the picture (a stage merged, a result in, a new blocker).
 
-*Last updated 2026-11-01, 20:00 MST (M5: the check extension, IIR and three versions of
+*Last updated 2026-11-05, 06:30 MST (M5: the check extension, IIR and three versions of
 improving merged, with chapter 14.1; improving is off by default and set aside; time losses not
 reproduced, #66; continuation history merged, +10.7 ± 7.3, #69; history in LMR merged off by
 default after no verdict, #70; singular extensions and multi-cut merged, +29.5 ± 13.3, #71;
@@ -199,7 +199,12 @@ once when a later move beats the best on its null-window search (`better`) or a 
 falls outside its aspiration window (`failHigh`, `failLow`). The node passes it on at most
 every `rootMs`, research at once; helpers don't follow. Searches are the same node for node
 with or without it, and its cost is within noise (PR #250); no functional change. The `cnp`
-pin moves to cjus/chess-node-protocol#23's merge, `6274420` (#250).*
+pin moves to cjus/chess-node-protocol#23's merge, `6274420` (#250).
+2026-11-05: **v1.0.0 is published** (Carlos, #199, #183): https://github.com/cjus/chessengine/releases/tag/v1.0.0,
+the tag on `83fa6c6`, the Mac binaries signed and notarised, the book and the gen2 net on it;
+before publishing, its eight assets were downloaded again and `SHA256SUMS.txt` checked OK, the
+arm64 binary's bench was 701720, and the release notes of #199 went above GitHub's generated
+list. `main` is v1.1 (gen3 the default). No functional change.*
 
 ## Stages
 
@@ -285,7 +290,7 @@ pin moves to cjus/chess-node-protocol#23's merge, `6274420` (#250).*
 generation's files stay in `~/nnue-data/genN` there, and in `~/engines/nets/genN` on
 the M1 Max.
 
-**v1.0's gates have all passed.** The GUI matrix, the last, passed on 2026-10-23 (#37, recorded
+**v1.0's gates all passed, and v1.0.0 is published (2026-11-05).** The GUI matrix, the last, passed on 2026-10-23 (#37, recorded
 in `docs/gui-compat.md` and the PRD): En Croissant, Cute Chess, XBoard and HIARCS Chess Explorer
 on the M1 Max, with two fixes found on the way (#169, #170). The Lichess bot's two games follow
 the release (Carlos, 2026-10-23, #191), and Scid vs. PC and ChessBase weren't checked. Next:
@@ -297,13 +302,13 @@ the release (Carlos, 2026-10-23, #191), and Scid vs. PC and ChessBase weren't ch
    then **gen2 as the default** in place of gen1 (Carlos, 2026-10-27; #214, #216), with the
    gauntlet again (#215, 3286 ± 17) and the robustness run (#215, clean); and the GUI
    re-check (#205, passed on 2026-10-29 in En Croissant, Cute Chess and HIARCS);
-4. Carlos tags `v1.0.0` **on `83fa6c6`**, not on the latest `main`, and the Release workflow
-   makes a draft release (#199);
-5. the Mac binaries are signed and notarised on the M1 Max, which holds the Developer ID key:
+4. `v1.0.0` tagged **on `83fa6c6`**, not on the latest `main`, and the Release workflow made a
+   draft release (2026-10-29, #199);
+5. the Mac binaries signed and notarised on the M1 Max, which holds the Developer ID key:
    `scripts/mac-sign-release.sh v1.0.0` (`docs/releasing.md`, "Signing the Mac binaries");
-6. the book is uploaded to the draft, and its line added to `SHA256SUMS.txt`, which the
+6. the book uploaded to the draft, and its line added to `SHA256SUMS.txt`, which the
    workflow writes before the book is there (`docs/releasing.md`; #183);
-7. Carlos checks the draft and publishes it.
+7. **published** on 2026-11-05 after the assets were checked again (Carlos, #199, #183).
 
 **The testing pass with the network** (2026-10-26). Carlos wanted more testing before calling
 the engine 1.0.0. The gauntlet (#131) and the GUI matrix (#37) were run with the HCE, and the
@@ -557,17 +562,14 @@ passed; the rest wait on GUI checks, level calibration or the v1.0 work.
 | M2 Classical search | stages 8–14 | **Passed** 2026-10-18: stage 14 rated 2442 ± 11 by gauntlet at 8+0.08 (gate ~2200 CCRL), #36 |
 | M3 Evaluation | stages 15–16 | **Passed** 2026-10-18: stage 16 rated 2669 ± 10 by gauntlet at 8+0.08 (gate ≥2400 CCRL), #36 |
 | M4 Complete engine | stages 17–20 | **Passed** 2026-10-23: levels calibrated at 40+0.4 on 2026-10-19, 629–2483 (#106); the GUI matrix passed (#37); the Lichess bot's games follow v1.0 (#191) |
-| M5 v1.0 | strength work, release | Started (the M5 branches above); release workflow merged (#40); `main` rated 2782 ± 11 by gauntlet on 2026-10-21 (#131; 2714 ± 10 on 2026-10-18, #36), above the gate (≥2400, goal 2600+), and **3236 ± 16 with the network** on 2026-10-26 (#207), **3286 ± 17 with gen2** on 2026-10-27 (#215); the robustness run clean on 2026-10-22 (#146), and again with the network as the default on 2026-10-24 (#197); the GUI matrix passed on 2026-10-23 (#37); version 1.0.0 merged (#154); the `v1.0.0` tag waits on the testing pass with the net (Carlos, 2026-10-26): #206 and #207 done with gen1; v1.0.0 ships gen2 (#216), and #215 is done (its gauntlet 3286 ± 17, its robustness run clean), and the GUI re-check passed on 2026-10-29 (#205), so the tag is next (#199) |
+| M5 v1.0 | strength work, release | Started (the M5 branches above); release workflow merged (#40); `main` rated 2782 ± 11 by gauntlet on 2026-10-21 (#131; 2714 ± 10 on 2026-10-18, #36), above the gate (≥2400, goal 2600+), and **3236 ± 16 with the network** on 2026-10-26 (#207), **3286 ± 17 with gen2** on 2026-10-27 (#215); the robustness run clean on 2026-10-22 (#146), and again with the network as the default on 2026-10-24 (#197); the GUI matrix passed on 2026-10-23 (#37); version 1.0.0 merged (#154); the `v1.0.0` tag waits on the testing pass with the net (Carlos, 2026-10-26): #206 and #207 done with gen1; v1.0.0 ships gen2 (#216), and #215 is done (its gauntlet 3286 ± 17, its robustness run clean), and the GUI re-check passed on 2026-10-29 (#205); **v1.0.0 published 2026-11-05** (#199, #183) |
 | M6 NNUE | stage 21 | SPRT gate passed 2026-10-24: gen1 (256 wide) beat the HCE +14 −0 (#195), and is the default since #196 (the HCE kept for levels, a lone king and, from #208, small pawnless endings); chapter 21 written. gen2, from the net's own games, trained and checked (#211), beat gen1 by SPRT, +144 ± 35 in 209 games (#214), and is the default since #216, before v1.0.0. gen3, from 200M of gen2's positions, trained and checked (#219), beat gen2 by SPRT, +53 ± 19 in 595 games (#222); its 512 network was no better than its 256 at 8+0.08, +1.1 ± 4.8 in 8,180 games (#223); gen3 is the default on `main` for v1.1 (#228), its gauntlet 3379 ± 21 (#227) |
 
 ## Waiting on Carlos
 
 The open [`needs-carlos` issues](https://github.com/cjus/chessengine/issues?q=is%3Aopen+label%3Aneeds-carlos):
 
-- #199: the `v1.0.0` tag on `83fa6c6` (every gate passed; the GUI re-check, #205, on
-  2026-10-29), then publishing the draft release with the
-  book on it (#183).
-- #191: the Lichess bot's two games, after v1.0.
+- #191: the Lichess bot's two games, now that v1.0.0 is out (#199 and #183 closed 2026-11-05).
 - #88: whether macOS honours the search threads' QoS outside Claude Code.
 
 On hold: #61, running long tests on AWS Batch (closed 2026-10-12; reopen it if the M3 can't keep
@@ -863,8 +865,8 @@ Run the full test suite on every commit you replay, not only at the tip: each be
    - Done: **the robustness run again** (#197), since v1.0's was with the HCE: clean on
      2026-10-24, 10,000 games at `72f50f1` from 1+0.01 to 40/60, no time losses, illegal moves,
      failures or aborted games.
-   - Next: **the `v1.0.0` tag (Carlos, #199)**, whose release carries the net and the Lichess
-     book (#183). Later: an Elo figure for the net (a fixed number of games, or a gauntlet
+   - Done: **v1.0.0 published** on 2026-11-05 (#199, #183), carrying the net and the Lichess
+     book. Later: an Elo figure for the net (a fixed number of games, or a gauntlet
      against the reference engines beside main's 2714 ± 10), the levels recalibrated with the
      net, 512 against 256 (`NET=… BASE_NET=…`), and gen2 from the net's own games: trained
      and checked on 2026-10-27 (#211), and it beat gen1 by SPRT, +144 ± 35 in 209 games (#214);
