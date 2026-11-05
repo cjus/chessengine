@@ -100,12 +100,18 @@ Connection rules, in every release:
 
 ### Finding the engine (Decision 3)
 
-**Discovery by UDP broadcast** (Carlos, 2026-11-05), on top of a typed address and port, which
-always works. Discovery only says *where an engine is*; it is never trusted. Pairing and the
-pinned fingerprints (above) decide who may connect.
+**Both ways to find an engine are supported** (Carlos, 2026-11-05): **entering an IP address
+and port**, and **automatic discovery by UDP broadcast**. The typed address is a full feature,
+for people who know their network and for networks where a broadcast can't reach; discovery is
+the easy way for people who are less technical, who should never have to find an address. A
+client offers both, with discovery as the first thing a new user sees. Discovery only says
+*where an engine is*; it is never trusted. Pairing and the pinned fingerprints (above) decide who
+may connect, the same way however the engine was found.
 
 - **Opt-in, in two layers.** Discovery runs only when the engine is serving on a non-loopback
-  address **and** is started with `--discover`. A listener with no flag answers no probes.
+  address **and** is started with `--discover`. A listener with no flag answers no probes. For
+  the less technical user the flag isn't the interface: the setup screen of a client or
+  installer turns it on with the same choice, and the documentation shows both.
 - **The engine answers, it doesn't announce.** A client sends a small *probe* to the broadcast
   address on a fixed UDP port; an engine that has discovery on answers the sender directly with
   one small JSON line: the node's name, the protocol version, its TCP port, its certificate
@@ -121,7 +127,7 @@ pinned fingerprints (above) decide who may connect.
   forged reply can only send a client to a machine that then fails the TLS check.
 - **Where it works, and where it doesn't.** A broadcast reaches the local network segment only.
   It won't cross a router or VLAN, many Wi-Fi access points isolate clients from each other, and
-  a firewall may block the UDP port, so the typed address stays the fallback. IPv6 has no
+  a firewall may block the UDP port, so a person can always enter the address instead. IPv6 has no
   broadcast, so the first release is IPv4; an IPv6 multicast group can be added with the same
   messages.
 - **Every interface.** Sending to the all-ones address (`255.255.255.255`) reaches only one
@@ -250,8 +256,9 @@ Answered by Carlos on 2026-11-05 (cjus/chessengine#255):
 
 1. **Security model:** pairing, with both sides pinning each other.
 2. **Clients:** one at a time.
-3. **Discovery:** **UDP broadcast** (a change from the typed address only that was
-   recommended), described above; the typed address stays as the fallback.
+3. **Discovery:** **both**: entering an IP address and port, and automatic discovery by UDP
+   broadcast for less technical users (a change from the typed address only that was
+   recommended), described above.
 4. **Limits:** set by flags or a config file on the engine's machine, with the provisional
    defaults above.
 5. **Where it lives:** a separate `crates/net`, off by default in the CLI.
