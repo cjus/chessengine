@@ -114,10 +114,16 @@ fn choose(input: &mut impl BufRead) -> Result<Option<Found>, String> {
     }
 }
 
-/// Pairs with the node on `connection`, after the person confirms its fingerprint, and returns
-/// a connection to it that has been approved. `None` if the person declined.
+/// Pairs with the node that showed `connection`'s fingerprint, after the person confirms it, and
+/// returns a connection to it that has been approved. `None` if the person declined.
+///
+/// The first connection is closed as soon as the fingerprint is read: the person takes longer
+/// than the node's first-message deadline (ten seconds) to compare it and type the code, and the
+/// node would have hung up. The pairing request goes on a new connection pinned to the
+/// fingerprint they confirmed, so it is sent at once, and a node showing any other certificate
+/// fails the handshake before the code leaves this computer.
 fn pair(
-    mut connection: Connection,
+    connection: Connection,
     address: SocketAddr,
     identity: &Identity,
     engines: &std::path::Path,
@@ -125,6 +131,7 @@ fn pair(
     input: &mut impl BufRead,
 ) -> Result<Option<Connection>, String> {
     let shown = connection.server_fingerprint();
+    drop(connection);
     println!("\nThis client hasn't paired with this node. Its fingerprint is:\n");
     for line in shown.in_lines().lines() {
         println!("     {line}");
@@ -143,7 +150,13 @@ fn pair(
         .filter(char::is_ascii_digit)
         .collect();
     let me = client_name();
-    let approved = connection
+    let mut request = client::connect(address, identity, Some(shown)).map_err(|e| {
+        format!(
+            "couldn't reconnect to {address} to pair (does it still show the fingerprint you \
+             confirmed?): {e}"
+        )
+    })?;
+    let approved = request
         .pair(&code, &me)
         .map_err(|e| format!("pairing: {e}"))?;
     if !approved {
@@ -155,7 +168,7 @@ fn pair(
     }
     remember(engines, shown, label).map_err(|e| format!("keeping {}: {e}", engines.display()))?;
     println!("Paired. From now on this client connects without a code.\n");
-    // The node closes the connection after pairing; this one is pinned to what was confirmed.
+    // The node closes the connection after pairing; the next one is pinned too.
     client::connect(address, identity, Some(shown))
         .map(Some)
         .map_err(|e| format!("reconnecting to {address}: {e}"))

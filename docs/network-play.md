@@ -361,6 +361,12 @@ Each step is its own PR with a green CI, and none changes the search:
    end-to-end tests (`crates/cli/tests/serve.rs`): pair then reconnect, declining sends no
    code, a wrong code remembers nothing, nothing listening; making "no" send the code fails
    the declining test.
+   **Fix, same day** (found by the Solrac side trying it by hand): `--connect` first held the
+   unpinned connection open while the person compared fingerprints and typed the code, and the
+   node's ten-second first-message deadline closed it ("Broken pipe" or "didn't accept the code").
+   It now reads the fingerprint and hangs up, then sends `pair` on a new connection pinned to the
+   confirmed fingerprint. Its tests piped the answers in at once, so they missed it; a test now
+   waits twelve seconds between the two answers (it fails on the old code).
 7. **Later, if wanted:** dial-out mode, isolated per-client engines, IPv6 multicast and mDNS.
 
 The Solrac side (a client connection, the pairing screen, the engine list, the discovery probe)
