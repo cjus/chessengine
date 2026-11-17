@@ -384,4 +384,17 @@ impl TlsCloser {
         let _ = send_pending(&mut connection, &self.socket);
         let _ = self.socket.shutdown(std::net::Shutdown::Both);
     }
+
+    /// Says goodbye to the peer and stops writing, but keeps reading: the half of [`close`]
+    /// that leaves what the peer is still sending to be read, so the connection can then close
+    /// without a reset (see `refuse` in the crate root).
+    ///
+    /// [`close`]: TlsCloser::close
+    pub(crate) fn finish_writing(&self) {
+        let _ = self.socket.set_write_timeout(Some(Duration::from_secs(1)));
+        let mut connection = lock(&self.connection);
+        connection.send_close_notify();
+        let _ = send_pending(&mut connection, &self.socket);
+        let _ = self.socket.shutdown(std::net::Shutdown::Write);
+    }
 }
