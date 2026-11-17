@@ -127,6 +127,9 @@ const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(10);
 /// How long a refused connection (told `Busy`) has to take the one line it is sent.
 const REFUSAL_TIMEOUT: Duration = Duration::from_secs(1);
 
+/// How much of a refused client's input is read and dropped at a time ([`drain`]).
+const DRAIN_BUFFER: usize = 4096;
+
 /// How often the listener looks for a connection, a finished session or a stop.
 const ACCEPT_POLL: Duration = Duration::from_millis(20);
 
@@ -296,6 +299,9 @@ struct Link {
     output: Box<dyn Write + Send>,
     /// Says goodbye the way the connection allows (a TLS `close_notify`) and closes it.
     goodbye: Box<dyn FnOnce() + Send>,
+    /// Says goodbye the same way and stops writing, but leaves the connection open for reading,
+    /// for a client that is sent away ([`refuse`]).
+    finish_writing: Box<dyn FnOnce() + Send>,
     /// A handle on the socket, to close it abruptly when the listener stops.
     socket: TcpStream,
 }
@@ -534,15 +540,51 @@ fn is_passing(e: &io::Error) -> bool {
 /// connection. CNP's `Busy`, with a null id since no request was read. Only a client that is
 /// approved gets this far, so what it learns (that the node is in use) is nothing a stranger can
 /// ask.
+///
+/// The connection is closed gently: the node says goodbye and stops writing, reads and drops
+/// what the client sends until it hangs up (or [`REFUSAL_TIMEOUT`] passes), and only then
+/// closes. A client may well have spoken first (Solrac sends `initialize` as soon as it is
+/// connected), and closing a socket with data still unread makes the kernel reset the
+/// connection; on Linux a reset makes the client lose what it hadn't read yet, the `Busy` line
+/// among it, so it saw "connection reset by peer" instead (macOS keeps the line). This is the
+/// lingering close of RFC 7230 §6.6 and Apache's `lingering_close`. The waiting is done on a
+/// thread of its own, so the listener goes on accepting.
 fn refuse(link: Link) {
-    let _ = link.socket.set_write_timeout(Some(REFUSAL_TIMEOUT));
+    let Link {
+        mut output,
+        finish_writing,
+        socket,
+        ..
+    } = link;
+    let _ = socket.set_write_timeout(Some(REFUSAL_TIMEOUT));
     let error = ResponseError::new(
         code::BUSY,
         "this cb2026 is serving another client; it serves one at a time",
     );
-    let mut output = link.output;
     let _ = write_message(&mut output, &Response::error(None, error).into());
-    (link.goodbye)();
+    finish_writing();
+    drop(output);
+    // The socket closes when its last handle does: this one, once the client has hung up.
+    let _ = thread::Builder::new()
+        .name("cb2026 refusal".into())
+        .spawn(move || drain(socket, REFUSAL_TIMEOUT));
+}
+
+/// Reads and drops what a refused client sends until it hangs up, the connection fails, or
+/// `within` passes, so that closing `socket` afterwards finds nothing unread ([`refuse`]).
+fn drain(mut socket: TcpStream, within: Duration) {
+    let until = Instant::now() + within;
+    let mut sink = [0u8; DRAIN_BUFFER];
+    loop {
+        let left = until.saturating_duration_since(Instant::now());
+        if left.is_zero() || socket.set_read_timeout(Some(left)).is_err() {
+            return;
+        }
+        match socket.read(&mut sink) {
+            Ok(0) | Err(_) => return,
+            Ok(_) => {}
+        }
+    }
 }
 
 /// How greeting a connection ended.
@@ -579,11 +621,15 @@ fn greet_with(stream: TcpStream, config: &Config) -> Option<Greeted> {
     let Some(trust) = &config.trust else {
         let writer = stream.try_clone().ok()?;
         let closer = stream.try_clone().ok()?;
+        let half = stream.try_clone().ok()?;
         return Some(Greeted::Link(Link {
             input: FirstMessage::new(Box::new(BufReader::new(gate)), control, deadline),
             output: Box::new(writer),
             goodbye: Box::new(move || {
                 let _ = closer.shutdown(Shutdown::Both);
+            }),
+            finish_writing: Box::new(move || {
+                let _ = half.shutdown(Shutdown::Write);
             }),
             socket,
         }));
@@ -591,6 +637,7 @@ fn greet_with(stream: TcpStream, config: &Config) -> Option<Greeted> {
     let (reader, mut writer, fingerprint) =
         tls::accept(gate, stream, Arc::clone(&trust.tls)).ok()?;
     let goodbye = writer.closer().ok()?;
+    let half = writer.closer().ok()?;
     let mut input = FirstMessage::new(Box::new(reader), control, deadline);
     if !trust.store.is_approved(&fingerprint) {
         // A client that isn't approved may only ask to pair, and only while a window is open.
@@ -606,6 +653,7 @@ fn greet_with(stream: TcpStream, config: &Config) -> Option<Greeted> {
         input,
         output: Box::new(writer),
         goodbye: Box::new(move || goodbye.close()),
+        finish_writing: Box::new(move || half.finish_writing()),
         socket,
     }))
 }
