@@ -383,6 +383,34 @@ fn a_second_approved_client_is_told_busy_and_the_first_is_not_disturbed() {
     node.finish();
 }
 
+/// A client told Busy reads it even when it spoke first, as Solrac's connection check does: it
+/// sends `initialize` as soon as it is connected. A node that closed with that request unread
+/// made the kernel reset the connection, and Linux drops what the client hadn't read yet when a
+/// reset arrives, the Busy line included: the client read "connection reset by peer" instead
+/// (macOS keeps the line, so this only ever failed on Linux).
+#[test]
+fn a_client_that_speaks_first_still_reads_busy() {
+    let node = Node::start();
+    let (a, b) = (node.approved_client("a"), node.approved_client("b"));
+    let mut first = node.connect(&a);
+    initialize(&mut first);
+    let mut second = node.connect(&b);
+    // The node may have closed already, so the write may fail; what there is to read says why.
+    let _ = second.send_line(INITIALIZE);
+    // Long enough for the node to have sent Busy and closed, and for a reset to have come.
+    thread::sleep(Duration::from_millis(300));
+    let line = second
+        .read_line()
+        .expect("the connection wasn't reset")
+        .expect("a refusal is sent");
+    assert!(
+        line.contains(r#""id":null"#) && line.contains(r#""error""#),
+        "{line}"
+    );
+    assert!(is_closed_silently(&mut second));
+    node.finish();
+}
+
 #[test]
 fn a_stranger_holding_a_connection_does_not_keep_an_approved_client_out() {
     let node = Node::start();
